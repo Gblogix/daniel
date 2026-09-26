@@ -1,0 +1,14 @@
+<%- include('../partials/head') %>
+<div class="pagehead"><h1>Email outbox</h1>
+  <% if (!config.smtp.host) { %><span class="badge ARRIVED">SMTP not configured — emails are logged, not sent</span><% } %></div>
+<div class="tablewrap"><table class="t">
+  <thead><tr><th>When</th><th>Kind</th><th>Shipment</th><th>To</th><th>Subject</th><th>Status</th></tr></thead>
+  <% if (!rows.length) { %><tr><td colspan="6" class="muted">No emails yet.</td></tr><% } %>
+  <% rows.forEach((e) => { %>
+    <tr><td class="nowrap small"><%= fmtDateTime(e.created_at) %></td><td class="small"><%= e.kind %></td>
+      <td><% if (e.shipment_id) { %><a href="/shipments/<%= e.shipment_id %>"><%= e.ref_no %></a><% } %></td>
+      <td class="small"><%= e.to_addr %></td><td><a href="/outbox/<%= e.id %>"><%= e.subject %></a></td>
+      <td><span class="badge <%= e.status %>" title="<%= e.error || '' %>"><%= e.status %></span></td></tr>
+  <% }) %>
+</table></div>
+<%- include('../partials/foot') %>

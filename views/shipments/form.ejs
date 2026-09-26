@@ -1,0 +1,8 @@
+<%- include('../partials/head') %>
+<div class="pagehead"><h1>New shipment</h1></div>
+<form method="post" action="/shipments">
+  <input type="hidden" name="_csrf" value="<%= csrf %>">
+  <%- include('../partials/fields', { s }) %>
+  <button class="btn">Create shipment</button>
+</form>
+<%- include('../partials/foot') %>

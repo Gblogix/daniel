@@ -1,0 +1,14 @@
+<%- include('../partials/head') %>
+<div class="pagehead"><h1 style="font-size:18px"><%= e.subject %></h1><a class="btn secondary" href="/outbox">← Outbox</a></div>
+<div class="card">
+  <table class="t">
+    <tr><th>To</th><td><%= e.to_addr %></td></tr>
+    <% if (e.cc_addr) { %><tr><th>CC</th><td><%= e.cc_addr %></td></tr><% } %>
+    <tr><th>Status</th><td><span class="badge <%= e.status %>"><%= e.status %></span> <span class="small muted"><%= e.error || '' %></span></td></tr>
+    <tr><th>Created / sent</th><td><%= fmtDateTime(e.created_at) %> / <%= fmtDateTime(e.sent_at) || '—' %></td></tr>
+    <tr><th>Attachments</th><td><% e.attachments.forEach((a) => { %><a href="/documents/<%= a.id %>" target="_blank"><%= a.filename %></a><br><% }) %></td></tr>
+  </table>
+  <form method="post" action="/outbox/<%= e.id %>/resend" style="margin-top:10px"><input type="hidden" name="_csrf" value="<%= csrf %>"><button class="btn secondary small">Re-send</button></form>
+</div>
+<iframe class="preview" sandbox src="/outbox/<%= e.id %>/body"></iframe>
+<%- include('../partials/foot') %>

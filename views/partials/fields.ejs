@@ -1,0 +1,117 @@
+<%# Shipment form fields. locals: s, customers, agents, brokers, truckers, deliveries, sources (optional) %>
+<%
+  const e = (v) => String(v ?? '').replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+  const src = (k) => locals.sources && sources[k] ? `<span class="src" title="from ${e(sources[k])}">${e(sources[k])}</span>` : '';
+  const inp = (k, label, type = 'text', extra = '') => `<div class="field"><label for="f_${k}">${label}${src(k)}</label><input id="f_${k}" name="${k}" type="${type}" value="${e(s[k])}" ${extra}></div>`;
+  const sel = (k, label, opts, blank = true) => `<div class="field"><label for="f_${k}">${label}</label><select id="f_${k}" name="${k}">${blank ? '<option value="">—</option>' : ''}${opts.map((o) => `<option value="${e(o.id)}" ${String(s[k]) === String(o.id) ? 'selected' : ''}>${e(o.name)}</option>`).join('')}</select></div>`;
+%>
+<fieldset class="fieldset"><legend>Parties & status</legend>
+  <div class="grid g4">
+    <%- sel('mode', 'Mode', Object.entries(S.MODES).map(([id, m]) => ({ id, name: m.label })), false) %>
+    <%- sel('status', 'Status', S.STATUSES.map((x) => ({ id: x.code, name: `${x.label} (${x.ko})` })), false) %>
+    <%- sel('customs_status', 'Customs', S.CUSTOMS_STATUSES.map((x) => ({ id: x, name: x })), false) %>
+    <%- sel('origin_country', 'Origin', [{ id: 'KR', name: 'Korea' }, { id: 'CN', name: 'China' }, { id: 'VN', name: 'Vietnam' }, { id: 'OTHER', name: 'Other' }]) %>
+    <%- sel('customer_id', 'Customer (CNEE)', customers) %>
+    <%- sel('agent_id', 'Overseas agent', agents) %>
+    <%- sel('broker_id', 'Customs broker', brokers) %>
+    <%- sel('trucker_id', 'Trucker', truckers) %>
+  </div>
+  <div class="grid g3">
+    <%- inp('shipper_name', 'Shipper') %>
+    <%- inp('consignee_name', 'Consignee (as on B/L)') %>
+    <%- inp('notify_party', 'Notify party') %>
+  </div>
+</fieldset>
+
+<fieldset class="fieldset"><legend>B/L & routing</legend>
+  <div class="grid g4">
+    <%- inp('mbl_no', s.mode === 'AIR' ? 'MAWB No.' : 'MBL No.') %>
+    <%- inp('hbl_no', s.mode === 'AIR' ? 'HAWB No.' : 'HBL No.') %>
+    <%- inp('carrier', 'Carrier / Airline') %>
+    <%- inp('flight_no', 'Flight No. (air)') %>
+    <%- inp('vessel', 'Vessel') %>
+    <%- inp('voyage', 'Voyage') %>
+    <%- inp('pol', 'Port of loading') %>
+    <%- inp('pod', 'Port of discharge') %>
+    <%- inp('place_of_delivery', 'Place of delivery') %>
+    <%- inp('cfs_location', 'CFS / terminal (pick-up)') %>
+    <%- inp('etd', 'ETD', 'date') %>
+    <%- inp('eta', 'ETA', 'date') %>
+    <%- inp('atd', 'ATD (actual)', 'date') %>
+    <%- inp('ata', 'ATA (actual)', 'date') %>
+    <%- inp('last_free_day', 'Last free day', 'date') %>
+    <div class="field"><label>&nbsp;</label><label class="check"><input type="checkbox" name="isf_filed" value="1" <%= s.isf_filed ? 'checked' : '' %>> ISF filed</label></div>
+  </div>
+</fieldset>
+
+<fieldset class="fieldset"><legend>Cargo totals</legend>
+  <div class="grid g6">
+    <%- inp('packages', 'Packages', 'number', 'step="1"') %>
+    <%- inp('package_unit', 'Unit (CTNS/PLTS)') %>
+    <%- inp('weight_kg', 'Gross weight (KG)', 'number', 'step="0.01"') %>
+    <%- inp('cbm', 'CBM', 'number', 'step="0.001"') %>
+    <%- inp('chargeable_weight', 'Chargeable wt (air)', 'number', 'step="0.01"') %>
+    <%- inp('commodity', 'Commodity') %>
+  </div>
+</fieldset>
+
+<fieldset class="fieldset"><legend>Delivery</legend>
+  <div class="grid g4">
+    <%- sel('delivery_company_id', 'Deliver to (location)', deliveries.concat(customers)) %>
+    <%- inp('delivery_address', 'Delivery address') %>
+    <%- inp('delivery_date', 'Delivery date', 'date') %>
+    <%- inp('delivery_time', 'Delivery time', 'time') %>
+  </div>
+</fieldset>
+
+<fieldset class="fieldset"><legend>Billing</legend>
+  <div class="grid g4">
+    <%- inp('service_price', 'Service price (USD)', 'number', 'step="0.01"') %>
+    <%- inp('invoice_no', 'Invoice No.') %>
+    <%- inp('invoice_amount', 'Invoice amount (USD)', 'number', 'step="0.01"') %>
+    <div class="field"><label>&nbsp;</label><label class="check"><input type="checkbox" name="paid" value="1" <%= s.paid ? 'checked' : '' %>> Paid</label></div>
+  </div>
+  <div class="field"><label for="f_notes">Internal notes</label><textarea id="f_notes" name="notes" rows="2"><%= s.notes || '' %></textarea></div>
+</fieldset>
+
+<fieldset class="fieldset"><legend>Containers</legend>
+  <div class="tablewrap"><table class="t lines" data-lines="ctn">
+    <thead><tr><th>Container No.</th><th>Seal No.</th><th>Size/Type</th><th>Pkgs</th><th>KG</th><th>CBM</th><th></th></tr></thead>
+    <tbody>
+    <% const ctns = s.containers && s.containers.length ? s.containers : [{}]; ctns.forEach((c) => { %>
+      <tr>
+        <td><input name="ctn_no" value="<%= c.container_no || '' %>" class="mono" placeholder="ABCU1234567"></td>
+        <td><input name="ctn_seal" value="<%= c.seal_no || '' %>"></td>
+        <td><input name="ctn_size" value="<%= c.size_type || '' %>" placeholder="40HC"></td>
+        <td><input name="ctn_pkgs" value="<%= c.packages ?? '' %>"></td>
+        <td><input name="ctn_kg" value="<%= c.weight_kg ?? '' %>"></td>
+        <td><input name="ctn_cbm" value="<%= c.cbm ?? '' %>"></td>
+        <td><button type="button" class="btn secondary small" data-remove-row>✕</button></td>
+      </tr>
+    <% }) %>
+    </tbody>
+  </table></div>
+  <button type="button" class="btn secondary small" data-add-row="ctn" style="margin-top:8px">+ Container</button>
+</fieldset>
+
+<fieldset class="fieldset"><legend>Packing list (P/L detail)</legend>
+  <div class="tablewrap"><table class="t lines" data-lines="item">
+    <thead><tr><th>PO</th><th style="min-width:220px">Description</th><th>HS code</th><th>Qty</th><th>Unit</th><th>Pkgs</th><th>KG</th><th>CBM</th><th></th></tr></thead>
+    <tbody>
+    <% const items = s.items && s.items.length ? s.items : [{}]; items.forEach((i) => { %>
+      <tr>
+        <td><input name="item_po" value="<%= i.po_no || '' %>"></td>
+        <td><input name="item_desc" value="<%= i.description || '' %>"></td>
+        <td><input name="item_hs" value="<%= i.hs_code || '' %>"></td>
+        <td><input name="item_qty" value="<%= i.quantity ?? '' %>"></td>
+        <td><input name="item_unit" value="<%= i.unit || '' %>"></td>
+        <td><input name="item_pkgs" value="<%= i.packages ?? '' %>"></td>
+        <td><input name="item_kg" value="<%= i.weight_kg ?? '' %>"></td>
+        <td><input name="item_cbm" value="<%= i.cbm ?? '' %>"></td>
+        <td><button type="button" class="btn secondary small" data-remove-row>✕</button></td>
+      </tr>
+    <% }) %>
+    </tbody>
+  </table></div>
+  <button type="button" class="btn secondary small" data-add-row="item" style="margin-top:8px">+ Line</button>
+</fieldset>

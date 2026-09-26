@@ -1,0 +1,61 @@
+<%- include('../partials/head') %>
+<div class="pagehead">
+  <div><h1 style="margin-bottom:4px">Intake #<%= intake.id %> <span class="badge <%= intake.status %>"><%= intake.status %></span></h1>
+    <div class="muted small">From <%= intake.agent_name || 'unknown agent' %> · <%= fmtDateTime(intake.created_at) %> UTC · extracted by <%= intake.extraction_method === 'ai' ? 'AI' : 'rules' %></div></div>
+  <a class="btn secondary" href="/intakes">← Back</a>
+</div>
+<% if (intake.note) { %><div class="card" style="white-space:pre-line"><b>Note:</b> <%= intake.note %></div><% } %>
+<% if ((draft.warnings || []).length) { %>
+  <div class="warnbox"><b>Please check</b><ul><% draft.warnings.forEach((w) => { %><li><%= w %></li><% }) %></ul></div>
+<% } %>
+
+<div class="grid" style="grid-template-columns: minmax(0, 2fr) minmax(300px, 1fr); align-items:start">
+  <div>
+  <% if (intake.status === 'PENDING') { %>
+    <form method="post" action="/intakes/<%= intake.id %>/apply">
+      <input type="hidden" name="_csrf" value="<%= csrf %>">
+      <div class="card">
+        <h2>Apply to</h2>
+        <div class="grid g2">
+          <div class="field"><label>Shipment</label>
+            <select name="target">
+              <option value="new" <%= target ? '' : 'selected' %>>➕ Create new shipment</option>
+              <% openShipments.forEach((o) => { %><option value="<%= o.id %>" <%= target && target.id === o.id ? 'selected' : '' %>><%= o.ref_no %> — <%= o.mbl_no || '' %> / <%= o.hbl_no || '' %></option><% }) %>
+            </select>
+            <% if (target) { %><div class="small" style="margin-top:4px">Matched existing shipment <a href="/shipments/<%= target.id %>"><%= target.ref_no %></a> by B/L or container number.</div><% } %>
+          </div>
+          <div class="field"><label>&nbsp;</label>
+            <label class="check"><input type="checkbox" name="send_notices" value="1" checked> Send notices now (A/N + docs → broker, shipment details → customer)</label></div>
+        </div>
+      </div>
+      <%- include('../partials/fields', { s, sources: draft.sources || {} }) %>
+      <div class="actions"><button class="btn">✔ Confirm & apply</button></div>
+    </form>
+    <form method="post" action="/intakes/<%= intake.id %>/reject" class="card" style="margin-top:18px">
+      <input type="hidden" name="_csrf" value="<%= csrf %>">
+      <div class="field"><label>Reject reason</label><input name="reason" placeholder="e.g. duplicate upload, wrong shipment"></div>
+      <button class="btn danger small" data-confirm="Reject this intake?">Reject</button>
+    </form>
+  <% } else { %>
+    <div class="card">This intake was <b><%= intake.status.toLowerCase() %></b><% if (intake.shipment_id) { %> → <a href="/shipments/<%= intake.shipment_id %>">shipment</a><% } %>.</div>
+  <% } %>
+  </div>
+
+  <div>
+    <div class="card"><h2>Uploaded documents</h2>
+      <% docs.forEach((d) => { const ex = JSON.parse(d.extracted_json || '{}'); %>
+        <div style="padding:8px 0;border-bottom:1px solid var(--line)">
+          <span class="badge"><%= d.doc_type %></span> <a href="/documents/<%= d.id %>" target="_blank"><%= d.filename %></a>
+          <div class="small muted" style="margin-top:4px">
+            <%= [ex.mbl_no && `MBL ${ex.mbl_no}`, ex.hbl_no && `HBL ${ex.hbl_no}`, (ex.containers || []).length && `${ex.containers.length} ctn`,
+                 ex.weight_kg && `${ex.weight_kg} KG`, ex.cbm && `${ex.cbm} CBM`, (ex.items || []).length && `${ex.items.length} P/L lines`].filter(Boolean).join(' · ') || 'No fields found' %>
+          </div>
+        </div>
+      <% }) %>
+    </div>
+    <% const firstPdf = docs.find((d) => d.mime === 'application/pdf'); if (firstPdf) { %>
+      <div class="card"><h2>Preview</h2><iframe class="preview" src="/documents/<%= firstPdf.id %>"></iframe></div>
+    <% } %>
+  </div>
+</div>
+<%- include('../partials/foot') %>

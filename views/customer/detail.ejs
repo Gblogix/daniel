@@ -1,0 +1,67 @@
+<%- include('../partials/head') %>
+<div class="pagehead">
+  <div>
+    <h1 style="margin-bottom:4px"><%= s.ref_no %> <span class="muted" style="font-weight:400">· <%= tr.mode.icon %> <%= tr.mode.label %></span></h1>
+    <div class="chips"><span class="badge <%= s.status %>"><%= S.statusLabel(s.status) %></span><span class="badge <%= s.customs_status %>">Customs: <%= s.customs_status %></span>
+      <% if (s.customs_status === 'EXAM') { %><span class="badge EXAM">Customs exam</span><% } %></div>
+  </div>
+  <div class="actions">
+    <% if (isInternal) { %><a class="btn secondary" href="/shipments/<%= s.id %>">← Staff view</a><% } %>
+    <a class="btn secondary" href="<%= user.role === 'customer' || isInternal ? '/track' : '/shipments' %>">All shipments</a>
+  </div>
+</div>
+
+<div class="card">
+  <%- include('../partials/trackbar', { s, tr, big: true }) %>
+  <%- include('../partials/steps', { tr }) %>
+</div>
+
+<div class="grid g2" style="align-items:start">
+  <div class="card">
+    <h2>Shipment</h2>
+    <table class="t">
+      <tr><th>Shipper</th><td><%= s.shipper_name || '—' %></td></tr>
+      <tr><th>Consignee</th><td><%= s.consignee_name || s.customer_name || '—' %></td></tr>
+      <tr><th><%= s.mode === 'AIR' ? 'MAWB' : 'MBL' %></th><td class="mono"><%= s.mbl_no || '—' %></td></tr>
+      <tr><th><%= s.mode === 'AIR' ? 'HAWB' : 'HBL' %></th><td class="mono"><%= s.hbl_no || '—' %></td></tr>
+      <tr><th><%= s.mode === 'AIR' ? 'Flight' : 'Vessel / Voyage' %></th><td><%= s.mode === 'AIR' ? (s.flight_no || '—') : [s.vessel, s.voyage].filter(Boolean).join(' / ') || '—' %></td></tr>
+      <tr><th>Route</th><td><%= s.pol || '?' %> → <%= s.pod || '?' %><%= s.place_of_delivery ? ` → ${s.place_of_delivery}` : '' %></td></tr>
+      <tr><th>ETD / ETA</th><td><%= s.etd || 'TBA' %> / <b><%= s.eta || 'TBA' %></b></td></tr>
+      <tr><th>Cargo</th><td><%= s.packages ? `${fmtNum(s.packages)} ${s.package_unit || ''}` : '—' %> · <%= s.weight_kg ? `${fmtNum(s.weight_kg, 2)} KG` : '—' %> · <%= s.cbm ? `${s.cbm} CBM` : '—' %></td></tr>
+      <tr><th>A/N</th><td><%= s.an_sent_at ? `Issued ${fmtDate(s.an_sent_at)}` : 'Not yet issued' %></td></tr>
+      <% if (user.role === 'customer' || isInternal) { %>
+        <% if (s.service_price != null) { %><tr><th>Service price</th><td>$<%= fmtNum(s.service_price, 2) %></td></tr><% } %>
+        <% if (s.invoice_amount != null) { %><tr><th>Invoice</th><td><%= s.invoice_no || '' %> $<%= fmtNum(s.invoice_amount, 2) %> <span class="badge <%= s.paid ? 'paid' : 'unpaid' %>"><%= s.paid ? 'PAID' : 'OPEN' %></span></td></tr><% } %>
+      <% } %>
+    </table>
+  </div>
+  <div class="card">
+    <h2>Delivery</h2>
+    <div class="deliv" style="font-size:14px">📍 <div><b><%= s.delivery_company_name || s.customer_name || 'Delivery' %></b><br><%= s.delivery_address || 'Address to be confirmed' %></div></div>
+    <p style="font-size:16px;margin:14px 0 6px">🗓 <b><%= s.delivery_date || 'Date TBA' %></b> <%= s.delivery_time || '' %></p>
+    <% if (s.cfs_location) { %><p class="muted small">Pick-up: <%= s.cfs_location %></p><% } %>
+    <h3 style="margin-top:18px">Containers</h3>
+    <% if (!s.containers.length) { %><p class="muted small">Loose cargo / not assigned</p><% } %>
+    <% s.containers.forEach((c) => { %><div class="mono"><%= c.container_no %> <span class="muted"><%= c.size_type || '' %> · seal <%= c.seal_no || '—' %></span></div><% }) %>
+  </div>
+</div>
+
+<div class="card">
+  <h2>What's inside (packing list)</h2>
+  <% if (!s.items.length) { %><p class="muted small">Packing list details will appear once received.</p><% } else { %>
+  <div class="tablewrap"><table class="t">
+    <thead><tr><th>PO</th><th>Description</th><th class="right">Qty</th><th>Unit</th><th class="right">Pkgs</th><th class="right">KG</th><th class="right">CBM</th></tr></thead>
+    <% s.items.forEach((i) => { %><tr><td><%= i.po_no || '' %></td><td><%= i.description %></td><td class="right"><%= fmtNum(i.quantity) %></td><td><%= i.unit || '' %></td><td class="right"><%= fmtNum(i.packages) %></td><td class="right"><%= fmtNum(i.weight_kg, 1) %></td><td class="right"><%= i.cbm ?? '' %></td></tr><% }) %>
+  </table></div><% } %>
+</div>
+
+<div class="grid g2" style="align-items:start">
+  <div class="card"><h2>Documents</h2>
+    <% if (!docs.length) { %><p class="muted small">No documents shared yet.</p><% } %>
+    <% docs.forEach((d) => { %><div style="padding:4px 0"><span class="badge"><%= d.doc_type %></span> <a href="/documents/<%= d.id %>" target="_blank"><%= d.filename %></a></div><% }) %>
+  </div>
+  <div class="card"><h2>Updates</h2>
+    <ul class="timeline"><% events.forEach((e) => { %><li><%= e.message %><br><span class="when"><%= fmtDateTime(e.created_at) %> UTC</span></li><% }) %></ul>
+  </div>
+</div>
+<%- include('../partials/foot') %>

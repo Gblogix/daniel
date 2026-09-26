@@ -1,0 +1,5 @@
+<div class="steps">
+  <% S.STATUSES.forEach((st, i) => { %>
+    <div class="step <%= i < tr.statusIndex ? 'done' : i === tr.statusIndex ? 'now done' : '' %>"><span class="dot"></span><%= st.label %></div>
+  <% }) %>
+</div>

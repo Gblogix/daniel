@@ -1,0 +1,48 @@
+<%- include('../partials/head') %>
+<div class="pagehead">
+  <h1><%= user.role === 'customer' ? 'My shipments' : 'Tracking board' %></h1>
+  <div class="chips">
+    <span class="badge IN_TRANSIT">🚢 On the water / in the air: <%= counts.sailing %></span>
+    <span class="badge ARRIVED">⚓ Arrived: <%= counts.arrived %></span>
+    <span class="badge">⏳ Awaiting departure: <%= counts.waiting %></span>
+  </div>
+</div>
+<form class="filters" method="get">
+  <div class="seg">
+    <a class="<%= filter === 'active' ? 'on' : '' %>" href="?filter=active">Active</a>
+    <a class="<%= filter === 'delivered' ? 'on' : '' %>" href="?filter=delivered">Delivered</a>
+    <a class="<%= filter === 'all' ? 'on' : '' %>" href="?filter=all">All</a>
+  </div>
+  <input type="hidden" name="filter" value="<%= filter %>">
+  <input name="q" value="<%= q %>" placeholder="Search PO, B/L, container…">
+  <button class="btn secondary">Search</button>
+</form>
+<% if (!cards.length) { %><div class="card muted">No shipments to show.</div><% } %>
+<div class="cards">
+<% cards.forEach(({ s, tr }) => { %>
+  <a class="scard" href="/shipments/<%= s.id %>">
+    <div class="top">
+      <div><span class="ref"><%= s.ref_no %></span> <span class="muted small">· <%= tr.mode.icon %> <%= tr.mode.label %></span></div>
+      <span class="badge <%= s.status %>"><%= S.statusLabel(s.status) %></span>
+    </div>
+    <%- include('../partials/trackbar', { s, tr, big: false }) %>
+    <div class="facts">
+      <div><span>Shipper</span><%= s.shipper_name || '—' %></div>
+      <div><span><%= s.mode === 'AIR' ? 'MAWB / HAWB' : 'MBL / HBL' %></span><span class="mono" style="color:inherit;font-size:12px"><%= s.mbl_no || '—' %> / <%= s.hbl_no || '—' %></span></div>
+      <div><span><%= s.mode === 'AIR' ? 'Flight' : 'Vessel / Voy.' %></span><%= s.mode === 'AIR' ? (s.flight_no || '—') : [s.vessel, s.voyage].filter(Boolean).join(' / ') || '—' %></div>
+      <div><span>Container</span><%= s.containers.map((c) => `${c.container_no}${c.size_type ? ' ' + c.size_type : ''}`).join(', ') || '—' %></div>
+      <div><span>Cargo</span><%= s.packages ? `${fmtNum(s.packages)} ${s.package_unit || ''}` : '—' %><%= s.weight_kg ? ` · ${fmtNum(s.weight_kg)} KG` : '' %><%= s.cbm ? ` · ${s.cbm} CBM` : '' %></div>
+      <div><span>Customs</span><span class="badge <%= s.customs_status %>"><%= s.customs_status %></span></div>
+    </div>
+    <% if (s.items.length) { %>
+      <div class="items"><b>Contents</b>
+        <ul><% s.items.slice(0, 4).forEach((i) => { %><li><%= i.description %><% if (i.quantity) { %> — <%= fmtNum(i.quantity) %> <%= i.unit || '' %><% } %></li><% }) %>
+        <% if (s.items.length > 4) { %><li class="muted">+ <%= s.items.length - 4 %> more</li><% } %></ul>
+      </div>
+    <% } %>
+    <div class="deliv">📍 <div><b><%= s.delivery_company_name || 'Delivery' %></b><br><%= s.delivery_address || 'Address to be confirmed' %><br>
+      <span class="<%= s.delivery_date ? '' : 'muted' %>"><%= s.delivery_date ? `🗓 ${s.delivery_date} ${s.delivery_time || ''}` : 'Delivery date TBA' %></span></div></div>
+  </a>
+<% }) %>
+</div>
+<%- include('../partials/foot') %>

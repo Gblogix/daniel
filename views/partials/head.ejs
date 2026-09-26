@@ -1,0 +1,43 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title><%= title %> · GlobalBridge Logistics</title>
+<link rel="stylesheet" href="/css/app.css">
+</head>
+<body>
+<% if (user) { %>
+<header class="topbar">
+  <a class="brand" href="/">GB Logix <span>GlobalBridge Logistics</span></a>
+  <nav class="nav">
+    <% const on = (p) => path === p || path.startsWith(p + '/') ? 'on' : ''; %>
+    <% if (isInternal) { %>
+      <a class="<%= on('/dashboard') %>" href="/dashboard">Dashboard</a>
+      <a class="<%= on('/shipments') %>" href="/shipments">Shipments</a>
+      <a class="<%= on('/track') %>" href="/track">Tracking board</a>
+      <a class="<%= on('/intakes') %>" href="/intakes">Document intake</a>
+      <a class="<%= on('/companies') %>" href="/companies">Parties</a>
+      <a class="<%= on('/outbox') %>" href="/outbox">Outbox</a>
+      <% if (user.role === 'admin') { %>
+        <a class="<%= on('/admin/users') %>" href="/admin/users">Users</a>
+        <a class="<%= on('/admin/settings') %>" href="/admin/settings">Automation</a>
+      <% } %>
+    <% } else if (user.role === 'customer') { %>
+      <a class="<%= on('/track') %>" href="/track">My shipments</a>
+    <% } else if (user.role === 'agent') { %>
+      <a class="<%= on('/portal') %>" href="/portal">Upload documents</a>
+      <a class="<%= on('/shipments') %>" href="/shipments">My shipments</a>
+    <% } else { %>
+      <a class="<%= on('/shipments') %>" href="/shipments">Assigned shipments</a>
+    <% } %>
+  </nav>
+  <div class="who">
+    <span><%= user.name %><% if (user.company_name) { %> · <%= user.company_name %><% } %></span>
+    <span class="role-chip"><%= ROLES[user.role].label %></span>
+    <form method="post" action="/logout"><input type="hidden" name="_csrf" value="<%= csrf %>"><button>Sign out</button></form>
+  </div>
+</header>
+<% } %>
+<main>
+<% if (flash) { %><div class="flash <%= flash.type %>"><%= flash.msg %></div><% } %>

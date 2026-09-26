@@ -1,0 +1,13 @@
+<%- include('partials/head') %>
+<div class="login card">
+  <span class="brand">GlobalBridge Logistics</span>
+  <% if (error) { %><div class="flash err"><%= error %></div><% } %>
+  <form method="post" action="/login">
+    <input type="hidden" name="_csrf" value="<%= csrf %>">
+    <input type="hidden" name="next" value="<%= next %>">
+    <div class="field"><label for="email">Email</label><input id="email" name="email" type="email" value="<%= email %>" required autofocus></div>
+    <div class="field"><label for="password">Password</label><input id="password" name="password" type="password" required></div>
+    <button class="btn" style="width:100%;justify-content:center">Sign in</button>
+  </form>
+</div>
+<%- include('partials/foot') %>

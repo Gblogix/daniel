@@ -1,0 +1,99 @@
+<%- include('../partials/head') %>
+<div class="pagehead">
+  <div>
+    <h1 style="margin-bottom:4px"><%= s.ref_no %> <span class="muted" style="font-weight:400">· <%= S.MODES[s.mode].icon %> <%= S.MODES[s.mode].label %></span></h1>
+    <div class="chips">
+      <span class="badge <%= s.status %>"><%= S.statusLabel(s.status) %></span>
+      <span class="badge <%= s.customs_status %>">Customs: <%= s.customs_status %></span>
+      <% if (s.an_sent_at) { %><span class="badge SENT">A/N sent <%= fmtDate(s.an_sent_at) %></span><% } %>
+      <% if (s.do_sent_at) { %><span class="badge SENT">D/O sent <%= fmtDate(s.do_sent_at) %></span><% } %>
+      <% if (s.invoice_amount) { %><span class="badge <%= s.paid ? 'paid' : 'unpaid' %>"><%= s.paid ? 'Paid' : 'Unpaid' %></span><% } %>
+    </div>
+  </div>
+  <div class="actions">
+    <a class="btn secondary" href="/shipments/<%= s.id %>?view=customer">View as customer</a>
+  </div>
+</div>
+
+<div class="card">
+  <%- include('../partials/trackbar', { s, tr, big: true }) %>
+  <%- include('../partials/steps', { tr }) %>
+</div>
+
+<div class="card">
+  <h2>Notices</h2>
+  <div class="actions">
+    <form method="post" action="/shipments/<%= s.id %>/actions/send-an"><input type="hidden" name="_csrf" value="<%= csrf %>">
+      <button class="btn" data-confirm="Send A/N + HBL/PL/CI to <%= s.broker_name || 'broker' %>?" <%= s.broker_id ? '' : 'disabled title="Assign a customs broker first"' %>>✉ Send A/N & docs → broker</button></form>
+    <form method="post" action="/shipments/<%= s.id %>/actions/send-do"><input type="hidden" name="_csrf" value="<%= csrf %>">
+      <button class="btn" data-confirm="Send D/O to <%= s.trucker_name || 'trucker' %>?" <%= s.trucker_id ? '' : 'disabled title="Assign a trucker first"' %>>✉ Send D/O → trucker</button></form>
+    <form method="post" action="/shipments/<%= s.id %>/actions/send-update"><input type="hidden" name="_csrf" value="<%= csrf %>">
+      <button class="btn" data-confirm="Email a status update to <%= s.customer_name || 'customer' %>?" <%= s.customer_id ? '' : 'disabled title="Assign a customer first"' %>>✉ Status update → customer</button></form>
+    <% ['AN', 'DO', 'ATME'].forEach((t) => { %>
+      <form method="post" action="/shipments/<%= s.id %>/generate/<%= t %>" target="_blank"><input type="hidden" name="_csrf" value="<%= csrf %>">
+        <button class="btn secondary">Preview <%= { AN: 'A/N', DO: 'D/O', ATME: 'ATME' }[t] %></button></form>
+    <% }) %>
+  </div>
+  <p class="muted small" style="margin:8px 0 0">Email subject format: <span class="mono">[A/N] MBL# … / HBL# … / CTN# … / ETA …</span>. Automatic sending rules are in Automation settings.</p>
+</div>
+
+<div class="grid" style="grid-template-columns: minmax(0, 2fr) minmax(300px, 1fr); align-items: start">
+  <form method="post" action="/shipments/<%= s.id %>">
+    <input type="hidden" name="_csrf" value="<%= csrf %>">
+    <%- include('../partials/fields', { s }) %>
+    <div class="actions"><button class="btn">Save changes</button></div>
+  </form>
+
+  <div>
+    <div class="card" id="docs">
+      <h2>Documents</h2>
+      <% if (!docs.length) { %><p class="muted small">No documents yet.</p><% } %>
+      <table class="t">
+        <% docs.forEach((d) => { %>
+          <tr>
+            <td><span class="badge"><%= d.doc_type %></span></td>
+            <td><a href="/documents/<%= d.id %>" target="_blank"><%= d.filename %></a><br><span class="muted small"><%= d.source %> · <%= fmtDateTime(d.created_at) %></span></td>
+            <td class="nowrap">
+              <form method="post" action="/documents/<%= d.id %>/visibility"><input type="hidden" name="_csrf" value="<%= csrf %>">
+                <button class="btn secondary small" title="Toggle customer visibility"><%= d.customer_visible ? '👁 Customer' : 'Internal' %></button></form>
+            </td>
+          </tr>
+        <% }) %>
+      </table>
+      <form method="post" action="/shipments/<%= s.id %>/documents?_csrf=<%= csrf %>" enctype="multipart/form-data" style="margin-top:12px">
+        <div class="grid g2" style="gap:8px">
+          <select name="doc_type"><% ['MBL','HBL','PL','CI','ISF','AWB','AN','DO','ATME','INVOICE','OTHER'].forEach((t) => { %><option><%= t %></option><% }) %></select>
+          <label class="check"><input type="checkbox" name="customer_visible" value="1"> Visible to customer</label>
+        </div>
+        <input type="file" name="files" multiple style="margin:8px 0">
+        <button class="btn secondary small">Upload</button>
+      </form>
+    </div>
+
+    <div class="card" id="emails">
+      <h2>Emails</h2>
+      <% if (!emails.length) { %><p class="muted small">Nothing sent yet.</p><% } %>
+      <ul class="timeline">
+        <% emails.forEach((e) => { %>
+          <li><a href="/outbox/<%= e.id %>"><%= e.kind.replace('_', ' ') %></a> <span class="badge <%= e.status %>"><%= e.status %></span><br>
+            <span class="small">to <%= e.to_addr %></span><br><span class="when"><%= fmtDateTime(e.created_at) %> UTC</span></li>
+        <% }) %>
+      </ul>
+    </div>
+
+    <div class="card">
+      <h2>History</h2>
+      <ul class="timeline">
+        <% events.forEach((e) => { %>
+          <li><%= e.message %><% if (!e.customer_visible) { %> <span class="muted small">(internal)</span><% } %><br><span class="when"><%= fmtDateTime(e.created_at) %> UTC</span></li>
+        <% }) %>
+      </ul>
+    </div>
+
+    <% if (user.role === 'admin') { %>
+      <form method="post" action="/shipments/<%= s.id %>/delete"><input type="hidden" name="_csrf" value="<%= csrf %>">
+        <button class="btn danger small" data-confirm="Delete shipment <%= s.ref_no %> and all its documents? This cannot be undone.">Delete shipment</button></form>
+    <% } %>
+  </div>
+</div>
+<%- include('../partials/foot') %>

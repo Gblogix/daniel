@@ -1,0 +1,34 @@
+<%- include('partials/head') %>
+<div class="pagehead"><h1>Upload shipping documents</h1></div>
+<div class="grid" style="grid-template-columns: minmax(0, 3fr) minmax(0, 2fr); align-items:start">
+  <div class="card">
+    <p class="muted" style="margin-top:0">Upload the B/L, packing list, commercial invoice and ISF for one shipment. We read the MBL/HBL numbers,
+      container & seal numbers, weight, CBM and schedule automatically — no need to email them.<br>
+      <span class="small">한 선적 건의 서류(MBL, HBL, P/L, C/I, ISF)를 함께 업로드해 주세요. PDF, Excel, CSV 가능.</span></p>
+    <form method="post" action="/portal/upload?_csrf=<%= csrf %>" enctype="multipart/form-data">
+      <% if (user.role !== 'agent') { %>
+        <div class="field"><label>Overseas agent</label><select name="agent_id"><option value="">—</option><% agents.forEach((a) => { %><option value="<%= a.id %>"><%= a.name %></option><% }) %></select></div>
+      <% } %>
+      <div class="dropzone">
+        <% const labels = { MBL: 'Master B/L', HBL: 'House B/L', PL: 'Packing list', CI: 'Commercial invoice', ISF: 'ISF', AWB: 'Air waybill (air)', OTHER: 'Other / auto-detect' }; %>
+        <% slots.forEach((slot) => { %>
+          <div class="slot"><label for="u_<%= slot %>"><%= labels[slot] %></label>
+            <input id="u_<%= slot %>" type="file" name="<%= slot %>" accept=".pdf,.xlsx,.csv,.txt,.jpg,.jpeg,.png" <%= slot === 'OTHER' ? 'multiple' : '' %>></div>
+        <% }) %>
+      </div>
+      <div class="field" style="margin-top:12px"><label for="note">Note (optional)</label><textarea id="note" name="note" rows="2" placeholder="e.g. 2nd container to follow, telex release requested…"></textarea></div>
+      <button class="btn">Upload documents</button>
+    </form>
+  </div>
+  <div class="card">
+    <h2>Recent uploads</h2>
+    <% if (!mine.length) { %><p class="muted small">Nothing uploaded yet.</p><% } %>
+    <ul class="timeline">
+      <% mine.forEach((i) => { %>
+        <li><b>#<%= i.id %></b> <span class="badge <%= i.status %>"><%= i.status %></span> <%= i.ref_no ? `→ ${i.ref_no}` : '' %><br>
+          <span class="small"><%= i.docs.map((d) => d.doc_type).join(', ') %></span><br><span class="when"><%= fmtDateTime(i.created_at) %> UTC</span></li>
+      <% }) %>
+    </ul>
+  </div>
+</div>
+<%- include('partials/foot') %>

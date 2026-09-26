@@ -1,0 +1,38 @@
+<%- include('../partials/head') %>
+<div class="pagehead"><h1>Users & access</h1></div>
+<div class="card small">
+  <b>Access levels:</b> <b>Admin</b> — everything incl. users & automation · <b>Staff</b> — all shipments, documents, notices ·
+  <b>Customer</b> — only their own shipments (tracking, P/L, delivery, invoice) · <b>Overseas agent</b> — upload portal + their shipments ·
+  <b>Customs broker</b> / <b>Trucker</b> — shipments assigned to them and the documents they need.
+</div>
+<div class="tablewrap" style="margin-bottom:18px"><table class="t">
+  <thead><tr><th>Name</th><th>Email</th><th>Role</th><th>Company</th><th>Last login</th><th>Active</th><th></th></tr></thead>
+  <% users.forEach((u) => { %>
+    <tr><td><%= u.name %></td><td><%= u.email %></td><td><%= ROLES[u.role].label %></td><td><%= u.company_name || '' %></td>
+      <td class="small"><%= fmtDateTime(u.last_login_at) %></td><td><%= u.active ? '✔' : '✕' %></td>
+      <td><details><summary class="btn secondary small">Edit</summary>
+        <form method="post" action="/admin/users" style="min-width:260px;margin-top:8px">
+          <input type="hidden" name="_csrf" value="<%= csrf %>"><input type="hidden" name="id" value="<%= u.id %>">
+          <div class="field"><label>Name</label><input name="name" value="<%= u.name %>" required></div>
+          <div class="field"><label>Email</label><input name="email" type="email" value="<%= u.email %>" required></div>
+          <div class="field"><label>Role</label><select name="role"><% Object.entries(ROLES).forEach(([k, r]) => { %><option value="<%= k %>" <%= u.role === k ? 'selected' : '' %>><%= r.label %></option><% }) %></select></div>
+          <div class="field"><label>Company</label><select name="company_id"><option value="">—</option><% companies.forEach((c) => { %><option value="<%= c.id %>" <%= u.company_id === c.id ? 'selected' : '' %>><%= c.name %></option><% }) %></select></div>
+          <div class="field"><label>New password (optional)</label><input name="password" type="password" minlength="8" autocomplete="new-password"></div>
+          <label class="check"><input type="checkbox" name="active" value="1" <%= u.active ? 'checked' : '' %>> Active</label>
+          <button class="btn small" style="margin-top:8px">Save</button>
+        </form></details></td></tr>
+  <% }) %>
+</table></div>
+<form class="card" method="post" action="/admin/users" style="max-width:640px">
+  <h2>Invite user</h2>
+  <input type="hidden" name="_csrf" value="<%= csrf %>"><input type="hidden" name="active" value="1">
+  <div class="grid g2">
+    <div class="field"><label>Name</label><input name="name" required></div>
+    <div class="field"><label>Email</label><input name="email" type="email" required></div>
+    <div class="field"><label>Role</label><select name="role"><% Object.entries(ROLES).forEach(([k, r]) => { %><option value="<%= k %>"><%= r.label %></option><% }) %></select></div>
+    <div class="field"><label>Company (required for external users)</label><select name="company_id"><option value="">—</option><% companies.forEach((c) => { %><option value="<%= c.id %>"><%= c.name %></option><% }) %></select></div>
+    <div class="field"><label>Temporary password</label><input name="password" type="password" minlength="8" required autocomplete="new-password"></div>
+  </div>
+  <button class="btn">Create user</button>
+</form>
+<%- include('../partials/foot') %>

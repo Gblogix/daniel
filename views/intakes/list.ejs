@@ -1,0 +1,28 @@
+<%- include('../partials/head') %>
+<div class="pagehead"><h1>Document intake</h1>
+  <div class="actions">
+    <div class="seg"><% ['PENDING', 'APPLIED', 'REJECTED'].forEach((st) => { %><a class="<%= status === st ? 'on' : '' %>" href="?status=<%= st %>"><%= st[0] + st.slice(1).toLowerCase() %></a><% }) %></div>
+    <a class="btn" href="/portal">+ Upload documents</a>
+  </div>
+</div>
+<div class="tablewrap"><table class="t">
+  <thead><tr><th>#</th><th>Received</th><th>Agent</th><th>Documents</th><th>MBL / HBL</th><th>Containers</th><th>ETA</th><th>Match</th><th>Method</th><th></th></tr></thead>
+  <tbody>
+  <% if (!rows.length) { %><tr><td colspan="10" class="muted">Nothing here.</td></tr><% } %>
+  <% rows.forEach((r) => { %>
+    <tr>
+      <td><%= r.id %></td>
+      <td class="nowrap small"><%= fmtDateTime(r.created_at) %><br><span class="muted"><%= r.uploader %></span></td>
+      <td><%= r.agent_name || '—' %></td>
+      <td><% r.docs.forEach((d) => { %><span class="badge" title="<%= d.filename %>"><%= d.doc_type %></span> <% }) %></td>
+      <td class="mono small"><%= r.draft.mbl_no || '—' %><br><%= r.draft.hbl_no || '—' %></td>
+      <td class="mono small"><%= (r.draft.containers || []).map((c) => c.container_no).join(', ') %></td>
+      <td><%= r.draft.eta || '' %></td>
+      <td><%= r.ref_no ? r.ref_no : 'New' %></td>
+      <td class="small"><%= r.extraction_method === 'ai' ? 'AI' : 'Rules' %><% if ((r.draft.warnings || []).length) { %> <span class="badge ARRIVED">⚠ <%= r.draft.warnings.length %></span><% } %></td>
+      <td><a class="btn small <%= r.status === 'PENDING' ? '' : 'secondary' %>" href="/intakes/<%= r.id %>"><%= r.status === 'PENDING' ? 'Review' : 'View' %></a></td>
+    </tr>
+  <% }) %>
+  </tbody>
+</table></div>
+<%- include('../partials/foot') %>

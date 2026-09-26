@@ -1,0 +1,40 @@
+<%- include('../partials/head') %>
+<div class="pagehead"><h1><%= isInternal ? 'Shipments' : 'Assigned shipments' %></h1>
+  <% if (isInternal) { %><a class="btn" href="/shipments/new">+ New shipment</a><% } %>
+</div>
+<form class="filters" method="get">
+  <input name="q" value="<%= q %>" placeholder="Search ref, MBL, HBL, container, customer…">
+  <select name="status"><option value="">All statuses</option><% S.STATUSES.forEach((x) => { %><option value="<%= x.code %>" <%= status === x.code ? 'selected' : '' %>><%= x.label %></option><% }) %></select>
+  <select name="mode"><option value="">All modes</option><% Object.entries(S.MODES).forEach(([k, m]) => { %><option value="<%= k %>" <%= mode === k ? 'selected' : '' %>><%= m.label %></option><% }) %></select>
+  <button class="btn secondary">Filter</button>
+</form>
+<div class="tablewrap">
+<table class="t">
+  <thead><tr>
+    <th>Ref</th><th>Mode</th><th>Customer</th><th>Shipper</th><th>MBL / HBL</th><th>Container</th><th>ETD</th><th>ETA</th>
+    <th>Status</th><th>Customs</th><th>A/N</th><th>D/O</th><% if (isInternal) { %><th>Invoice</th><% } %><th>Delivery</th>
+  </tr></thead>
+  <tbody>
+  <% if (!rows.length) { %><tr><td colspan="14" class="muted">No shipments found.</td></tr><% } %>
+  <% rows.forEach((s) => { %>
+    <tr>
+      <td class="nowrap"><a href="/shipments/<%= s.id %>"><b><%= s.ref_no %></b></a></td>
+      <td class="nowrap"><%= S.MODES[s.mode].icon %> <%= s.mode %></td>
+      <td><%= s.customer_name || '—' %></td>
+      <td><%= s.shipper_name || '' %></td>
+      <td class="mono small"><%= s.mbl_no || '—' %><br><%= s.hbl_no || '—' %></td>
+      <td class="mono small"><%= s.containers.map((c) => c.container_no).join(', ') %></td>
+      <td class="nowrap"><%= s.etd || '' %></td>
+      <td class="nowrap"><b><%= s.eta || '' %></b></td>
+      <td><span class="badge <%= s.status %>"><%= S.statusLabel(s.status) %></span></td>
+      <td><span class="badge <%= s.customs_status %>"><%= s.customs_status %></span></td>
+      <td><%= s.an_sent_at ? '✔' : '' %></td>
+      <td><%= s.do_sent_at ? '✔' : '' %></td>
+      <% if (isInternal) { %><td class="nowrap"><% if (s.invoice_amount) { %>$<%= fmtNum(s.invoice_amount, 2) %> <span class="badge <%= s.paid ? 'paid' : 'unpaid' %>"><%= s.paid ? 'PAID' : 'OPEN' %></span><% } %></td><% } %>
+      <td class="small"><%= s.delivery_date || '' %> <%= s.delivery_time || '' %></td>
+    </tr>
+  <% }) %>
+  </tbody>
+</table>
+</div>
+<%- include('../partials/foot') %>

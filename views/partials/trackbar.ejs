@@ -1,0 +1,24 @@
+<%# locals: s, tr, big %>
+<div class="track <%= tr.phase %> <%= locals.big ? 'track-big' : '' %>">
+  <div class="track-route">
+    <div><b><%= s.pol || 'Origin' %></b><br><%= s.atd ? 'ATD' : 'ETD' %> <%= s.atd || s.etd || 'TBA' %></div>
+    <div class="right"><b><%= s.pod || 'Destination' %></b><br><%= s.ata ? 'ATA' : 'ETA' %> <%= s.ata || s.eta || 'TBA' %></div>
+  </div>
+  <% if (tr.days.length) { %>
+    <div class="track-bar" role="img" aria-label="<%= tr.percent %>% of transit time elapsed">
+      <span class="vessel <%= ["FCL","LCL","TRUCK"].includes(s.mode) ? "flip" : "" %>" style="left: <%= Math.min(98, Math.max(2, tr.percent)) %>%"><%= tr.mode.icon %></span>
+      <% tr.days.forEach((d) => { %><span class="cell <%= d.state %>" title="<%= d.date %>"></span><% }) %>
+    </div>
+    <div class="track-meta">
+      <span class="left">
+        <% if (tr.phase === 'arrived') { %>Arrived
+        <% } else if (tr.phase === 'delayed') { %>Past ETA — awaiting arrival update
+        <% } else if (tr.phase === 'waiting') { %>Departs in <%= tr.daysToDeparture %> day(s) · <%= tr.totalDays %>-day transit
+        <% } else { %>Day <%= tr.totalDays - tr.daysLeft %> of <%= tr.totalDays %> · <%= tr.daysLeft %> day(s) to arrival<% } %>
+      </span>
+      <span><%= tr.percent %>%</span>
+    </div>
+  <% } else { %>
+    <div class="muted small">Schedule to be advised (ETD / ETA not set yet)</div>
+  <% } %>
+</div>
