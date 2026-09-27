@@ -32,6 +32,7 @@ async function login(email) {
   keep(r2);
   assert.equal(r2.status, 302, `login ${email}`);
   const get = (p) => fetch(base + p, { headers: { cookie }, redirect: 'manual' });
+  get.form = (p, body) => fetch(base + p, { method: 'POST', redirect: 'manual', headers: { cookie, 'content-type': 'application/x-www-form-urlencoded' }, body });
   get.post = (p, body, csrf) => fetch(base + p, { method: 'POST', redirect: 'manual', headers: { cookie, 'content-type': 'application/json', 'x-csrf-token': csrf }, body: JSON.stringify(body) });
   return get;
 }
@@ -103,4 +104,40 @@ test('staff workspace: tabs shell, menu by permission, favorites saved per user'
   // An absolute URL cannot be smuggled into ?open=
   const evil = JSON.parse(/id="shell-data">([^<]*)</.exec(await (await staff('/app?open=//evil.example')).text())[1]);
   assert.equal(evil.open, '');
+});
+
+test('permission matrix: check / uncheck per staff user is enforced', async () => {
+  const auth = require('../src/auth');
+  const staffRow = store.db.get("SELECT * FROM users WHERE email = 'staff@gblogix.com'");
+  // Defaults: staff edit shipments and send notices, but no accounting / delete / settings / users.
+  assert.equal(auth.can(staffRow, 'shipments_edit'), true);
+  assert.equal(auth.can(staffRow, 'delete'), false);
+  const admin = await login('admin@gblogix.com');
+  const page = await (await admin('/admin/permissions')).text();
+  assert.match(page, /Save permissions/);
+  const csrf = /name="_csrf" value="([^"]+)"/.exec(page)[1];
+  const staffBefore = await login('staff@gblogix.com');
+  assert.equal((await staffBefore('/admin/permissions')).status, 403);
+  // Take "send notices" away, give "delete" and "settings".
+  const body = new URLSearchParams({ _csrf: csrf, ids: String(staffRow.id) });
+  for (const k of ['shipments_edit', 'intake', 'parties', 'delete', 'settings']) body.append(`u${staffRow.id}_${k}`, '1');
+  body.append(`u${staffRow.id}_active`, '1');
+  const r = await admin.form('/admin/permissions', body);
+  assert.equal(r.status, 302);
+  const after = store.db.get("SELECT * FROM users WHERE email = 'staff@gblogix.com'");
+  assert.equal(auth.can(after, 'send_notices'), false);
+  assert.equal(auth.can(after, 'delete'), true);
+  assert.equal(auth.can(after, 'accounting'), false);
+  const staff = await login('staff@gblogix.com');
+  const s = store.db.get('SELECT id FROM shipments LIMIT 1');
+  assert.doesNotMatch(await (await staff(`/shipments/${s.id}`)).text(), /Send A\/N/);
+  assert.equal((await staff('/admin/settings')).status, 200);
+  const menu = JSON.parse(/id="shell-data">([^<]*)</.exec(await (await staff('/app')).text())[1]);
+  assert.ok(menu.items.some((i) => i.id === 'settings'));
+  assert.ok(!menu.items.some((i) => i.id === 'permissions'));
+  // Deactivate: login is refused.
+  const off = new URLSearchParams({ _csrf: csrf, ids: String(staffRow.id) });
+  await admin.form('/admin/permissions', off);
+  assert.equal(store.db.get('SELECT active FROM users WHERE id = ?', staffRow.id).active, 0);
+  store.db.run('UPDATE users SET active = 1, perms = NULL WHERE id = ?', staffRow.id);
 });

@@ -308,6 +308,56 @@ function tracking(s, now = new Date()) {
   return out;
 }
 
+/**
+ * Dashboard schedule: one shared calendar across the top, one line per shipment (ETD → ETA on the same day grid).
+ * Range: earliest departure (max 3 weeks back) to the latest ETA / delivery (max 5 weeks ahead).
+ */
+function timeline(list, now = new Date()) {
+  const today = todayUTC(now);
+  const span = (s) => ({ a: parseDate(s.atd || s.etd), b: parseDate(s.ata || s.eta) });
+  const dated = list.map((s) => ({ s, ...span(s) })).filter((x) => x.a != null && x.b != null && x.b >= x.a);
+  let start = Math.min(today - 3 * DAY, ...dated.map((x) => x.a));
+  let end = Math.max(today + 10 * DAY, ...dated.map((x) => x.b), ...list.map((s) => parseDate(s.delivery_date) || 0));
+  start = Math.max(start, today - 21 * DAY);
+  end = Math.min(end, today + 35 * DAY);
+  const n = Math.round((end - start) / DAY) + 1;
+  const idx = (t) => Math.round((t - start) / DAY);
+  const WD = 'SMTWTFS';
+  const MONTHS = ['JAN', 'FEB', 'MAR', 'APR', 'MAY', 'JUN', 'JUL', 'AUG', 'SEP', 'OCT', 'NOV', 'DEC'];
+  const days = [];
+  for (let i = 0; i < n; i += 1) {
+    const d = new Date(start + i * DAY);
+    days.push({ date: isoDay(start + i * DAY), day: d.getUTCDate(), dow: WD[d.getUTCDay()], weekend: [0, 6].includes(d.getUTCDay()),
+      today: start + i * DAY === today, month: i === 0 || d.getUTCDate() === 1 ? MONTHS[d.getUTCMonth()] : null });
+  }
+  const pct = (i) => Math.round((i / n) * 100000) / 1000;
+  const rows = list.map((s) => {
+    const { a, b } = span(s);
+    const row = { s, tr: tracking(s, now), markers: [] };
+    const mark = (t, kind, title) => { if (t != null && t >= start && t <= end) row.markers.push({ kind, title, left: pct(idx(t) + 0.5) }); };
+    mark(parseDate(s.delivery_date), 'delivery', `Delivery ${s.delivery_date}`);
+    const lfd = lfdInfo(s, now);
+    if (lfd) mark(parseDate(lfd.date), 'lfd', `LFD ${lfd.date}`);
+    if (a == null || b == null || b < a) return { ...row, tba: true };
+    const arrived = (STATUS_INDEX[s.status] ?? 0) >= STATUS_INDEX.ARRIVED;
+    const last = !arrived && today > b ? today : b; // past ETA and not arrived: stretch to today
+    const from = Math.max(a, start); const to = Math.min(last, end);
+    if (to < from) return { ...row, out: a > end ? 'later' : 'earlier' };
+    const cells = [];
+    for (let t = from; t <= to; t += DAY) {
+      let state = 'todo';
+      if (arrived) state = 'arr';
+      else if (t > b) state = t === today ? 'current late' : 'late';
+      else if (t < today) state = 'done';
+      else if (t === today) state = 'current';
+      cells.push(state);
+    }
+    return { ...row, left: pct(idx(from)), width: pct(idx(to) - idx(from) + 1), cells, clipL: a < start, clipR: last > end,
+      arrived, late: !arrived && today > b };
+  });
+  return { days, rows, n, todayLeft: today >= start && today <= end ? pct(idx(today)) : null };
+}
+
 // ---------- file name, billing state, closing ----------
 const COMPANY_SUFFIX = /[\s,.]*\b(CO\.?,?\s*LTD\.?|CO\.?|LTD\.?|LIMITED|INC\.?|CORP(ORATION)?\.?|LLC|L\.L\.C\.|COMPANY|INTERNATIONAL|INT'?L|TRADING|IMPORT AND EXPORT|주식회사|\(주\)|㈜)\s*$/i;
 
@@ -386,5 +436,5 @@ function setClosed(id, closed, { db = store.db, userId = null } = {}) {
 module.exports = {
   MODES, STATUSES, STATUS_INDEX, CUSTOMS_STATUSES, HOLD_TYPES, EDITABLE_FIELDS, checklist, lfdInfo,
   statusLabel, normalizeInput, saveLines, nextRefNo, create, update, addEvent, list, find, scopeFor, tracking,
-  shortParty, fileName, billingState, stage, refreshClosed, setClosed, RECEIVABLE,
+  shortParty, fileName, billingState, stage, refreshClosed, setClosed, RECEIVABLE, timeline,
 };

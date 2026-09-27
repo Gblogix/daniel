@@ -9,7 +9,7 @@
         <td><%= c.users %></td><td><a class="btn secondary small" href="/companies/<%= c.id %>">Edit</a></td></tr>
     <% }) %>
   </table></div>
-  <form class="card" method="post" action="/companies">
+  <% if (can('parties')) { %><form class="card" method="post" action="/companies">
     <h2><%= edit ? 'Edit party' : 'Add party' %></h2>
     <input type="hidden" name="_csrf" value="<%= csrf %>">
     <% const c = edit || {}; if (edit) { %><input type="hidden" name="id" value="<%= c.id %>"><% } %>
@@ -23,6 +23,6 @@
     <div class="field"><label>Phone</label><input name="phone" value="<%= c.phone || '' %>"></div>
     <div class="field"><label>Address (printed on invoices / A/N)</label><textarea name="address" rows="3"><%= c.address || '' %></textarea></div>
     <button class="btn">Save</button> <% if (edit) { %><a class="btn secondary" href="/companies">Cancel</a><% } %>
-  </form>
+  </form><% } %>
 </div>
 <%- include('../partials/foot') %>

@@ -114,6 +114,11 @@ Company name, address, tel/fax, accounting contact and **payment instructions** 
 (stored in the database only — keep bank details out of source control). Filing numbers continue the current sequence:
 `OI-#####` ocean import, `AI-#####` air import, `OTH#######` other; `INV-#####`, `DCN-#####` (next numbers editable).
 
+## Permissions
+Admin › **Permissions**: one row per user, one checkbox per permission — create / edit shipments, send notices,
+document intake, edit parties, accounting, delete shipments, automation & company settings, users & permissions — plus
+Active. Admins always have everything; only admins can manage admin accounts.
+
 ## Staff workspace
 Staff sign in to **/app**: ☰ opens the menu (Main, Shipments, Documents, Accounting, Master Code, Administration — like OPUS);
 ☆ next to any page adds it to the favorites bar at the top (saved per user). Every page opens in its own tab

@@ -49,7 +49,7 @@ function authenticate(email, password) {
 function loadUser(req, res, next) {
   const id = req.session?.userId;
   if (id) {
-    const u = store.db.get(`SELECT u.id, u.email, u.name, u.role, u.company_id, u.can_accounting, u.favorites, c.name AS company_name
+    const u = store.db.get(`SELECT u.id, u.email, u.name, u.role, u.company_id, u.can_accounting, u.favorites, u.perms, c.name AS company_name
       FROM users u LEFT JOIN companies c ON c.id = u.company_id WHERE u.id = ? AND u.active = 1`, id);
     if (u) { req.user = u; res.locals.user = u; }
   }
@@ -57,7 +57,52 @@ function loadUser(req, res, next) {
   res.locals.ROLES = ROLES;
   res.locals.isInternal = Boolean(req.user && INTERNAL.includes(req.user.role));
   res.locals.canAccounting = canAccounting(req.user);
+  res.locals.can = (key) => can(req.user, key);
   next();
+}
+
+/**
+ * Staff permissions, switched on / off per user in Admin › Permissions. Admins always have everything.
+ * `accounting` is stored in users.can_accounting (as before); the rest in users.perms (JSON). Defaults apply until set.
+ */
+const PERMISSIONS = [
+  { key: 'shipments_edit', label: 'Create / edit shipments', help: 'shipment form, containers, cargo, file uploads, tracking refresh', def: true },
+  { key: 'send_notices', label: 'Send notices & issue documents', help: 'A/N, D/O, ATME, status updates, resend from Outbox', def: true },
+  { key: 'intake', label: 'Document intake', help: 'apply / reject agent uploads', def: true },
+  { key: 'parties', label: 'Edit parties', help: 'customers, agents, brokers, truckers, warehouses', def: true },
+  { key: 'accounting', label: 'Accounting', help: 'invoices, D/N, vendor bills, payments, SOA, P&L, prices', def: false },
+  { key: 'delete', label: 'Delete shipments', help: 'permanently delete a file and its documents', def: false },
+  { key: 'settings', label: 'Automation & company settings', help: 'automation, Smartsheet, tracking, company profile, numbering, delete test data', def: false },
+  { key: 'users', label: 'Users & permissions', help: 'invite users, reset passwords, change permissions', def: false },
+];
+const PERM_KEYS = PERMISSIONS.map((p) => p.key);
+
+function permsOf(user) {
+  let saved = null;
+  try { saved = JSON.parse(user?.perms || 'null'); } catch { saved = null; }
+  const out = {};
+  for (const p of PERMISSIONS) out[p.key] = saved && p.key in saved ? Boolean(saved[p.key]) : p.def;
+  out.accounting = Boolean(user?.can_accounting);
+  return out;
+}
+
+/** Can this user do `key`? Admins: always. Staff: per their permissions. External users: never. */
+function can(user, key) {
+  if (!user) return false;
+  if (user.role === 'admin') return true;
+  if (user.role !== 'staff') return false;
+  return permsOf(user)[key] === true;
+}
+
+function requirePerm(key) {
+  return (req, res, next) => {
+    if (!req.user) return res.redirect(`/login?next=${encodeURIComponent(req.originalUrl)}`);
+    if (!can(req.user, key)) {
+      const p = PERMISSIONS.find((x) => x.key === key);
+      return res.status(403).render('error', { title: 'Forbidden', message: `You do not have the "${p ? p.label : key}" permission. Ask an admin to turn it on in Admin › Permissions.` });
+    }
+    next();
+  };
 }
 
 /** Accounting (invoices, D/N, payments, SOA, prices, profit) is limited to admins and staff granted access. */
@@ -101,4 +146,4 @@ function checkCsrf(req, res, next) {
   next();
 }
 
-module.exports = { canAccounting, requireAccounting, ACCOUNTING_DOCS, ACCOUNTING_EMAILS, ACCOUNTING_FIELDS, ROLES, INTERNAL, SqliteStore, hashPassword, authenticate, loadUser, requireLogin, requireRole, requireInternal, csrf, checkCsrf };
+module.exports = { PERMISSIONS, PERM_KEYS, permsOf, can, requirePerm, canAccounting, requireAccounting, ACCOUNTING_DOCS, ACCOUNTING_EMAILS, ACCOUNTING_FIELDS, ROLES, INTERNAL, SqliteStore, hashPassword, authenticate, loadUser, requireLogin, requireRole, requireInternal, csrf, checkCsrf };

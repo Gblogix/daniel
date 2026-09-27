@@ -1,6 +1,6 @@
 <%- include('partials/head') %>
 <div class="pagehead"><h1>Dashboard</h1>
-  <div class="actions"><a class="btn" href="/shipments/new">+ New shipment</a><a class="btn secondary" href="/portal">Upload documents</a></div>
+  <div class="actions"><% if (can('shipments_edit')) { %><a class="btn" href="/shipments/new">+ New shipment</a><% } %><a class="btn secondary" href="/portal">Upload documents</a></div>
 </div>
 <div class="card summary">
   <div class="sum-group">
@@ -23,7 +23,6 @@
     </div>
   </div>
   <% } %>
-</div></a>
 </div>
 <% if (lfdWatch.length) { %>
 <div class="card" id="lfd">
@@ -39,20 +38,15 @@
   </table></div>
 </div>
 <% } %>
-<div class="grid" style="grid-template-columns: 2fr 1fr">
-  <div class="card">
-    <h2>In progress</h2>
-    <% if (!active.length) { %><p class="muted">No active shipments.</p><% } %>
-    <% active.slice(0, 12).forEach((s) => { const tr = S.tracking(s); %>
-      <div style="padding:10px 0;border-bottom:1px solid var(--line)">
-        <div style="display:flex;justify-content:space-between;gap:8px;align-items:center">
-          <div><a href="/shipments/<%= s.id %>"><b><%= S.fileName(s) %></b></a> · <%= S.MODES[s.mode].icon %> <%= S.MODES[s.mode].label %> · <%= s.customer_name || '—' %></div>
-          <div class="chips"><span class="badge <%= s.status %>"><%= S.statusLabel(s.status) %></span><span class="badge <%= s.customs_status %>"><%= s.customs_status %></span></div>
-        </div>
-        <%- include('partials/trackbar', { s, tr, big: false }) %>
-      </div>
-    <% }) %>
+<div class="card" id="timeline">
+  <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap">
+    <h2 style="margin:0">In progress — schedule</h2>
+    <div class="tl-legend small"><span class="lg done"></span>sailed / flown <span class="lg todo"></span>to go <span class="lg late"></span>past ETA
+      <span class="lg arr"></span>arrived <span class="dmark">◆</span> delivery <span class="lmark">▮</span> LFD</div>
   </div>
+  <%- include('partials/timeline', { tl: S.timeline(active) }) %>
+</div>
+<div class="grid" style="grid-template-columns: 1fr">
   <div class="card">
     <h2>Recent activity</h2>
     <ul class="timeline">

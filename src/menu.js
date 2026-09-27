@@ -11,7 +11,7 @@ const MENU = [
   { key: 'shipments', label: 'Shipments', icon: '🚢', cols: [
     { head: 'Files', items: [
       { id: 'ship-list', label: 'Shipment list (open)', href: '/shipments' },
-      { id: 'ship-new', label: 'New shipment', href: '/shipments/new' },
+      { id: 'ship-new', label: 'New shipment', href: '/shipments/new', perm: 'shipments_edit' },
       { id: 'ship-active', label: 'Active — before delivery', href: '/shipments?stage=active' },
       { id: 'ship-delivered', label: 'Delivered — billing open', href: '/shipments?stage=delivered' },
       { id: 'history', label: 'Shipment history (closed)', href: '/history' },
@@ -29,7 +29,7 @@ const MENU = [
     ] },
     { head: 'Email', items: [{ id: 'outbox', label: 'Outbox / sent notices', href: '/outbox' }] },
   ] },
-  { key: 'accounting', label: 'Accounting', icon: '🧮', acct: true, cols: [
+  { key: 'accounting', label: 'Accounting', icon: '🧮', perm: 'accounting', cols: [
     { head: 'Operation', items: [
       { id: 'ar-entry', label: 'A/R invoice entry', href: '/invoices/new?kind=AR' },
       { id: 'ap-entry', label: 'A/P vendor bill entry', href: '/invoices/new?kind=AP' },
@@ -51,20 +51,26 @@ const MENU = [
   { key: 'master', label: 'Master Code', icon: '🗂', cols: [
     { head: 'Parties', items: [{ id: 'parties', label: 'Parties (customers, agents, vendors)', href: '/companies' }] },
   ] },
-  { key: 'admin', label: 'Administration', icon: '⚙', admin: true, cols: [
-    { head: 'Administration', items: [
-      { id: 'users', label: 'Users & access', href: '/admin/users' },
-      { id: 'settings', label: 'Automation / Smartsheet / tracking', href: '/admin/settings' },
-      { id: 'company', label: 'Company profile & numbering', href: '/admin/company' },
+  { key: 'admin', label: 'Administration', icon: '⚙', cols: [
+    { head: 'Users', items: [
+      { id: 'permissions', label: 'Permissions (check / uncheck)', href: '/admin/permissions', perm: 'users' },
+      { id: 'users', label: 'Users — invite, password', href: '/admin/users', perm: 'users' },
+    ] },
+    { head: 'Settings', items: [
+      { id: 'settings', label: 'Automation / Smartsheet / tracking', href: '/admin/settings', perm: 'settings' },
+      { id: 'company', label: 'Company profile & numbering', href: '/admin/company', perm: 'settings' },
     ] },
   ] },
 ];
 
 const DEFAULT_FAVORITES = ['dashboard', 'ship-list', 'track', 'intake', 'ar-entry', 'settle'];
 
+/** The menu this user may see: categories and pages filtered by their permissions; empty columns / categories dropped. */
 function menuFor(user) {
-  const acct = auth.canAccounting(user);
-  return MENU.filter((m) => (!m.acct || acct) && (!m.admin || user.role === 'admin'));
+  const ok = (x) => !x.perm || auth.can(user, x.perm);
+  return MENU.filter(ok)
+    .map((m) => ({ ...m, cols: m.cols.map((c) => ({ ...c, items: c.items.filter(ok) })).filter((c) => c.items.length) }))
+    .filter((m) => m.cols.length);
 }
 
 function items(user) {

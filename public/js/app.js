@@ -64,3 +64,10 @@ if (document.documentElement.classList.contains('embedded') && window.top.gbOpen
     }
   });
 }
+
+// Permissions matrix: header checkbox checks / unchecks the whole column.
+document.querySelectorAll('input[data-col]').forEach((all) => {
+  const boxes = () => [...document.querySelectorAll(`input[data-perm="${all.dataset.col}"]:not(:disabled)`)];
+  all.checked = boxes().length > 0 && boxes().every((b) => b.checked);
+  all.addEventListener('change', () => boxes().forEach((b) => { b.checked = all.checked; }));
+});

@@ -1,0 +1,42 @@
+<%- include('../partials/head') %>
+<div class="pagehead"><div><h1 style="margin-bottom:4px">Permissions</h1>
+  <p class="muted small" style="margin:0">Check to give, uncheck to take away, then Save. Admins always have everything. Customers, agents, brokers and truckers only ever see their own shipments.</p></div>
+  <a class="btn secondary" href="/admin/users">Users (invite, password)</a></div>
+<form method="post" action="/admin/permissions" class="perm-form">
+  <input type="hidden" name="_csrf" value="<%= csrf %>">
+  <div class="card" style="padding:0">
+    <div class="tablewrap"><table class="t perm">
+      <thead><tr><th>Staff</th><th class="c">Active</th>
+        <% PERMISSIONS.forEach((p) => { %><th class="c" title="<%= p.help %>"><%= p.label %><br><input type="checkbox" data-col="<%= p.key %>" title="Check / uncheck the whole column"></th><% }) %></tr></thead>
+      <tbody>
+      <% users.filter((u) => ['admin', 'staff'].includes(u.role)).forEach((u) => { const admin = u.role === 'admin'; const lockAdmin = admin && user.role !== 'admin'; %>
+        <tr class="<%= u.active ? '' : 'inactive' %>">
+          <td><input type="hidden" name="ids" value="<%= u.id %>"><b><%= u.name %></b> <span class="badge"><%= ROLES[u.role].label %></span><br><span class="muted small"><%= u.email %></span></td>
+          <td class="c"><input type="checkbox" name="u<%= u.id %>_active" value="1" <%= u.active ? 'checked' : '' %> <%= u.id === user.id || lockAdmin ? 'disabled' : '' %>>
+            <% if (u.id === user.id || lockAdmin) { %><input type="hidden" name="u<%= u.id %>_active" value="<%= u.active ? '1' : '' %>"><% } %></td>
+          <% PERMISSIONS.forEach((p) => { const lockUsers = p.key === 'users' && user.role !== 'admin'; %>
+            <td class="c"><% if (admin) { %><span class="always" title="Admins always have this">✔</span><% } else { %>
+              <input type="checkbox" name="u<%= u.id %>_<%= p.key %>" value="1" data-perm="<%= p.key %>" <%= u.p[p.key] ? 'checked' : '' %> <%= lockUsers ? 'disabled' : '' %>><% } %></td>
+          <% }) %>
+        </tr>
+      <% }) %>
+      </tbody>
+    </table></div>
+  </div>
+  <div class="card" style="padding:0">
+    <div class="tablewrap"><table class="t perm">
+      <thead><tr><th>External users</th><th>Role</th><th>Company</th><th>Sees</th><th class="c">Active</th></tr></thead>
+      <% const SEES = { customer: 'their shipments, tracking, P/L, delivery (no prices)', agent: 'upload portal + their shipments', broker: 'assigned shipments: A/N, HBL, P/L, C/I, ISF', trucker: 'assigned shipments: D/O, P/L' }; %>
+      <% users.filter((u) => !['admin', 'staff'].includes(u.role)).forEach((u) => { %>
+        <tr class="<%= u.active ? '' : 'inactive' %>"><td><input type="hidden" name="ids" value="<%= u.id %>"><b><%= u.name %></b><br><span class="muted small"><%= u.email %></span></td>
+          <td><%= ROLES[u.role].label %></td><td><%= u.company_name || '' %></td><td class="small muted"><%= SEES[u.role] %></td>
+          <td class="c"><input type="checkbox" name="u<%= u.id %>_active" value="1" <%= u.active ? 'checked' : '' %>></td></tr>
+      <% }) %>
+    </table></div>
+  </div>
+  <div class="card small">
+    <% PERMISSIONS.forEach((p) => { %><div><b><%= p.label %></b> — <%= p.help %></div><% }) %>
+  </div>
+  <div class="savebar"><button class="btn">Save permissions</button></div>
+</form>
+<%- include('../partials/foot') %>

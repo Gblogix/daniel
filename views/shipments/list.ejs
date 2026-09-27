@@ -1,6 +1,6 @@
 <%- include('../partials/head') %>
 <div class="pagehead"><h1><%= history ? 'Shipment history' : isInternal ? 'Shipments' : 'Assigned shipments' %></h1>
-  <% if (isInternal && !history) { %><a class="btn" href="/shipments/new">+ New shipment</a><% } %>
+  <% if (isInternal && !history && can('shipments_edit')) { %><a class="btn" href="/shipments/new">+ New shipment</a><% } %>
 </div>
 <% if (history) { %><p class="muted small" style="margin-top:-8px">Closed files — the customer's invoices are paid. Kept here for look-up; reopen a file from its page if something comes up.</p><% } %>
 <form class="filters" method="get">

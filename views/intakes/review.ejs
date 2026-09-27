@@ -29,12 +29,12 @@
         </div>
       </div>
       <%- include('../partials/fields', { s, sources }) %>
-      <div class="actions"><button class="btn">✔ Confirm & apply</button></div>
+      <% if (can('intake')) { %><div class="actions"><button class="btn">✔ Confirm & apply</button></div><% } else { %><p class="muted small">View only — no "Document intake" permission.</p><% } %>
     </form>
     <form method="post" action="/intakes/<%= intake.id %>/reject" class="card" style="margin-top:18px">
       <input type="hidden" name="_csrf" value="<%= csrf %>">
       <div class="field"><label>Reject reason</label><input name="reason" placeholder="e.g. duplicate upload, wrong shipment"></div>
-      <button class="btn danger small" data-confirm="Reject this intake?">Reject</button>
+      <% if (can('intake')) { %><button class="btn danger small" data-confirm="Reject this intake?">Reject</button><% } %>
     </form>
   <% } else { %>
     <div class="card">This intake was <b><%= intake.status.toLowerCase() %></b><% if (intake.shipment_id) { %> → <a href="/shipments/<%= intake.shipment_id %>">shipment</a><% } %>.</div>

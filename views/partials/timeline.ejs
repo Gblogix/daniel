@@ -1,0 +1,39 @@
+<%# locals: tl — one shared calendar, one line per shipment %>
+<% const cols = `repeat(${tl.n}, minmax(0, 1fr))`; %>
+<div class="tl-wrap"><div class="tl">
+  <div class="tl-head">
+    <div class="tl-label muted small"><%= tl.rows.length %> shipment(s)</div>
+    <div class="tl-cal">
+      <div class="tl-months" style="grid-template-columns: <%= cols %>">
+        <% tl.days.forEach((d) => { %><span><%= d.month || '' %></span><% }) %>
+      </div>
+      <div class="tl-days" style="grid-template-columns: <%= cols %>">
+        <% tl.days.forEach((d) => { %><span class="<%= d.weekend ? 'we' : '' %> <%= d.today ? 'today' : '' %>" title="<%= d.date %>"><b><%= d.day %></b><i><%= d.today ? 'Today' : d.dow %></i></span><% }) %>
+      </div>
+    </div>
+  </div>
+  <% if (!tl.rows.length) { %><p class="muted small" style="padding:10px">No active shipments.</p><% } %>
+  <% tl.rows.forEach((r) => { const s = r.s; %>
+    <div class="tl-row">
+      <div class="tl-label">
+        <a href="/shipments/<%= s.id %>" title="<%= s.ref_no %>"><b><%= S.fileName(s) %></b></a>
+        <div class="small muted"><%= S.MODES[s.mode].icon %> <%= s.customer_name || '—' %> ·
+          <span class="st st-<%= s.status %>"><%= S.statusLabel(s.status) %></span><% if (['EXAM', 'HOLD'].includes(s.customs_status)) { %> · <span class="st-hold"><%= s.customs_status %></span><% } %></div>
+        <div class="small muted"><%= (s.pol || '?').split(',')[0] %> → <%= (s.pod || '?').split(',')[0] %> · <%= s.ata ? 'ATA' : 'ETA' %> <%= (s.ata || s.eta || 'TBA').slice(5).replace('-', '/') %><%
+          if (!r.tba && !r.arrived && r.tr.daysLeft != null && !r.late) { %> (<%= r.tr.daysLeft %>d)<% } %><%= r.late ? ' · late' : '' %></div>
+      </div>
+      <div class="tl-track">
+        <div class="tl-grid" style="grid-template-columns: <%= cols %>"><% tl.days.forEach((d) => { %><span class="<%= d.weekend ? 'we' : '' %> <%= d.today ? 'today' : '' %>"></span><% }) %></div>
+        <% if (r.tba) { %><span class="tl-note">Schedule TBA</span>
+        <% } else if (r.out) { %><span class="tl-note"><%= r.out === 'later' ? `Departs ${s.etd} →` : '← earlier' %></span>
+        <% } else { %>
+          <div class="tl-bar <%= r.clipL ? 'clip-l' : '' %> <%= r.clipR ? 'clip-r' : '' %>" style="left: <%= r.left %>%; width: <%= r.width %>%"
+            title="<%= s.pol || '' %> → <%= s.pod || '' %> · ETD <%= s.atd || s.etd %> · ETA <%= s.ata || s.eta %>">
+            <% r.cells.forEach((c) => { %><i class="<%= c %>"></i><% }) %>
+          </div>
+        <% } %>
+        <% r.markers.forEach((m) => { %><span class="tl-mark tl-<%= m.kind %>" style="left: <%= m.left %>%" title="<%= m.title %>"><%= m.kind === 'delivery' ? '◆' : '' %></span><% }) %>
+      </div>
+    </div>
+  <% }) %>
+</div></div>

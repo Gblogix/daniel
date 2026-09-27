@@ -47,7 +47,7 @@
   <% } %>
 </div>
 
-<div class="card">
+<% if (can('send_notices')) { %><div class="card">
   <h2>Notices</h2>
   <div class="actions">
     <form method="post" action="/shipments/<%= s.id %>/actions/send-an"><input type="hidden" name="_csrf" value="<%= csrf %>">
@@ -63,7 +63,7 @@
     <% }) %>
   </div>
   <p class="muted small" style="margin:8px 0 0">Subject: <span class="mono">[A/N] MBL // HBL // Container // 40HC x 1 // ETA m/d // LFD m/d</span>. Re-issued documents are marked _Rev. Automatic sending rules are in Automation settings.</p>
-</div>
+</div><% } %>
 
 <% if (canAccounting) { const m = (v) => fmtNum(v, 2); %>
 <div class="card" id="accounting">
@@ -133,7 +133,7 @@
   <form method="post" action="/shipments/<%= s.id %>">
     <input type="hidden" name="_csrf" value="<%= csrf %>">
     <%- include('../partials/fields', { s }) %>
-    <div class="actions"><button class="btn">Save changes</button></div>
+    <% if (can('shipments_edit')) { %><div class="actions"><button class="btn">Save changes</button></div><% } else { %><p class="muted small">View only — you do not have the "Create / edit shipments" permission.</p><% } %>
   </form>
 
   <div>
@@ -153,14 +153,14 @@
           </tr>
         <% }) %>
       </table>
-      <form method="post" action="/shipments/<%= s.id %>/documents?_csrf=<%= csrf %>" enctype="multipart/form-data" style="margin-top:12px">
+<% if (can('shipments_edit')) { %>      <form method="post" action="/shipments/<%= s.id %>/documents?_csrf=<%= csrf %>" enctype="multipart/form-data" style="margin-top:12px">
         <div class="grid g2" style="gap:8px">
           <select name="doc_type"><% ['MBL','HBL','PL','CI','ISF','AWB','AN','DO','ATME','INVOICE','OTHER'].forEach((t) => { %><option><%= t %></option><% }) %></select>
           <label class="check"><input type="checkbox" name="customer_visible" value="1"> Visible to customer</label>
         </div>
         <input type="file" name="files" multiple style="margin:8px 0">
         <button class="btn secondary small">Upload</button>
-      </form>
+      </form><% } %>
     </div>
 
     <div class="card" id="emails">
@@ -183,7 +183,7 @@
       </ul>
     </div>
 
-    <% if (user.role === 'admin') { %>
+    <% if (can('delete')) { %>
       <form method="post" action="/shipments/<%= s.id %>/delete"><input type="hidden" name="_csrf" value="<%= csrf %>">
         <button class="btn danger small" data-confirm="Delete shipment <%= S.fileName(s) %> (<%= s.ref_no %>) and all its documents? This cannot be undone.">Delete shipment</button></form>
     <% } %>

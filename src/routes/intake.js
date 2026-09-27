@@ -134,7 +134,7 @@ router.get('/intakes/:id', auth.requireInternal, (req, res) => {
   res.render('intakes/review', { title: `Intake #${intake.id}`, intake, draft, perDoc, docs, target, s, sources, openShipments, ...lists });
 });
 
-router.post('/intakes/:id/apply', auth.requireInternal, async (req, res) => {
+router.post('/intakes/:id/apply', auth.requirePerm('intake'), async (req, res) => {
   const db = store.db;
   const intake = db.get("SELECT * FROM intakes WHERE id = ? AND status = 'PENDING'", Number(req.params.id));
   if (!intake) return res.status(404).render('error', { title: 'Not found', message: 'Intake not found or already processed.' });
@@ -156,7 +156,7 @@ router.post('/intakes/:id/apply', auth.requireInternal, async (req, res) => {
   res.redirect(`/shipments/${id}`);
 });
 
-router.post('/intakes/:id/reject', auth.requireInternal, (req, res) => {
+router.post('/intakes/:id/reject', auth.requirePerm('intake'), (req, res) => {
   store.db.run("UPDATE intakes SET status = 'REJECTED', note = COALESCE(note, '') || ?, reviewed_at = datetime('now'), reviewed_by = ? WHERE id = ?",
     req.body.reason ? `\nRejected: ${req.body.reason}` : '', req.user.id, Number(req.params.id));
   req.session.flash = { type: 'ok', msg: 'Intake rejected' };

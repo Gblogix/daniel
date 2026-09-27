@@ -70,7 +70,7 @@ router.get('/history', auth.requireInternal, (req, res) => {
   res.render('shipments/list', { title: 'Shipment history', rows, q, status: '', mode, stage: 'closed', STAGES, bill: '', history: true });
 });
 
-router.get('/shipments/new', auth.requireInternal, (req, res) => {
+router.get('/shipments/new', auth.requirePerm('shipments_edit'), (req, res) => {
   res.render('shipments/form', { title: 'New shipment', s: { mode: 'FCL', status: 'BOOKED', customs_status: 'PENDING', containers: [], items: [] }, ...partyLists() });
 });
 
@@ -80,7 +80,7 @@ function stripAccounting(req) {
   return req.body;
 }
 
-router.post('/shipments', auth.requireInternal, (req, res) => {
+router.post('/shipments', auth.requirePerm('shipments_edit'), (req, res) => {
   const id = S.create(stripAccounting(req), { userId: req.user.id });
   S.saveLines(id, req.body);
   flash(req, 'ok', 'Shipment created');
@@ -121,7 +121,7 @@ function docFilter(user) {
   return 'AND 0';
 }
 
-router.post('/shipments/:id', auth.requireInternal, async (req, res) => {
+router.post('/shipments/:id', auth.requirePerm('shipments_edit'), async (req, res) => {
   const id = Number(req.params.id);
   const changes = S.update(id, stripAccounting(req));
   S.saveLines(id, req.body);
@@ -164,7 +164,7 @@ router.post('/shipments/:id/close', auth.requireAccounting, (req, res) => {
   res.redirect(`/shipments/${id}`);
 });
 
-router.post('/shipments/:id/delete', auth.requireRole('admin'), (req, res) => {
+router.post('/shipments/:id/delete', auth.requirePerm('delete'), (req, res) => {
   store.db.run('DELETE FROM shipments WHERE id = ?', Number(req.params.id));
   flash(req, 'ok', 'Shipment deleted');
   res.redirect('/shipments');
@@ -176,7 +176,7 @@ const ACTIONS = {
   'send-do': (id, u) => notify.sendDeliveryOrder(id, { userId: u.id }).then(() => 'Delivery order sent to trucker'),
   'send-update': (id, u) => notify.sendCustomerUpdate(id, 'Shipment status update', { userId: u.id }).then(() => 'Status update sent to customer'),
 };
-router.post('/shipments/:id/actions/:action', auth.requireInternal, async (req, res) => {
+router.post('/shipments/:id/actions/:action', auth.requirePerm('send_notices'), async (req, res) => {
   const id = Number(req.params.id);
   const fn = ACTIONS[req.params.action];
   if (!fn) return res.status(400).render('error', { title: 'Unknown action', message: 'Unknown action.' });
@@ -184,7 +184,7 @@ router.post('/shipments/:id/actions/:action', auth.requireInternal, async (req, 
   res.redirect(`/shipments/${id}#emails`);
 });
 
-router.post('/shipments/:id/track', auth.requireInternal, async (req, res) => {
+router.post('/shipments/:id/track', auth.requirePerm('shipments_edit'), async (req, res) => {
   const r = await require('../tracking').refreshShipment(Number(req.params.id), { userId: req.user.id });
   flash(req, r.ok ? 'ok' : 'err', r.ok ? `Tracking updated${r.changes.length ? ` — ${r.changes.map((c) => c.field).join(', ')} changed` : ' — no changes'}` : `Tracking: ${r.error}`);
   res.redirect(`/shipments/${req.params.id}#tracking`);
@@ -201,7 +201,7 @@ router.get('/shipments/:id/preview/:type', auth.requireInternal, (req, res) => {
 });
 
 // Issue (save) a document without emailing it — e.g. to download and send manually.
-router.post('/shipments/:id/issue/:type', auth.requireInternal, async (req, res) => {
+router.post('/shipments/:id/issue/:type', auth.requirePerm('send_notices'), async (req, res) => {
   const type = req.params.type.toUpperCase();
   if (!['AN', 'DO', 'ATME'].includes(type)) return res.status(400).render('error', { title: 'Unknown document', message: 'Unknown document type.' });
   const d = await notify.generateDocument(Number(req.params.id), type, { userId: req.user.id });
@@ -210,7 +210,7 @@ router.post('/shipments/:id/issue/:type', auth.requireInternal, async (req, res)
 });
 
 // ---------- documents ----------
-router.post('/shipments/:id/documents', auth.requireInternal, upload.array('files', 10), auth.checkCsrf, (req, res) => {
+router.post('/shipments/:id/documents', auth.requirePerm('shipments_edit'), upload.array('files', 10), auth.checkCsrf, (req, res) => {
   const id = Number(req.params.id);
   for (const f of req.files || []) {
     store.db.run(`INSERT INTO documents (shipment_id, doc_type, filename, stored_path, mime, size, customer_visible, uploaded_by)
@@ -221,7 +221,7 @@ router.post('/shipments/:id/documents', auth.requireInternal, upload.array('file
   res.redirect(`/shipments/${id}#docs`);
 });
 
-router.post('/documents/:id/visibility', auth.requireInternal, (req, res) => {
+router.post('/documents/:id/visibility', auth.requirePerm('shipments_edit'), (req, res) => {
   const d = store.db.get('SELECT * FROM documents WHERE id = ?', Number(req.params.id));
   if (!d) return res.status(404).end();
   store.db.run('UPDATE documents SET customer_visible = ? WHERE id = ?', d.customer_visible ? 0 : 1, d.id);

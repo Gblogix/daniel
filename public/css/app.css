@@ -319,3 +319,57 @@ body.shell { height: 100vh; display: flex; flex-direction: column; overflow: hid
 .sum-grid .bad b { color: var(--red); }
 .sum-grid .bad { border-color: #fecaca; }
 @media (max-width: 900px) { .summary { flex-direction: column; } .sum-group.billing { border-left: 0; border-top: 1px solid var(--line); } }
+
+/* Dashboard schedule: shared calendar on top, one line per shipment */
+.tl-wrap { overflow-x: auto; margin-top: 10px; }
+.tl { min-width: 880px; }
+.tl-head, .tl-row { display: grid; grid-template-columns: 270px 1fr; }
+.tl-head { position: sticky; top: 0; background: var(--card); z-index: 2; border-bottom: 2px solid #c7d4ea; }
+.tl-label { padding: 6px 10px 6px 0; min-width: 0; line-height: 1.35; }
+.tl-label a { display: block; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-size: 13.5px; }
+.tl-label .small { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-size: 11.5px; }
+.tl-months, .tl-days, .tl-grid { display: grid; }
+.tl-months span { font-size: 10.5px; font-weight: 700; color: var(--navy); white-space: nowrap; overflow: visible; height: 14px; }
+.tl-days span { text-align: center; padding: 2px 0 4px; border-left: 1px solid var(--line); }
+.tl-days b { display: block; font-size: 12px; color: #334155; }
+.tl-days i { display: block; font-style: normal; font-size: 9.5px; color: #94a3b8; }
+.tl-days .we b { color: #94a3b8; }
+.tl-days .today { background: #fef3c7; border-radius: 4px 4px 0 0; }
+.tl-days .today b, .tl-days .today i { color: #b45309; font-weight: 700; }
+.tl-row { border-bottom: 1px solid var(--line); }
+.tl-row:hover { background: #f8fafc; }
+.tl-track { position: relative; min-height: 52px; }
+.tl-grid { position: absolute; inset: 0; }
+.tl-grid span { border-left: 1px solid #eef2f7; }
+.tl-grid .we { background: #f8fafc; }
+.tl-grid .today { background: #fef3c7; border-left: 1px solid #f59e0b; border-right: 1px solid #f59e0b; }
+.tl-bar { position: absolute; top: 50%; transform: translateY(-50%); height: 16px; display: flex; gap: 1px; padding: 0 1px; }
+.tl-bar i { flex: 1; border-radius: 3px; background: #e5e7eb; }
+.tl-bar i.done { background: linear-gradient(180deg, #3b82f6, var(--blue)); }
+.tl-bar i.arr { background: linear-gradient(180deg, #22c55e, var(--green)); }
+.tl-bar i.late { background: linear-gradient(180deg, #fb923c, #ea580c); }
+.tl-bar i.current { background: var(--amber); animation: blink 1.1s ease-in-out infinite; box-shadow: 0 0 8px rgba(245,158,11,.8); }
+.tl-bar.clip-l i:first-child { border-top-left-radius: 0; border-bottom-left-radius: 0; }
+.tl-bar.clip-r i:last-child { border-top-right-radius: 0; border-bottom-right-radius: 0; }
+.tl-note { position: absolute; top: 50%; left: 8px; transform: translateY(-50%); font-size: 12px; color: var(--muted); }
+.tl-mark { position: absolute; top: 50%; transform: translate(-50%, -50%); z-index: 1; font-size: 14px; line-height: 1; }
+.tl-mark.tl-delivery { color: #7c3aed; margin-top: -14px; font-size: 12px; }
+.tl-mark.tl-lfd { width: 3px; height: 26px; background: var(--red); border-radius: 2px; }
+.st { font-weight: 600; color: #334155; }
+.st-hold { color: var(--red); font-weight: 700; }
+.tl-legend { display: flex; align-items: center; gap: 6px; color: var(--muted); flex-wrap: wrap; }
+.tl-legend .lg { display: inline-block; width: 16px; height: 8px; border-radius: 2px; margin-left: 6px; }
+.lg.done { background: var(--blue); } .lg.todo { background: #e5e7eb; } .lg.late { background: #ea580c; } .lg.arr { background: var(--green); }
+.tl-legend .dmark { color: #7c3aed; margin-left: 6px; } .tl-legend .lmark { color: var(--red); margin-left: 6px; }
+@media (prefers-reduced-motion: reduce) { .tl-bar i.current { animation: none; } }
+
+/* Permissions matrix */
+table.perm th.c, table.perm td.c { text-align: center; }
+table.perm thead th { vertical-align: bottom; font-size: 11px; line-height: 1.3; white-space: normal; min-width: 76px; max-width: 110px; }
+table.perm td:first-child { min-width: 200px; }
+table.perm thead th input { margin-top: 6px; }
+table.perm input[type=checkbox] { width: 18px; height: 18px; cursor: pointer; }
+table.perm .always { color: var(--green); font-weight: 700; }
+table.perm tr.inactive td { opacity: .55; }
+table.perm tbody tr:hover { background: var(--soft); }
+.savebar { position: sticky; bottom: 0; background: var(--bg); padding: 10px 0; }

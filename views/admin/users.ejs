@@ -1,5 +1,5 @@
 <%- include('../partials/head') %>
-<div class="pagehead"><h1>Users & access</h1></div>
+<div class="pagehead"><h1>Users & access</h1><a class="btn" href="/admin/permissions">☑ Permissions (check / uncheck)</a></div>
 <div class="card small">
   <b>Access levels:</b> <b>Admin</b> — everything incl. users & automation · <b>Staff</b> — all shipments, documents, notices ·
   <b>Accounting access</b> (staff checkbox) — invoices, D/N, payments, SOA, prices, profit; admins always have it ·
@@ -19,7 +19,6 @@
           <div class="field"><label>Role</label><select name="role"><% Object.entries(ROLES).forEach(([k, r]) => { %><option value="<%= k %>" <%= u.role === k ? 'selected' : '' %>><%= r.label %></option><% }) %></select></div>
           <div class="field"><label>Company</label><select name="company_id"><option value="">—</option><% companies.forEach((c) => { %><option value="<%= c.id %>" <%= u.company_id === c.id ? 'selected' : '' %>><%= c.name %></option><% }) %></select></div>
           <div class="field"><label>New password (optional)</label><input name="password" type="password" minlength="8" autocomplete="new-password"></div>
-          <label class="check"><input type="checkbox" name="can_accounting" value="1" <%= u.can_accounting ? 'checked' : '' %>> Accounting access (staff)</label>
           <label class="check"><input type="checkbox" name="active" value="1" <%= u.active ? 'checked' : '' %>> Active</label>
           <button class="btn small" style="margin-top:8px">Save</button>
         </form></details></td></tr>
