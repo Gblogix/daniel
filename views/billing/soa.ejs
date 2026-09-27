@@ -1,0 +1,35 @@
+<%- include('../partials/head') %>
+<% const m = (v) => fmtNum(v, 2); %>
+<div class="pagehead"><div><h1 style="margin-bottom:4px">Statement of account — <%= agent.name %></h1>
+  <div class="chips"><span class="badge">Due to us <%= m(soa.dueToUs) %></span><span class="badge">Due to agent <%= m(soa.dueToAgent) %></span>
+    <span class="badge <%= soa.net >= 0 ? 'paid' : 'unpaid' %>">Net <%= m(Math.abs(soa.net)) %> <%= soa.net >= 0 ? 'due to us' : 'we owe' %></span></div></div>
+  <div class="actions">
+    <a class="btn secondary" href="?all=<%= all ? '' : '1' %>"><%= all ? 'Open items only' : 'Include settled' %></a>
+    <a class="btn secondary" href="/billing/agents/<%= agent.id %>/soa.xlsx">⬇ Excel</a>
+    <form method="post" action="/billing/agents/<%= agent.id %>/send-soa"><input type="hidden" name="_csrf" value="<%= csrf %>"><button class="btn" data-confirm="Email the SOA to <%= agent.name %>?">✉ Email SOA</button></form>
+    <a class="btn secondary" href="/invoices/new?kind=AP">+ Agent invoice (AP)</a>
+  </div>
+</div>
+<form method="post" action="/billing/agents/<%= agent.id %>/settle">
+  <input type="hidden" name="_csrf" value="<%= csrf %>">
+  <div class="tablewrap"><table class="t">
+    <thead><tr><th></th><th>Date</th><th>Doc no.</th><th>Type</th><th>Our filing</th><th>Agent ref / HBL</th><th>ETA</th><th class="right">Amount</th><th class="right">Settled</th><th class="right">Open</th><th class="right">Running</th><th>Sent to agent</th></tr></thead>
+    <% soa.items.forEach((i) => { %>
+      <tr><td><% if (i.status === 'OPEN') { %><input type="checkbox" name="invoice_ids" value="<%= i.id %>"><% } %></td>
+        <td class="nowrap"><%= i.invoice_date %></td><td><a href="/invoices/<%= i.id %>"><%= i.number %></a></td>
+        <td class="small"><%= i.kind === 'AP' ? 'Agent invoice' : i.total < 0 ? 'Credit note' : 'Debit note' %></td>
+        <td><% if (i.shipment_id) { %><a href="/shipments/<%= i.shipment_id %>"><%= i.ref_no %></a><% } %></td>
+        <td class="mono small"><%= i.agent_ref || i.ship_agent_ref || i.hbl_no || '' %></td><td><%= i.eta || '' %></td>
+        <td class="right" style="color:<%= i.signed < 0 ? 'var(--red)' : 'inherit' %>"><%= m(i.signed) %></td><td class="right"><%= m(i.paid_amount) %></td>
+        <td class="right"><b><%= m(i.open) %></b></td><td class="right"><%= m(i.running) %></td>
+        <td class="small"><%= i.sent_at ? fmtDate(i.sent_at) : (i.kind === 'DN' ? '⚠ not sent' : '') %></td></tr>
+    <% }) %>
+  </table></div>
+  <div class="card" style="margin-top:14px">
+    <h3>Settle selected items (netting)</h3>
+    <p class="muted small">Debit notes are offset against agent invoices / credit notes; the difference is recorded as the wire. Unselected items are carried forward.</p>
+    <div class="actions"><input type="date" name="paid_on" value="<%= new Date().toISOString().slice(0, 10) %>" style="width:170px"><input name="reference" placeholder="Wire reference" style="width:220px"><input name="memo" placeholder="Memo (e.g. 9/20 SOA)" style="width:220px">
+      <button class="btn" data-confirm="Settle the selected items?">Settle selected</button></div>
+  </div>
+</form>
+<%- include('../partials/foot') %>

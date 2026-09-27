@@ -1,0 +1,59 @@
+<%- include('../partials/head') %>
+<% const m = (v) => fmtNum(v, 2); %>
+<div class="pagehead"><h1>Billing</h1>
+  <div class="actions"><a class="btn" href="/invoices/new?kind=AR">+ AR invoice</a><a class="btn secondary" href="/invoices/new?kind=DN">+ D/N to agent</a><a class="btn secondary" href="/invoices/new?kind=AP">+ Vendor bill (AP)</a></div>
+</div>
+
+<div class="card">
+  <h2>Accounts receivable — aging</h2>
+  <% if (!aging.length) { %><p class="muted small">No open invoices.</p><% } else { %>
+  <div class="tablewrap"><table class="t">
+    <thead><tr><th>Customer</th><th class="right">Current</th><th class="right">1–30</th><th class="right">31–60</th><th class="right">61–90</th><th class="right">90+</th><th class="right">Total open</th></tr></thead>
+    <% aging.forEach((g) => { %>
+      <tr><td><details><summary><b><%= g.company_name %></b> <span class="muted small">(<%= g.invoices.length %>)</span></summary>
+        <form method="post" action="/billing/send-batch" style="margin-top:6px"><input type="hidden" name="_csrf" value="<%= csrf %>"><input type="hidden" name="company_id" value="<%= g.company_id %>">
+        <table class="t small"><% g.invoices.forEach((i) => { %><tr><td><input type="checkbox" name="invoice_ids" value="<%= i.id %>" <%= i.sent_at ? '' : 'checked' %>></td>
+          <td><a href="/invoices/<%= i.id %>"><%= i.number %></a></td><td><%= i.hbl_no || i.ref_no || '' %></td><td>due <%= i.due_date %></td>
+          <td class="right"><%= m(i.balance) %></td><td><%= i.days_past_due > 0 ? `${i.days_past_due}d late` : '' %></td><td><%= i.sent_at ? 'sent' : '' %></td></tr><% }) %></table>
+        <button class="btn small" style="margin-top:6px">✉ Email selected as "Invoice - <%= g.company_name %>"</button></form></details></td>
+        <td class="right"><%= m(g.current) %></td><td class="right"><%= m(g.d30) %></td><td class="right"><%= m(g.d60) %></td><td class="right"><%= m(g.d90) %></td>
+        <td class="right" style="<%= g.d90p ? 'color:var(--red)' : '' %>"><%= m(g.d90p) %></td><td class="right"><b><%= m(g.total) %></b></td></tr>
+    <% }) %>
+  </table></div><% } %>
+</div>
+
+<div class="grid g2" style="align-items:start">
+  <div class="card">
+    <h2>Agents — statement of account</h2>
+    <% if (!agents.length) { %><p class="muted small">No open D/N or agent invoices.</p><% } %>
+    <table class="t">
+      <% agents.forEach((a) => { %><tr><td><a href="/billing/agents/<%= a.id %>"><b><%= a.name %></b></a><br><span class="small muted"><%= a.soa.items.length %> open item(s)</span></td>
+        <td class="right small">due to us <%= m(a.soa.dueToUs) %><br>due to agent <%= m(a.soa.dueToAgent) %></td>
+        <td class="right"><b style="color:<%= a.soa.net >= 0 ? 'var(--green)' : 'var(--red)' %>"><%= m(Math.abs(a.soa.net)) %></b><br><span class="small"><%= a.soa.net >= 0 ? 'net due to us' : 'net we owe' %></span></td></tr><% }) %>
+    </table>
+  </div>
+  <div class="card">
+    <h2>Record payment</h2>
+    <form method="post" action="/billing/payments">
+      <input type="hidden" name="_csrf" value="<%= csrf %>">
+      <div class="grid g2">
+        <div class="field"><label>From / to</label><select name="company_id" required><option value="">—</option><% parties.forEach((p) => { %><option value="<%= p.id %>"><%= p.name %> (<%= p.type %>)</option><% }) %></select></div>
+        <div class="field"><label>Direction</label><select name="direction"><option value="IN">Received (customer / agent pays us)</option><option value="OUT">Paid (we pay vendor / agent)</option></select></div>
+        <div class="field"><label>Amount (USD)</label><input name="amount" type="number" step="0.01" required></div>
+        <div class="field"><label>Date</label><input name="paid_on" type="date" value="<%= new Date().toISOString().slice(0, 10) %>"></div>
+        <div class="field"><label>Method</label><select name="method"><option>ACH</option><option>WIRE</option><option>CHECK</option></select></div>
+        <div class="field"><label>Reference</label><input name="reference" placeholder="Mercury ACH / check #"></div>
+      </div>
+      <p class="muted small">Applied to the oldest open items first (one ACH can cover many invoices).</p>
+      <button class="btn">Record</button>
+    </form>
+  </div>
+</div>
+
+<div class="card">
+  <h2>Recent payments</h2>
+  <table class="t"><thead><tr><th>Date</th><th>Party</th><th>Dir</th><th>Method</th><th>Reference</th><th class="right">Amount</th><th>Items</th></tr></thead>
+    <% payments.forEach((p) => { %><tr><td><%= p.paid_on %></td><td><%= p.company_name || '' %></td><td><%= p.direction %></td><td><%= p.method || '' %></td><td class="small"><%= p.reference || '' %></td><td class="right"><%= m(p.amount) %></td><td><%= p.n %></td></tr><% }) %>
+  </table>
+</div>
+<%- include('../partials/foot') %>

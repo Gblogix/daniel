@@ -70,9 +70,12 @@ router.get('/shipments/:id', auth.requireLogin, (req, res) => {
   const docs = db.all(`SELECT * FROM documents WHERE shipment_id = ? ${internal ? '' : docFilter(viewer)} ORDER BY id DESC`, s.id);
   const events = db.all(`SELECT * FROM events WHERE shipment_id = ? ${internal ? '' : 'AND customer_visible = 1'} ORDER BY id DESC`, s.id);
   const emails = internal ? db.all('SELECT id, kind, to_addr, subject, status, created_at FROM emails WHERE shipment_id = ? ORDER BY id DESC', s.id) : [];
+  const A = require('../accounting');
+  const invoices = internal ? A.listInvoices({ shipmentId: s.id }) : [];
+  const profit = internal ? A.shipmentProfit(s.id) : null;
   const trackEvents = db.all("SELECT * FROM tracking_events WHERE shipment_id = ? AND classifier IN ('ACT', '') ORDER BY event_time DESC LIMIT 30", s.id);
   const view = internal ? 'shipments/detail' : 'customer/detail';
-  res.render(view, { title: s.ref_no, s, tr: S.tracking(s), docs, events, emails, trackEvents, trackingStatus: require('../tracking').status(), ...(internal ? partyLists() : {}) });
+  res.render(view, { title: s.ref_no, s, tr: S.tracking(s), docs, events, emails, trackEvents, invoices, profit, trackingStatus: require('../tracking').status(), ...(internal ? partyLists() : {}) });
 });
 
 /** Which documents each external role may download. */

@@ -49,7 +49,7 @@ test('documents applied -> broker packet with A/N + customer update, subject for
   await notify.onDocumentsApplied(s.id);
   const emails = store.db.all('SELECT * FROM emails WHERE shipment_id = ? ORDER BY id', s.id);
   assert.deepEqual(emails.map((e) => e.kind), ['BROKER_PACKET', 'CUSTOMER_UPDATE']);
-  assert.equal(emails[0].to_addr, 'entry@ohmycustoms.example');
+  assert.equal(emails[0].to_addr, 'op@ohmycustoms.example');
   const md = (d) => `${Number(d.slice(5, 7))}/${Number(d.slice(8, 10))}`;
   assert.equal(emails[0].subject, `HDMUPUSA1234567 // KMHB2409001 // TCLU1234567 // 40HC x 1 // ETA ${md(s.eta)}`);
   assert.equal(emails[0].status, 'LOGGED');

@@ -47,7 +47,7 @@ npm test
 ```
 
 First start creates the admin from `ADMIN_EMAIL` / `ADMIN_PASSWORD` (default `admin@gblogix.com` / `changeme123` — change it).
-Demo users (password `demo1234`): `staff@gblogix.com`, `customer@unlockt.example`, `agent@kukmin.example`,
+Demo users (password `demo1234`): `staff@gblogix.com`, `customer@unlockt.example`, `agent@nsc.example`,
 `agent@zhejiang.example`, `broker@ohmycustoms.example`, `dispatch@ctc.example`.
 
 Data lives in `data/gblogix.db` (SQLite) and uploaded/generated files in `uploads/` — back both up.

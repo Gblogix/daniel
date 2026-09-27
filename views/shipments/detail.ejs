@@ -71,6 +71,18 @@
   </form>
 
   <div>
+    <div class="card" id="billing"><h2>Billing</h2>
+      <table class="t small">
+        <% invoices.forEach((i) => { %><tr><td><a href="/invoices/<%= i.id %>"><%= i.number %></a></td><td><%= { AR: 'Invoice', DN: i.total < 0 ? 'C/N' : 'D/N', AP: 'Cost' }[i.kind] %></td>
+          <td><%= i.company_name || '' %></td><td class="right"><%= fmtNum(i.total, 2) %></td><td><span class="badge <%= i.status === 'PAID' ? 'paid' : i.status === 'VOID' ? 'FAILED' : 'unpaid' %>"><%= i.status %></span></td></tr><% }) %>
+      </table>
+      <% if (profit.revenue || profit.cost) { %><p class="small" style="margin:8px 0">Revenue <b><%= fmtNum(profit.revenue, 2) %></b> · Cost <b><%= fmtNum(profit.cost, 2) %></b> · Profit <b style="color:<%= profit.profit >= 0 ? 'var(--green)' : 'var(--red)' %>"><%= fmtNum(profit.profit, 2) %></b><%= profit.margin != null ? ` (${profit.margin}%)` : '' %></p><% } %>
+      <div class="actions" style="margin-top:8px">
+        <a class="btn secondary small" href="/invoices/new?kind=AR&shipment=<%= s.id %>">+ Invoice (AR)</a>
+        <a class="btn secondary small" href="/invoices/new?kind=DN&shipment=<%= s.id %>">+ D/N to agent</a>
+        <a class="btn secondary small" href="/invoices/new?kind=AP&shipment=<%= s.id %>">+ Cost (AP)</a>
+      </div>
+    </div>
     <div class="card"><h2>Clearance & release</h2><%- include('../partials/checklist', { s }) %></div>
     <div class="card" id="docs">
       <h2>Documents</h2>

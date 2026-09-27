@@ -239,6 +239,25 @@ CREATE TABLE IF NOT EXISTS invoice_lines (
   side TEXT NOT NULL DEFAULT 'DEBIT'   -- D/N: DEBIT (+, due to us) | CREDIT (-, due to agent)
 );
 
+CREATE TABLE IF NOT EXISTS payments (
+  id INTEGER PRIMARY KEY,
+  company_id INTEGER REFERENCES companies(id),
+  direction TEXT NOT NULL,            -- IN (received) | OUT (paid)
+  amount REAL NOT NULL,
+  paid_on TEXT NOT NULL,
+  method TEXT,                        -- ACH | WIRE | CHECK | NETTING
+  reference TEXT,
+  memo TEXT,
+  created_by INTEGER REFERENCES users(id),
+  created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+CREATE TABLE IF NOT EXISTS payment_allocations (
+  id INTEGER PRIMARY KEY,
+  payment_id INTEGER NOT NULL REFERENCES payments(id) ON DELETE CASCADE,
+  invoice_id INTEGER NOT NULL REFERENCES invoices(id) ON DELETE CASCADE,
+  amount REAL NOT NULL
+);
+
 CREATE TABLE IF NOT EXISTS settings (
   key TEXT PRIMARY KEY,
   value TEXT
@@ -273,6 +292,8 @@ const MIGRATIONS = {
     empty_returned_at: 'TEXT', current_status: 'TEXT', location: 'TEXT', pickup_no: 'TEXT',
   },
   cargo_items: { unit_price: 'REAL', amount: 'REAL' },
+  companies: { billing_emails: 'TEXT', terms_days: 'INTEGER', short_name: 'TEXT' },
+  invoices: { document_id: 'INTEGER' },
 };
 
 function migrate(db) {
@@ -306,6 +327,7 @@ function open(file = config.dbPath) {
 
 function wrap(db) {
   const cache = new Map();
+  let depth = 0;
   const stmt = (sql) => {
     let s = cache.get(sql);
     if (!s) { s = db.prepare(sql); cache.set(sql, s); }
@@ -319,9 +341,21 @@ function wrap(db) {
     get: (sql, ...p) => { const r = stmt(sql).get(...norm(p)); return r ? { ...r } : undefined; },
     run: (sql, ...p) => stmt(sql).run(...norm(p)),
     exec: (sql) => db.exec(sql),
+    // Nestable: the outermost call opens a transaction, inner calls use savepoints.
     tx(fn) {
-      db.exec('BEGIN');
-      try { const out = fn(); db.exec('COMMIT'); return out; } catch (e) { db.exec('ROLLBACK'); throw e; }
+      const sp = `sp${depth}`;
+      db.exec(depth === 0 ? 'BEGIN' : `SAVEPOINT ${sp}`);
+      depth++;
+      try {
+        const out = fn();
+        depth--;
+        db.exec(depth === 0 ? 'COMMIT' : `RELEASE ${sp}`);
+        return out;
+      } catch (e) {
+        depth--;
+        db.exec(depth === 0 ? 'ROLLBACK' : `ROLLBACK TO ${sp}; RELEASE ${sp}`);
+        throw e;
+      }
     },
     setting: (key) => api.get('SELECT value FROM settings WHERE key = ?', key)?.value,
     setSetting: (key, value) => api.run('INSERT INTO settings (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value', key, String(value)),

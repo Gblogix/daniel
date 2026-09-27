@@ -17,6 +17,7 @@
       <a class="<%= on('/shipments') %>" href="/shipments">Shipments</a>
       <a class="<%= on('/track') %>" href="/track">Tracking board</a>
       <a class="<%= on('/intakes') %>" href="/intakes">Document intake</a>
+      <a class="<%= on('/billing') %>" href="/billing">Billing</a>
       <a class="<%= on('/companies') %>" href="/companies">Parties</a>
       <a class="<%= on('/outbox') %>" href="/outbox">Outbox</a>
       <% if (user.role === 'admin') { %>
@@ -26,6 +27,7 @@
       <% } %>
     <% } else if (user.role === 'customer') { %>
       <a class="<%= on('/track') %>" href="/track">My shipments</a>
+      <a class="<%= on('/my/invoices') %>" href="/my/invoices">Invoices</a>
     <% } else if (user.role === 'agent') { %>
       <a class="<%= on('/portal') %>" href="/portal">Upload documents</a>
       <a class="<%= on('/shipments') %>" href="/shipments">My shipments</a>

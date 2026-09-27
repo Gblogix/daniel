@@ -187,3 +187,7 @@ table.t .right, table.t th.right { text-align: right; }
 .ship-pin { color: var(--navy); font-size: 24px; text-shadow: 0 0 3px #fff; line-height: 28px; text-align: center; }
 .trackinfo { display: grid; grid-template-columns: auto 1fr; gap: 3px 12px; font-size: 13px; }
 .trackinfo dt { color: var(--muted); } .trackinfo dd { margin: 0; }
+
+/* keep the admin menu on one line on laptop screens */
+.nav a { padding: 7px 9px; font-size: 13.5px; }
+@media (max-width: 1540px) { .brand span { display: none; } .who > span:first-child { display: none; } }

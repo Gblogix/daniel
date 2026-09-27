@@ -55,8 +55,8 @@ function fileName(type, s, revision = 0) {
 }
 const shortName = (name) => String(name || '').replace(/\(.*?\)/g, '').replace(/,?\s*(INC|LLC|LTD|CO)\.?$/i, '').trim().split(/\s+/)[0].replace(/[^A-Za-z0-9가-힣]/g, '') || 'Customer';
 function invoiceFileName(inv) {
-  return inv.kind === 'DN' ? `DC_${clean(inv.number).replace(/-/g, '')}-${shortName(inv.company_name)}`
-    : `AR_${clean(inv.number).replace(/-/g, '')}_${shortName(inv.company_name)}`;
+  const who = inv.company_short_name || shortName(inv.company_name);
+  return inv.kind === 'DN' ? `DC_${clean(inv.number).replace(/-/g, '')}-${who}` : `AR_${clean(inv.number).replace(/-/g, '')}_${who}`;
 }
 
 const BASE_CSS = `
@@ -291,9 +291,9 @@ ${refBlock(s, inv)}
   ${lines.map((l) => `<tr><td>${up(l.description)}</td><td class="r">${esc(l.unit || '')}</td><td class="r">${l.rate != null ? n(l.rate, 3) : ''}</td><td class="r">${l.qty != null ? n(l.qty, 0) : ''}</td><td class="r">${n(l.amount)}</td></tr>`).join('')}
 </table>
 <div style="min-height:${Math.max(40, 300 - lines.length * 18)}px"></div>
-<table style="border-top:1px solid #000"><tr><td style="width:58%"></td><td class="r"><b>TOTAL DUE</b></td><td style="width:10%"></td><td class="r" style="width:16%"><b>${n(inv.total)}</b></td></tr>
+<table style="border-top:1px solid #000"><tr><td style="width:46%"></td><td class="r"><b>TOTAL DUE</b></td><td style="width:10%"></td><td class="r" style="width:16%"><b>${n(inv.total)}</b></td></tr>
   <tr><td></td><td class="r"><b>PAID AMOUNT</b></td><td></td><td class="r"><b>${n(inv.paid_amount || 0)}</b></td></tr>
-  <tr><td></td><td class="r"><b>PLEASE PAY THIS AMOUNT</b></td><td class="c"><b>${esc(inv.currency || 'USD')}</b></td><td class="r"><b>${n(inv.total - (inv.paid_amount || 0))}</b></td></tr></table>
+  <tr><td></td><td class="r" style="white-space:nowrap"><b>PLEASE PAY THIS AMOUNT</b></td><td class="c"><b>${esc(inv.currency || 'USD')}</b></td><td class="r"><b>${n(inv.total - (inv.paid_amount || 0))}</b></td></tr></table>
 <table class="b" style="margin-top:10px"><tr><td class="c" style="width:9%;vertical-align:middle"><b>MEMO</b></td><td style="height:48px;font-size:11px">${nl(inv.memo || '')}</td></tr>
   <tr><td class="c" style="vertical-align:middle"><b>REMARK</b></td><td class="small">${remitBlock(co)}</td></tr></table>
 <table style="margin-top:6px"><tr><td style="width:45%;border-bottom:1px solid #000"></td><td></td><td class="c" style="width:40%;border-bottom:1px solid #000">${esc(preparedBy)}</td></tr>

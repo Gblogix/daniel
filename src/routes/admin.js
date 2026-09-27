@@ -5,7 +5,7 @@ const notify = require('../notify');
 
 const router = express.Router();
 const COMPANY_TYPES = {
-  customer: 'Customer (CNEE)', agent: 'Overseas agent', broker: 'Customs broker', trucker: 'Trucker',
+  customer: 'Customer (CNEE / bill-to)', agent: 'Overseas agent', broker: 'Customs broker', trucker: 'Trucker', importer: 'Importer of record (consignee)',
   delivery: 'Delivery location / warehouse', shipper: 'Shipper / factory',
 };
 const flash = (req, type, msg) => { req.session.flash = { type, msg }; };
@@ -21,10 +21,11 @@ router.get('/companies/:id', auth.requireInternal, (req, res) => {
   res.render('admin/companies', { title: 'Parties', rows, COMPANY_TYPES, edit });
 });
 router.post('/companies', auth.requireInternal, (req, res) => {
-  const { id, name, type, country, emails, phone, address } = req.body;
+  const { id, name, type, country, emails, phone, address, billing_emails, short_name } = req.body;
+  const terms = req.body.terms_days === '' || req.body.terms_days == null ? null : Number(req.body.terms_days);
   if (!name || !COMPANY_TYPES[type]) { flash(req, 'err', 'Name and type are required'); return res.redirect('/companies'); }
-  if (id) store.db.run('UPDATE companies SET name = ?, type = ?, country = ?, emails = ?, phone = ?, address = ? WHERE id = ?', name, type, country, emails, phone, address, Number(id));
-  else store.db.run('INSERT INTO companies (name, type, country, emails, phone, address) VALUES (?, ?, ?, ?, ?, ?)', name, type, country, emails, phone, address);
+  if (id) store.db.run('UPDATE companies SET name = ?, type = ?, country = ?, emails = ?, phone = ?, address = ?, billing_emails = ?, terms_days = ?, short_name = ? WHERE id = ?', name, type, country, emails, phone, address, billing_emails, terms, short_name, Number(id));
+  else store.db.run('INSERT INTO companies (name, type, country, emails, phone, address, billing_emails, terms_days, short_name) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)', name, type, country, emails, phone, address, billing_emails, terms, short_name);
   flash(req, 'ok', 'Saved');
   res.redirect('/companies');
 });

@@ -17,8 +17,11 @@
     <div class="field"><label>Type</label><select name="type"><% Object.entries(COMPANY_TYPES).forEach(([k, v]) => { %><option value="<%= k %>" <%= c.type === k ? 'selected' : '' %>><%= v %></option><% }) %></select></div>
     <div class="field"><label>Country</label><input name="country" value="<%= c.country || '' %>" placeholder="US / KR / CN"></div>
     <div class="field"><label>Notice emails (comma separated)</label><input name="emails" value="<%= c.emails || '' %>"></div>
+    <div class="field"><label>Billing emails (invoices / D/N / SOA)</label><input name="billing_emails" value="<%= c.billing_emails || '' %>"></div>
+    <div class="grid g2" style="gap:8px"><div class="field"><label>Payment terms (days)</label><input name="terms_days" type="number" value="<%= c.terms_days ?? '' %>"></div>
+      <div class="field"><label>Short name (file names)</label><input name="short_name" value="<%= c.short_name || '' %>" placeholder="Unlockt"></div></div>
     <div class="field"><label>Phone</label><input name="phone" value="<%= c.phone || '' %>"></div>
-    <div class="field"><label>Address</label><textarea name="address" rows="2"><%= c.address || '' %></textarea></div>
+    <div class="field"><label>Address (printed on invoices / A/N)</label><textarea name="address" rows="3"><%= c.address || '' %></textarea></div>
     <button class="btn">Save</button> <% if (edit) { %><a class="btn secondary" href="/companies">Cancel</a><% } %>
   </form>
 </div>

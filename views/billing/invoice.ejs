@@ -1,0 +1,81 @@
+<%- include('../partials/head') %>
+<% const isNew = !inv.id; const k = inv.kind; const m = (v) => fmtNum(v, 2);
+   const title = { AR: 'Invoice (AR)', DN: inv.total < 0 ? 'Credit note (C/N)' : 'Debit note (D/N)', AP: 'Vendor bill (AP)' }[k]; %>
+<div class="pagehead">
+  <div><h1 style="margin-bottom:4px"><%= isNew ? `New ${title}` : `${title} ${inv.number}` %></h1>
+    <% if (!isNew) { %><div class="chips"><span class="badge <%= inv.status === 'PAID' ? 'paid' : inv.status === 'VOID' ? 'FAILED' : 'unpaid' %>"><%= inv.status %></span>
+      <span class="badge">Total <%= m(inv.total) %></span><span class="badge">Paid <%= m(inv.paid_amount) %></span>
+      <% if (inv.sent_at) { %><span class="badge SENT">sent <%= fmtDate(inv.sent_at) %></span><% } %></div><% } %></div>
+  <div class="actions">
+    <% if (s) { %><a class="btn secondary" href="/shipments/<%= s.id %>#billing">← <%= s.ref_no %></a><% } %>
+    <% if (!isNew && k !== 'AP') { %>
+      <a class="btn secondary" href="/invoices/<%= inv.id %>/preview" target="_blank">Preview</a>
+      <form method="post" action="/invoices/<%= inv.id %>/issue"><input type="hidden" name="_csrf" value="<%= csrf %>"><button class="btn secondary">Issue PDF</button></form>
+      <form method="post" action="/invoices/<%= inv.id %>/send"><input type="hidden" name="_csrf" value="<%= csrf %>"><input type="hidden" name="back" value="/invoices/<%= inv.id %>">
+        <button class="btn" data-confirm="Email <%= inv.number %> to <%= inv.company_name %>?">✉ Email to <%= k === 'AR' ? 'customer' : 'agent' %></button></form>
+    <% } %>
+    <% if (!isNew && inv.document_id) { %><a class="btn secondary" href="/documents/<%= inv.document_id %>" target="_blank">📄 PDF</a><% } %>
+  </div>
+</div>
+<form method="post" action="<%= isNew ? '/invoices' : `/invoices/${inv.id}` %>">
+  <input type="hidden" name="_csrf" value="<%= csrf %>"><input type="hidden" name="kind" value="<%= k %>">
+  <input type="hidden" name="shipment_id" value="<%= inv.shipment_id || '' %>">
+  <div class="card">
+    <div class="grid g4">
+      <div class="field"><label><%= k === 'AR' ? 'Bill to (customer)' : k === 'DN' ? 'Agent' : 'Vendor' %></label>
+        <select name="company_id" required><option value="">—</option><% parties.forEach((p) => { %><option value="<%= p.id %>" <%= inv.company_id === p.id ? 'selected' : '' %>><%= p.name %> (<%= p.type %>)</option><% }) %></select></div>
+      <% if (k === 'AP') { %><div class="field"><label>Vendor invoice no.</label><input name="number" value="<%= inv.number || '' %>" required></div><% } %>
+      <div class="field"><label>Date</label><input type="date" name="invoice_date" value="<%= inv.invoice_date %>"></div>
+      <div class="field"><label>Terms (days)</label><input type="number" name="terms_days" value="<%= inv.terms_days ?? '' %>" placeholder="customer default"></div>
+      <div class="field"><label>Currency</label><input name="currency" value="<%= inv.currency || 'USD' %>"></div>
+      <% if (k === 'AR') { %>
+        <div class="field"><label>Attn</label><input name="attn" value="<%= inv.attn || '' %>"></div>
+        <div class="field"><label>Ship to</label><input name="ship_to" value="<%= inv.ship_to || '' %>" placeholder="e.g. SOLVENZA TRADE INC"></div>
+        <div class="field"><label>Customer ref.</label><input name="customer_ref" value="<%= inv.customer_ref || '' %>"></div>
+      <% } %>
+      <% if (k === 'DN') { %>
+        <div class="field"><label>Agent filing no. / HBL</label><input name="agent_ref" value="<%= inv.agent_ref || '' %>"></div>
+        <div class="field"><label>Profit share %</label><input type="number" step="0.01" name="profit_share" value="<%= inv.profit_share ?? 0 %>"></div>
+      <% } %>
+    </div>
+    <% if (!isNew) { %><div class="field"><label>Bill-to block (printed)</label><textarea name="bill_to" rows="3"><%= inv.bill_to || '' %></textarea></div><% } %>
+    <div class="field"><label>Memo</label><input name="memo" value="<%= inv.memo || '' %>" placeholder="e.g. IPSY DELIVERY - 133 PLTS (MO) & 1 PLT (SC)"></div>
+  </div>
+  <div class="card">
+    <h2>Lines</h2>
+    <% if (k === 'DN' && s && isNew) { %><p class="small"><a href="/invoices/new?kind=DN&shipment=<%= s.id %>&from_ap=1">↺ Start from this shipment's AP costs (cost recovery)</a></p><% } %>
+    <div class="tablewrap"><table class="t lines" data-lines="inv">
+      <thead><tr><% if (k === 'DN') { %><th>M/H</th><th>BL no</th><% } %><th style="min-width:220px">Description</th><th>Unit</th><th>Rate</th><th>Qty</th><th>Amount</th><% if (k === 'DN') { %><th>P/C</th><th>Side</th><% } %><th></th></tr></thead>
+      <tbody>
+      <% (inv.lines.length ? inv.lines : [{}, {}, {}]).forEach((l) => { %><tr>
+        <% if (k === 'DN') { %><td><select name="l_mh"><option <%= l.mh === 'H' ? '' : 'selected' %>>M</option><option <%= l.mh === 'H' ? 'selected' : '' %>>H</option></select></td><td><input name="l_bl" value="<%= l.bl_no || '' %>"></td><% } %>
+        <td><input name="l_desc" value="<%= l.description || '' %>" list="charge-codes"></td><td><input name="l_unit" value="<%= l.unit || '' %>" style="width:70px"></td>
+        <td><input name="l_rate" value="<%= l.rate ?? '' %>" style="width:100px"></td><td><input name="l_qty" value="<%= l.qty ?? '' %>" style="width:60px"></td>
+        <td><input name="l_amount" value="<%= l.amount ?? '' %>" placeholder="= rate × qty" style="width:110px"></td>
+        <% if (k === 'DN') { %><td><select name="l_pc"><option <%= l.pc === 'P' ? '' : 'selected' %>>C</option><option <%= l.pc === 'P' ? 'selected' : '' %>>P</option></select></td>
+          <td><select name="l_side"><option value="DEBIT" <%= l.side === 'CREDIT' ? '' : 'selected' %>>Debit (+)</option><option value="CREDIT" <%= l.side === 'CREDIT' ? 'selected' : '' %>>Credit (−)</option></select></td><% } %>
+        <td><button type="button" class="btn secondary small" data-remove-row>✕</button></td></tr><% }) %>
+      </tbody></table></div>
+    <datalist id="charge-codes"><% codes.forEach((c) => { %><option value="<%= c %>"><% }) %></datalist>
+    <button type="button" class="btn secondary small" data-add-row="inv" style="margin-top:8px">+ Line</button>
+    <p class="muted small">Leave Amount empty to use Rate × Qty.<% if (k === 'DN') { %> Debit = the agent owes us; Credit = we owe the agent. A negative balance prints as a CREDIT NOTE.<% } %></p>
+  </div>
+  <button class="btn"><%= isNew ? 'Create' : 'Save' %></button>
+</form>
+<% if (!isNew) { %>
+  <div class="card" style="margin-top:18px"><h2>Payments</h2>
+    <% if (!allocations.length) { %><p class="muted small">No payments applied.</p><% } %>
+    <table class="t"><% allocations.forEach((a) => { %><tr><td><%= a.paid_on %></td><td><%= a.direction %></td><td><%= a.method || '' %></td><td><%= a.reference || '' %></td><td class="right"><%= m(a.amount) %></td></tr><% }) %></table>
+    <% if (inv.status === 'OPEN') { %>
+      <form method="post" action="/billing/payments" class="actions" style="margin-top:10px">
+        <input type="hidden" name="_csrf" value="<%= csrf %>"><input type="hidden" name="company_id" value="<%= inv.company_id %>">
+        <input type="hidden" name="direction" value="<%= inv.kind === 'AP' || inv.total < 0 ? 'OUT' : 'IN' %>"><input type="hidden" name="allocations_for" value="<%= inv.id %>">
+        <input type="hidden" name="back" value="/invoices/<%= inv.id %>">
+        <input name="amount" type="number" step="0.01" value="<%= inv.balance %>" style="width:140px"><input name="paid_on" type="date" value="<%= new Date().toISOString().slice(0, 10) %>" style="width:160px">
+        <select name="method" style="width:110px"><option>ACH</option><option>WIRE</option><option>CHECK</option></select><input name="reference" placeholder="Reference" style="width:180px">
+        <button class="btn secondary">Record payment on this item</button></form>
+      <form method="post" action="/invoices/<%= inv.id %>/void" style="margin-top:10px"><input type="hidden" name="_csrf" value="<%= csrf %>"><button class="btn danger small" data-confirm="Void <%= inv.number %>?">Void</button></form>
+    <% } %>
+  </div>
+<% } %>
+<%- include('../partials/foot') %>

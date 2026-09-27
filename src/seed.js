@@ -17,29 +17,30 @@ function bootstrap(db = store.db) {
 
 // Parties as they appear in the real email flow (demo notice emails use .example addresses).
 const DEMO_PARTIES = [
-  { key: 'kukmin', name: '국민해운 (Kukmin Shipping)', type: 'agent', country: 'KR', emails: 'docs@kukmin.example' },
+  { key: 'kukmin', name: 'NATIONAL SHIPPING CO., LTD (국민해운)', short_name: 'NSC', type: 'agent', country: 'KR', emails: 'export@nsc.example', billing_emails: 'import@nsc.example, account@nsc.example', terms_days: 0, address: '12TH FLOOR, SAM JUNG BLDG\n69-5, 2KA, TAI PAYUNG-RO, CHUNG-KU\nSEOUL' },
+  { key: 'solvenza_imp', name: 'SOLVENZA TRADE INC', type: 'importer', country: 'US', emails: 'ops@solvenza.example', address: '1525 W. COMMONWEALTH AVE\nFULLERTON, CA 92833' },
   { key: 'zhejiang', name: 'Zhejiang Twings Supply Chain', type: 'agent', country: 'CN', emails: 'ops@twings.example' },
   { key: 'reko', name: 'Reko Logistics (US partner)', type: 'agent', country: 'US', emails: 'lax_op1@reko.example' },
   { key: 'ian', name: 'IAN Customs Service (8TV)', type: 'broker', country: 'US', emails: 'import@ianchb.example' },
-  { key: 'omc', name: 'Oh! My Customs', type: 'broker', country: 'US', emails: 'entry@ohmycustoms.example' },
-  { key: 'solvenza', name: 'Solvenza Trading', type: 'broker', country: 'US', emails: 'customs@solvenza.example' },
-  { key: 'opulen', name: 'Opulen Global', type: 'broker', country: 'US', emails: 'customs@opulen.example' },
+  { key: 'omc', name: 'Oh! My Customs', type: 'broker', country: 'US', emails: 'op@ohmycustoms.example', billing_emails: 'accounting@ohmycustoms.example' },
+  { key: 'solvenza', name: 'Solvenza Trade Inc (clearance)', type: 'broker', country: 'US', emails: 'customs@solvenza.example' },
+  { key: 'opulen', name: 'Opulen Global Inc (clearance)', type: 'broker', country: 'US', emails: 'customs@opulen.example' },
   { key: 'ctc', name: 'CTC Logistics', type: 'trucker', country: 'US', emails: 'dispatch@ctc.example' },
   { key: 'qtrans', name: 'Q-Trans Logistics (Gardena)', type: 'trucker', country: 'US', emails: 'ops@qtrans.example', address: '540 E. Alondra Blvd, Gardena, CA' },
   { key: 'shm', name: 'SHM Transport', type: 'trucker', country: 'US', emails: 'dispatch@shm.example' },
-  { key: 'unlockt', name: 'Unlockt Brands', type: 'customer', country: 'US', emails: 'logistics@unlockt.example' },
+  { key: 'unlockt', name: 'UNLOCKT BRANDS, INC', short_name: 'Unlockt', type: 'customer', country: 'US', emails: 'ops@unlockt.example', billing_emails: 'accounting@unlockt.example', terms_days: 25, address: '14251 FIRESTONE BLVD, STE 204\nLA MIRADA, CA 90638' },
   { key: 'leepop', name: 'LEEPOP Company LLC', type: 'customer', country: 'US', emails: 'ops@leepop.example', address: '417 S Associated Rd #1026, Brea, CA' },
-  { key: 'pgp', name: 'Pacific Global Partners', type: 'customer', country: 'US', emails: 'import@pgp.example' },
-  { key: 'heyhae', name: 'Heyhae', type: 'customer', country: 'US', emails: 'ops@heyhae.example' },
+  { key: 'pgp', name: 'PACIFIC GLOBAL PARTNERS, LLC', short_name: 'PGP', type: 'customer', country: 'US', emails: 'accounting@unlockt.example', billing_emails: 'accounting@unlockt.example', terms_days: 0, address: '14251 FIRESTONE BLVD, STE 204\nLA MIRADA, CA 90638' },
+  { key: 'heyhae', name: 'HEYHAE LLC', short_name: 'Heyhae', type: 'customer', country: 'US', emails: 'accounting@unlockt.example', billing_emails: 'accounting@unlockt.example', terms_days: 25, address: '14251 FIRESTONE BLVD, STE 204\nLA MIRADA, CA 90638' },
   { key: 'nextrade', name: 'Nextrade', type: 'delivery', country: 'US', emails: 'receiving@nextrade.example', address: 'Nextrade Warehouse, South Gate, CA' },
-  { key: 'ubwh', name: 'Unlockt Brands Warehouse', type: 'delivery', country: 'US', emails: 'receiving@unlockt.example', address: 'Unlockt Brands DC, Ontario, CA' },
+  { key: 'ubwh', name: 'UNLOCKT BRANDS - FULLERTON (WALNUT)', type: 'delivery', country: 'US', emails: 'receiving@unlockt.example', address: '1500 E. WALNUT AVENUE\nFULLERTON, CA 92831' },
   { key: 'msi', name: 'MSI West Sacramento', type: 'delivery', country: 'US', emails: 'receiving@msi.example', address: 'West Sacramento, CA' },
 ];
 
 const DEMO_USERS = [
   { email: 'staff@gblogix.com', name: 'GB Staff', role: 'staff' },
   { email: 'customer@unlockt.example', name: 'Unlockt Brands (demo)', role: 'customer', company: 'unlockt' },
-  { email: 'agent@kukmin.example', name: '국민해운 (demo)', role: 'agent', company: 'kukmin' },
+  { email: 'agent@nsc.example', name: '국민해운 NSC (demo)', role: 'agent', company: 'kukmin' },
   { email: 'agent@zhejiang.example', name: 'Zhejiang (demo)', role: 'agent', company: 'zhejiang' },
   { email: 'broker@ohmycustoms.example', name: 'OMC (demo)', role: 'broker', company: 'omc' },
   { email: 'dispatch@ctc.example', name: 'CTC (demo)', role: 'trucker', company: 'ctc' },
@@ -58,7 +59,8 @@ function seedDemo(db = store.db) {
   for (const p of DEMO_PARTIES) {
     const existing = db.get('SELECT id FROM companies WHERE name = ?', p.name);
     ids[p.key] = existing ? existing.id
-      : Number(db.run('INSERT INTO companies (name, type, country, emails, address) VALUES (?, ?, ?, ?, ?)', p.name, p.type, p.country, p.emails, p.address || null).lastInsertRowid);
+      : Number(db.run('INSERT INTO companies (name, type, country, emails, address, billing_emails, terms_days, short_name) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
+        p.name, p.type, p.country, p.emails, p.address || null, p.billing_emails || null, p.terms_days ?? null, p.short_name || null).lastInsertRowid);
   }
   for (const u of DEMO_USERS) {
     if (db.get('SELECT 1 FROM users WHERE email = ?', u.email)) continue;
