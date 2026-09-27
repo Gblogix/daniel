@@ -258,6 +258,21 @@ CREATE TABLE IF NOT EXISTS payment_allocations (
   amount REAL NOT NULL
 );
 
+-- Smartsheet sync bookkeeping: which sheet row feeds which shipment, which attachments were downloaded.
+CREATE TABLE IF NOT EXISTS smartsheet_rows (
+  sheet_id TEXT NOT NULL,
+  row_id TEXT NOT NULL,
+  shipment_id INTEGER REFERENCES shipments(id) ON DELETE CASCADE,
+  synced_at TEXT,
+  PRIMARY KEY (sheet_id, row_id)
+);
+CREATE TABLE IF NOT EXISTS smartsheet_files (
+  attachment_id TEXT PRIMARY KEY,
+  document_id INTEGER REFERENCES documents(id) ON DELETE SET NULL,
+  shipment_id INTEGER REFERENCES shipments(id) ON DELETE CASCADE,
+  created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
 CREATE TABLE IF NOT EXISTS settings (
   key TEXT PRIMARY KEY,
   value TEXT
@@ -291,7 +306,7 @@ const MIGRATIONS = {
     pickup_lfd: 'TEXT', available: 'INTEGER', holds: 'TEXT', discharged_at: 'TEXT', full_out_at: 'TEXT',
     empty_returned_at: 'TEXT', current_status: 'TEXT', location: 'TEXT', pickup_no: 'TEXT',
   },
-  cargo_items: { unit_price: 'REAL', amount: 'REAL' },
+  cargo_items: { unit_price: 'REAL', amount: 'REAL', source: 'TEXT' },
   companies: { billing_emails: 'TEXT', terms_days: 'INTEGER', short_name: 'TEXT' },
   invoices: { document_id: 'INTEGER' },
   users: { can_accounting: 'INTEGER NOT NULL DEFAULT 0' },
@@ -310,6 +325,8 @@ const DEFAULT_SETTINGS = {
   auto_notify_status: '1',      // status / ETA / delivery changes -> customer
   auto_tracking: '1',           // poll carrier / GPS tracking and update ETD/ETA automatically
   lfd_alerts: '1',              // daily LFD / pickup digest to staff
+  smartsheet_sync: '1',         // pull shared Smartsheet sheets (needs SMARTSHEET_TOKEN)
+  smartsheet_push: '0',         // write ETA back into the customer-shared sheets (opt-in)
   // Next document numbers (continue from the current system; admin can change them)
   seq_OI: '11828', seq_AI: '10009', seq_OTH: '10582', seq_INV: '12215', seq_DCN: '11665',
   ar_terms_days: '25',

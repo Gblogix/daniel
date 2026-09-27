@@ -77,6 +77,18 @@ ETD / ETA / ATD / ATA, vessel, container LFD, terminal availability, holds, out-
 Carrier websites are not scraped: carriers' terms forbid automated access and scrapers break silently.
 Note: Terminal49 lists HMM as "partial" (tracks by MBL, not container).
 
+## Smartsheet sync
+With `SMARTSHEET_TOKEN` set, the shared sheets are read every 30 minutes (Admin › Automation › Sync now):
+* **Unlockt - GlobalBridge** (and Seorin, Other Solvenza, Lumare, ATELIER QUINCE, OPULEN, BK Trading, Leepop Inc):
+  each row → shipment matched by HBL (NSC… / ESSA…), MBL or container. Handles "8/28 > 8/24" revised dates (year from the
+  HBL's yymm), "NSCLGB… // ESSASEL…" house numbers, consol rows (one P/L line per brand), Detail text (INV#, pallets,
+  equipment, AIR), ISF / Custom checkboxes, declared value. Section headers, "REF; SEE BELOW" / "BKG#" / FBA rows are skipped.
+* **Row attachments** (CI / PL / CO …) are downloaded once, stored on the shipment and read by the document extractor —
+  P/L lines replace the sheet's summary line.
+* **Delivery Status_Unlockt**: per-container terminal, availability, LFD, delivery date/time, delivered.
+* Nothing is written to Smartsheet unless "write ETA back" is enabled; the system never uploads attachments
+  (the Unlockt sheet emails the customer on attachment changes).
+
 ## Reading documents (PDF)
 * PDF text layer with positions → B/L fields and **packing-list / invoice tables rebuilt row by row** (wrapped cells, totals, units).
 * **Scanned PDFs and photos → OCR** (offline; English bundled, Korean optional). OCR results are flagged for checking.

@@ -66,12 +66,20 @@ const SETTINGS = [
   ['auto_notify_status', 'When status / ETA / delivery schedule / customs changes: auto-email the customer'],
   ['auto_tracking', 'Carrier / GPS tracking: update ETD, ETA, vessel, LFD and terminal status automatically'],
   ['lfd_alerts', 'Daily 7am LFD / pickup digest email to staff'],
+  ['smartsheet_sync', 'Smartsheet: import shipments, P/L and documents from the shared sheets every 30 min'],
+  ['smartsheet_push', 'Smartsheet: write ETA / ETD back to the shared sheets ("old > new" style) — changes the customer\'s sheet'],
 ];
 router.get('/admin/settings', auth.requireRole('admin'), (req, res) => {
   res.render('admin/settings', {
     title: 'Automation settings', settings: SETTINGS.map(([k, label]) => ({ k, label, on: store.db.setting(k) === '1' })),
     tracking: require('../tracking').status(),
+    smartsheet: { token: Boolean(process.env.SMARTSHEET_TOKEN), last: (() => { try { return JSON.parse(store.db.setting('smartsheet_last_sync') || 'null'); } catch { return null; } })() },
   });
+});
+router.post('/admin/smartsheet/run', auth.requireRole('admin'), async (req, res) => {
+  const r = await require('../smartsheet').syncAll();
+  flash(req, r.some((x) => x.error) ? 'err' : 'ok', `Smartsheet: ${r.map((x) => (x.error ? `${x.sheet}: ${x.error}` : `${x.sheet} +${x.created} new, ${x.updated} updated, ${x.attachments} files`)).join(' | ') || 'no sheets'}`);
+  res.redirect('/admin/settings');
 });
 router.post('/admin/tracking/run', auth.requireRole('admin'), async (req, res) => {
   const r = await require('../tracking').refreshAll();

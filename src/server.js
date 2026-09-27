@@ -70,6 +70,7 @@ if (require.main === module) {
   console.log(`Email: ${config.mailTransport}${config.graph.enabled && config.graph.intake ? ' · Outlook intake on' : ''}`);
   require('./mailin').start();
   require('./alerts').start();
+  if (require('./smartsheet').start()) console.log('Smartsheet sync on');
   const t = require('./tracking').start();
   console.log(`Tracking: ${t.any ? [t.terminal49 && 'Terminal49', t.shipsgo && 'ShipsGo', t.dcsa.length && `carrier APIs (${t.dcsa.join(', ')})`].filter(Boolean).join(', ') : 'no provider configured'}${t.datalastic || t.aisstream ? ' · vessel GPS on' : ''}`);
 }

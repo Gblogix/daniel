@@ -10,6 +10,15 @@
   <button class="btn">Save</button>
 </form>
 <div class="card" style="max-width:760px">
+  <h2>Smartsheet</h2>
+  <p class="small"><%= smartsheet.token ? '✔ API token set' : 'Not connected — set SMARTSHEET_TOKEN (Smartsheet › Personal settings › API access)' %>.
+    Sheets read: Unlockt - GlobalBridge, Delivery Status_Unlockt, Seorin, Other Solvenza, Lumare, ATELIER QUINCE, OPULEN, BK Trading, Leepop Inc.</p>
+  <% if (smartsheet.last) { %><p class="small muted">Last sync <%= fmtDateTime(smartsheet.last.at) %> UTC:
+    <%= smartsheet.last.results.map((x) => x.error ? `${x.sheet}: ${x.error}` : `${x.sheet} +${x.created}/${x.updated}/${x.attachments} files`).join(' · ') %></p><% } %>
+  <form method="post" action="/admin/smartsheet/run"><input type="hidden" name="_csrf" value="<%= csrf %>">
+    <button class="btn secondary small" <%= smartsheet.token ? '' : 'disabled' %>>↻ Sync now</button></form>
+</div>
+<div class="card" style="max-width:760px">
   <h2>Tracking sources</h2>
   <table class="t">
     <tr><th>Ocean — carrier APIs (DCSA)</th><td><%= tracking.dcsa.length ? tracking.dcsa.join(', ') : 'not configured (DCSA_CARRIERS)' %></td></tr>
