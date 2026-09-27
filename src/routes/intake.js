@@ -76,7 +76,11 @@ async function processUpload(files, { userId, agentId, note, db = store.db }) {
 }
 
 function findMatch(draft, db = store.db) {
-  if (draft.hbl_no) { const s = db.get('SELECT id, ref_no FROM shipments WHERE hbl_no = ?', draft.hbl_no); if (s) return s; }
+  // NSC house numbers can sit in either HBL or SUB B/L depending on which document arrived first.
+  for (const no of [draft.hbl_no, draft.sub_bl_no].filter(Boolean)) {
+    const s = db.get('SELECT id, ref_no FROM shipments WHERE hbl_no = ? OR sub_bl_no = ? OR agent_ref = ?', no, no, no);
+    if (s) return s;
+  }
   if (draft.mbl_no) { const s = db.get('SELECT id, ref_no FROM shipments WHERE mbl_no = ? ORDER BY id DESC', draft.mbl_no); if (s) return s; }
   for (const c of draft.containers || []) {
     const s = db.get(`SELECT s.id, s.ref_no FROM shipments s JOIN containers k ON k.shipment_id = s.id
@@ -136,6 +140,7 @@ router.post('/intakes/:id/apply', auth.requireInternal, async (req, res) => {
   if (!intake) return res.status(404).render('error', { title: 'Not found', message: 'Intake not found or already processed.' });
   const targetId = req.body.target === 'new' ? null : Number(req.body.target) || null;
   let id;
+  require('./shipments').stripAccounting(req);
   if (targetId) {
     S.update(targetId, req.body);
     id = targetId;

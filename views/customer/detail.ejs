@@ -31,10 +31,6 @@
       <tr><th>ETD / ETA</th><td><%= s.etd || 'TBA' %> / <b><%= s.eta || 'TBA' %></b></td></tr>
       <tr><th>Cargo</th><td><%= s.packages ? `${fmtNum(s.packages)} ${s.package_unit || ''}` : '—' %> · <%= s.weight_kg ? `${fmtNum(s.weight_kg, 2)} KG` : '—' %> · <%= s.cbm ? `${s.cbm} CBM` : '—' %></td></tr>
       <tr><th>A/N</th><td><%= s.an_sent_at ? `Issued ${fmtDate(s.an_sent_at)}` : 'Not yet issued' %></td></tr>
-      <% if (user.role === 'customer' || isInternal) { %>
-        <% if (s.service_price != null) { %><tr><th>Service price</th><td>$<%= fmtNum(s.service_price, 2) %></td></tr><% } %>
-        <% if (s.invoice_amount != null) { %><tr><th>Invoice</th><td><%= s.invoice_no || '' %> $<%= fmtNum(s.invoice_amount, 2) %> <span class="badge <%= s.paid ? 'paid' : 'unpaid' %>"><%= s.paid ? 'PAID' : 'OPEN' %></span></td></tr><% } %>
-      <% } %>
     </table>
   </div>
   <div class="card">

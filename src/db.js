@@ -294,6 +294,7 @@ const MIGRATIONS = {
   cargo_items: { unit_price: 'REAL', amount: 'REAL' },
   companies: { billing_emails: 'TEXT', terms_days: 'INTEGER', short_name: 'TEXT' },
   invoices: { document_id: 'INTEGER' },
+  users: { can_accounting: 'INTEGER NOT NULL DEFAULT 0' },
 };
 
 function migrate(db) {

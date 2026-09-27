@@ -12,7 +12,7 @@ const cfg = module.exports = {
   company: {
     name: 'GlobalBridge Logistics',
     short: 'GB Logix',
-    address: process.env.COMPANY_ADDRESS || '1661 N. Raymond Ave., Suite 140F, Anaheim, CA 92801',
+    address: process.env.COMPANY_ADDRESS || '1661 N. RAYMOND AVE., SUITE 140F, ANAHEIM, CA 92801',
     phone: process.env.COMPANY_PHONE || '',
     dot: process.env.COMPANY_DOT || '4406045',
     remit: process.env.COMPANY_REMIT || '',   // bank / payment instructions printed on the freight invoice

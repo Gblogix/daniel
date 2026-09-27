@@ -7,7 +7,7 @@
       <span class="badge <%= s.customs_status %>">Customs: <%= s.customs_status %></span>
       <% if (s.an_sent_at) { %><span class="badge SENT">A/N sent <%= fmtDate(s.an_sent_at) %></span><% } %>
       <% if (s.do_sent_at) { %><span class="badge SENT">D/O sent <%= fmtDate(s.do_sent_at) %></span><% } %>
-      <% if (s.invoice_amount) { %><span class="badge <%= s.paid ? 'paid' : 'unpaid' %>"><%= s.paid ? 'Paid' : 'Unpaid' %></span><% } %>
+      <% if (canAccounting && s.invoice_amount) { %><span class="badge <%= s.paid ? 'paid' : 'unpaid' %>"><%= s.paid ? 'Paid' : 'Unpaid' %></span><% } %>
       <% if (s.holds) { %><span class="badge EXAM">Hold: <%= s.holds %></span><% } %>
       <% const lfd = S.lfdInfo(s); if (lfd) { %><span class="badge lfd-<%= lfd.level %>">LFD <%= lfd.date %></span><% } %>
     </div>
@@ -71,7 +71,7 @@
   </form>
 
   <div>
-    <div class="card" id="billing"><h2>Billing</h2>
+    <% if (canAccounting) { %><div class="card" id="billing"><h2>Billing</h2>
       <table class="t small">
         <% invoices.forEach((i) => { %><tr><td><a href="/invoices/<%= i.id %>"><%= i.number %></a></td><td><%= { AR: 'Invoice', DN: i.total < 0 ? 'C/N' : 'D/N', AP: 'Cost' }[i.kind] %></td>
           <td><%= i.company_name || '' %></td><td class="right"><%= fmtNum(i.total, 2) %></td><td><span class="badge <%= i.status === 'PAID' ? 'paid' : i.status === 'VOID' ? 'FAILED' : 'unpaid' %>"><%= i.status %></span></td></tr><% }) %>
@@ -82,7 +82,7 @@
         <a class="btn secondary small" href="/invoices/new?kind=DN&shipment=<%= s.id %>">+ D/N to agent</a>
         <a class="btn secondary small" href="/invoices/new?kind=AP&shipment=<%= s.id %>">+ Cost (AP)</a>
       </div>
-    </div>
+    </div><% } %>
     <div class="card"><h2>Clearance & release</h2><%- include('../partials/checklist', { s }) %></div>
     <div class="card" id="docs">
       <h2>Documents</h2>

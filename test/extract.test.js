@@ -138,3 +138,10 @@ test('arrival-notice fields: firms code, freight location, LFD', () => {
   assert.equal(r.freight_location, 'WFS LAX ATLAS 5761 W IMPERIAL HWY');
   assert.equal(r.last_free_day, '2026-06-05');
 });
+
+test('National Shipping house numbers: ESSA… = HBL, NSC… = SUB B/L + agent ref', () => {
+  const a = extractRules('HOUSE B/L NO. ESSASEL26090859\nSUB B/L NO. NSCLGB26090016\nMASTER B/L NO. SMLMSEL6E2823600', { filename: 'hbl.pdf' });
+  assert.deepEqual([a.hbl_no, a.sub_bl_no, a.agent_ref, a.mbl_no], ['ESSASEL26090859', 'NSCLGB26090016', 'NSCLGB26090016', 'SMLMSEL6E2823600']);
+  const b = extractRules('B/L NO.: NSCLGB26090012\nMB/L ONEYSELGH6403300', { filename: 'hbl.pdf' });
+  assert.deepEqual([b.hbl_no, b.sub_bl_no, b.agent_ref], ['NSCLGB26090012', null, 'NSCLGB26090012']);
+});

@@ -79,7 +79,8 @@ async function generateDocument(shipmentId, type, { db = store.db, userId = null
   // Re-issuing a document marks it as a revision (…_Rev, …_Rev2), as brokers expect.
   const revision = db.get("SELECT COUNT(*) AS n FROM documents WHERE shipment_id = ? AND doc_type = ? AND source = 'generated'", s.id, type).n;
   const html = GENERATORS[type](s, { ...docContext(s, { db, userId }), revision });
-  return storeGenerated(db, { shipmentId: s.id, type, base: fileName(type, s, revision), html, visible: type === 'AN', userId, refNo: s.ref_no });
+  // Nothing with charges on it is shown in the customer portal (the A/N is emailed; staff can share it per shipment).
+  return storeGenerated(db, { shipmentId: s.id, type, base: fileName(type, s, revision), html, visible: false, userId, refNo: s.ref_no });
 }
 
 async function storeGenerated(db, { shipmentId, type, base, html, visible, userId, refNo }) {

@@ -13,7 +13,7 @@ const arr = (v) => (Array.isArray(v) ? v : v == null ? [] : [v]);
 const parties = () => store.db.all('SELECT id, name, type, terms_days FROM companies ORDER BY type, name');
 
 // ---------- overview ----------
-router.get('/billing', auth.requireInternal, (req, res) => {
+router.get('/billing', auth.requireAccounting, (req, res) => {
   const db = store.db;
   const aging = A.arAging();
   const agents = db.all("SELECT id, name FROM companies WHERE type = 'agent' ORDER BY name")
@@ -26,7 +26,7 @@ router.get('/billing', auth.requireInternal, (req, res) => {
 });
 
 // ---------- invoice editor ----------
-router.get('/invoices/new', auth.requireInternal, (req, res) => {
+router.get('/invoices/new', auth.requireAccounting, (req, res) => {
   const kind = ['AR', 'DN', 'AP'].includes(req.query.kind) ? req.query.kind : 'AR';
   const s = req.query.shipment ? S.find(Number(req.query.shipment), null) : null;
   const inv = { kind, shipment_id: s?.id || null, invoice_date: new Date().toISOString().slice(0, 10), currency: 'USD', lines: [] };
@@ -43,15 +43,9 @@ router.get('/invoices/new', auth.requireInternal, (req, res) => {
   res.render('billing/invoice', { title: `New ${kind === 'AR' ? 'invoice' : kind === 'DN' ? 'debit note' : 'vendor bill'}`, inv, s, parties: parties(), codes: A.CHARGE_CODES });
 });
 
-router.get('/invoices/:id', auth.requireLogin, (req, res) => {
+router.get('/invoices/:id', auth.requireAccounting, (req, res) => {
   const inv = A.getInvoice(Number(req.params.id));
   if (!inv) return res.status(404).render('error', { title: 'Not found', message: 'Invoice not found.' });
-  if (!auth.INTERNAL.includes(req.user.role)) {
-    // Customers see their own AR invoices; agents their D/Ns.
-    const ok = inv.company_id === req.user.company_id && ((req.user.role === 'customer' && inv.kind === 'AR') || (req.user.role === 'agent' && inv.kind === 'DN'));
-    if (!ok) return res.status(403).render('error', { title: 'Forbidden', message: 'You do not have access to this invoice.' });
-    return res.redirect(inv.document_id ? `/documents/${inv.document_id}` : `/invoices/${inv.id}/preview`);
-  }
   const s = inv.shipment_id ? S.find(inv.shipment_id, null) : null;
   const allocations = store.db.all(`SELECT a.amount, p.paid_on, p.method, p.reference, p.direction FROM payment_allocations a
     JOIN payments p ON p.id = a.payment_id WHERE a.invoice_id = ? ORDER BY p.paid_on`, inv.id);
@@ -65,19 +59,19 @@ function linesFromBody(b) {
   }));
 }
 
-router.post('/invoices', auth.requireInternal, (req, res) => {
+router.post('/invoices', auth.requireAccounting, (req, res) => {
   const id = A.saveInvoice({ ...req.body, lines: linesFromBody(req.body) }, { userId: req.user.id });
   flash(req, 'ok', 'Saved');
   res.redirect(`/invoices/${id}`);
 });
-router.post('/invoices/:id', auth.requireInternal, (req, res) => {
+router.post('/invoices/:id', auth.requireAccounting, (req, res) => {
   const cur = A.getInvoice(Number(req.params.id));
   if (!cur) return res.status(404).end();
   A.saveInvoice({ ...req.body, kind: cur.kind, lines: linesFromBody(req.body) }, { userId: req.user.id, id: cur.id });
   flash(req, 'ok', 'Saved');
   res.redirect(`/invoices/${cur.id}`);
 });
-router.post('/invoices/:id/void', auth.requireInternal, (req, res) => {
+router.post('/invoices/:id/void', auth.requireAccounting, (req, res) => {
   A.voidInvoice(Number(req.params.id));
   flash(req, 'ok', 'Voided');
   res.redirect(`/invoices/${req.params.id}`);
@@ -90,10 +84,9 @@ function renderInvoice(inv, userId) {
   return INVOICE_GENERATORS[inv.kind](inv, { company: company.get(), shipment: s, preparedBy: prepared?.name || user?.name || '' });
 }
 
-router.get('/invoices/:id/preview', auth.requireLogin, (req, res) => {
+router.get('/invoices/:id/preview', auth.requireAccounting, (req, res) => {
   const inv = A.getInvoice(Number(req.params.id));
-  const allowed = inv && (auth.INTERNAL.includes(req.user.role) || (inv.company_id === req.user.company_id && inv.kind === 'AR'));
-  if (!allowed || !INVOICE_GENERATORS[inv.kind]) return res.status(404).render('error', { title: 'Not found', message: 'No printable document.' });
+  if (!inv || !INVOICE_GENERATORS[inv.kind]) return res.status(404).render('error', { title: 'Not found', message: 'No printable document.' });
   res.set('Content-Security-Policy', "default-src 'none'; style-src 'unsafe-inline'; img-src data:");
   res.type('html').send(renderInvoice(inv, req.user.id));
 });
@@ -106,12 +99,12 @@ async function issue(inv, userId, { force = false } = {}) {
   }
   const html = renderInvoice(inv, userId);
   const d = await notify.storeGenerated(store.db, {
-    shipmentId: inv.shipment_id, type: inv.kind, base: invoiceFileName(inv), html, visible: inv.kind === 'AR', userId, refNo: inv.number,
+    shipmentId: inv.shipment_id, type: inv.kind, base: invoiceFileName(inv), html, visible: false, userId, refNo: inv.number,
   });
   store.db.run('UPDATE invoices SET document_id = ? WHERE id = ?', d.id, inv.id);
   return d;
 }
-router.post('/invoices/:id/issue', auth.requireInternal, async (req, res) => {
+router.post('/invoices/:id/issue', auth.requireAccounting, async (req, res) => {
   const inv = A.getInvoice(Number(req.params.id));
   const d = await issue(inv, req.user.id, { force: true });
   flash(req, 'ok', `${d.filename} issued`);
@@ -121,7 +114,7 @@ router.post('/invoices/:id/issue', auth.requireInternal, async (req, res) => {
 const billingTo = (inv) => (inv.billing_emails || inv.company_emails || '').split(/[,;\s]+/).filter((e) => /.+@.+\..+/.test(e));
 
 /** Email one D/N to the agent, or one AR invoice to the customer. */
-router.post('/invoices/:id/send', auth.requireInternal, async (req, res) => {
+router.post('/invoices/:id/send', auth.requireAccounting, async (req, res) => {
   const inv = A.getInvoice(Number(req.params.id));
   const to = billingTo(inv);
   if (!to.length) { flash(req, 'err', `No billing email for ${inv.company_name} — add it on the Parties page`); return res.redirect(`/invoices/${inv.id}`); }
@@ -167,10 +160,10 @@ async function sendArBatch(req, res, companyId, ids) {
   flash(req, 'ok', `${invs.length} invoice(s) emailed to ${to.join(', ')}`);
   return res.redirect(req.body.back || '/billing');
 }
-router.post('/billing/send-batch', auth.requireInternal, (req, res) => sendArBatch(req, res, Number(req.body.company_id), arr(req.body.invoice_ids)));
+router.post('/billing/send-batch', auth.requireAccounting, (req, res) => sendArBatch(req, res, Number(req.body.company_id), arr(req.body.invoice_ids)));
 
 // ---------- payments ----------
-router.post('/billing/payments', auth.requireInternal, (req, res) => {
+router.post('/billing/payments', auth.requireAccounting, (req, res) => {
   const allocations = req.body.allocations_for ? [{ invoice_id: Number(req.body.allocations_for), amount: Number(req.body.amount) }] : null;
   const r = A.recordPayment({ ...req.body, company_id: Number(req.body.company_id), allocations }, { userId: req.user.id });
   flash(req, 'ok', `Payment recorded${r.unapplied > 0 ? ` — USD ${r.unapplied} unapplied (no more open items)` : ''}`);
@@ -178,13 +171,13 @@ router.post('/billing/payments', auth.requireInternal, (req, res) => {
 });
 
 // ---------- agent statement of account ----------
-router.get('/billing/agents/:id', auth.requireInternal, (req, res) => {
+router.get('/billing/agents/:id', auth.requireAccounting, (req, res) => {
   const agent = store.db.get('SELECT * FROM companies WHERE id = ?', Number(req.params.id));
   if (!agent) return res.status(404).end();
   const soa = A.agentStatement(agent.id, { includePaid: req.query.all === '1' });
   res.render('billing/soa', { title: `SOA — ${agent.name}`, agent, soa, all: req.query.all === '1' });
 });
-router.post('/billing/agents/:id/settle', auth.requireInternal, (req, res) => {
+router.post('/billing/agents/:id/settle', auth.requireAccounting, (req, res) => {
   const r = A.settleNetting({ company_id: Number(req.params.id), invoice_ids: arr(req.body.invoice_ids), paid_on: req.body.paid_on, reference: req.body.reference, memo: req.body.memo }, { userId: req.user.id });
   flash(req, 'ok', `Settled — ${r.net >= 0 ? `agent pays USD ${r.net}` : `we pay USD ${-r.net}`} (receivable ${r.receivable}, payable ${r.payable}); unselected items carried forward`);
   res.redirect(`/billing/agents/${req.params.id}`);
@@ -210,13 +203,13 @@ async function soaWorkbook(agent, soa) {
   [8, 9, 10, 11].forEach((c) => { ws.getColumn(c).numFmt = '#,##0.00;[Red]-#,##0.00'; });
   return wb.xlsx.writeBuffer();
 }
-router.get('/billing/agents/:id/soa.xlsx', auth.requireInternal, async (req, res) => {
+router.get('/billing/agents/:id/soa.xlsx', auth.requireAccounting, async (req, res) => {
   const agent = store.db.get('SELECT * FROM companies WHERE id = ?', Number(req.params.id));
   const buf = await soaWorkbook(agent, A.agentStatement(agent.id));
   res.set('Content-Disposition', `attachment; filename="SOA_${agent.name.replace(/[^A-Za-z0-9]+/g, '_')}_${new Date().toISOString().slice(0, 10)}.xlsx"`);
   res.type('application/vnd.openxmlformats-officedocument.spreadsheetml.sheet').send(Buffer.from(buf));
 });
-router.post('/billing/agents/:id/send-soa', auth.requireInternal, async (req, res) => {
+router.post('/billing/agents/:id/send-soa', auth.requireAccounting, async (req, res) => {
   const agent = store.db.get('SELECT * FROM companies WHERE id = ?', Number(req.params.id));
   const soa = A.agentStatement(agent.id);
   const to = (agent.billing_emails || agent.emails || '').split(/[,;\s]+/).filter((e) => /.+@.+\..+/.test(e));
@@ -237,12 +230,6 @@ router.post('/billing/agents/:id/send-soa', auth.requireInternal, async (req, re
   });
   flash(req, 'ok', `SOA emailed to ${to.join(', ')}`);
   res.redirect(`/billing/agents/${agent.id}`);
-});
-
-// ---------- customer: my invoices ----------
-router.get('/my/invoices', auth.requireRole('customer'), (req, res) => {
-  const rows = A.listInvoices({ companyId: req.user.company_id, kind: 'AR' }).filter((i) => i.status !== 'VOID');
-  res.render('billing/my', { title: 'Invoices', rows });
 });
 
 module.exports = router;

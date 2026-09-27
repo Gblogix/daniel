@@ -12,7 +12,7 @@
 <table class="t">
   <thead><tr>
     <th>Ref</th><th>Mode</th><th>Customer</th><th>Shipper</th><th>MBL / HBL</th><th>Container</th><th>ETD</th><th>ETA</th>
-    <th>Status</th><th>Customs</th><th>A/N</th><th>D/O</th><% if (isInternal) { %><th>Invoice</th><% } %><th>Delivery</th>
+    <th>Status</th><th>Customs</th><th>A/N</th><th>D/O</th><% if (canAccounting) { %><th>Invoice</th><% } %><th>Delivery</th>
   </tr></thead>
   <tbody>
   <% if (!rows.length) { %><tr><td colspan="14" class="muted">No shipments found.</td></tr><% } %>
@@ -30,7 +30,7 @@
       <td><span class="badge <%= s.customs_status %>"><%= s.customs_status %></span></td>
       <td><%= s.an_sent_at ? '✔' : '' %></td>
       <td><%= s.do_sent_at ? '✔' : '' %></td>
-      <% if (isInternal) { %><td class="nowrap"><% if (s.invoice_amount) { %>$<%= fmtNum(s.invoice_amount, 2) %> <span class="badge <%= s.paid ? 'paid' : 'unpaid' %>"><%= s.paid ? 'PAID' : 'OPEN' %></span><% } %></td><% } %>
+      <% if (canAccounting) { %><td class="nowrap"><% if (s.invoice_amount) { %>$<%= fmtNum(s.invoice_amount, 2) %> <span class="badge <%= s.paid ? 'paid' : 'unpaid' %>"><%= s.paid ? 'PAID' : 'OPEN' %></span><% } %></td><% } %>
       <td class="small"><%= s.delivery_date || '' %> <%= s.delivery_time || '' %></td>
     </tr>
   <% }) %>

@@ -49,15 +49,31 @@ function authenticate(email, password) {
 function loadUser(req, res, next) {
   const id = req.session?.userId;
   if (id) {
-    const u = store.db.get(`SELECT u.id, u.email, u.name, u.role, u.company_id, c.name AS company_name
+    const u = store.db.get(`SELECT u.id, u.email, u.name, u.role, u.company_id, u.can_accounting, c.name AS company_name
       FROM users u LEFT JOIN companies c ON c.id = u.company_id WHERE u.id = ? AND u.active = 1`, id);
     if (u) { req.user = u; res.locals.user = u; }
   }
   res.locals.user = req.user || null;
   res.locals.ROLES = ROLES;
   res.locals.isInternal = Boolean(req.user && INTERNAL.includes(req.user.role));
+  res.locals.canAccounting = canAccounting(req.user);
   next();
 }
+
+/** Accounting (invoices, D/N, payments, SOA, prices, profit) is limited to admins and staff granted access. */
+function canAccounting(user) {
+  return Boolean(user && (user.role === 'admin' || (user.role === 'staff' && user.can_accounting)));
+}
+function requireAccounting(req, res, next) {
+  if (!req.user) return res.redirect(`/login?next=${encodeURIComponent(req.originalUrl)}`);
+  if (!canAccounting(req.user)) return res.status(403).render('error', { title: 'Forbidden', message: 'Accounting is limited to authorized staff.' });
+  next();
+}
+// Document types and email kinds that carry accounting information.
+const ACCOUNTING_DOCS = ['AR', 'DN', 'SOA', 'INVOICE'];
+const ACCOUNTING_EMAILS = ['AR_INVOICE', 'DEBIT_NOTE', 'SOA'];
+// Shipment fields only accounting users may see or change.
+const ACCOUNTING_FIELDS = ['service_price', 'invoice_no', 'invoice_amount', 'paid'];
 
 function requireLogin(req, res, next) {
   if (!req.user) return res.redirect(`/login?next=${encodeURIComponent(req.originalUrl)}`);
@@ -85,4 +101,4 @@ function checkCsrf(req, res, next) {
   next();
 }
 
-module.exports = { ROLES, INTERNAL, SqliteStore, hashPassword, authenticate, loadUser, requireLogin, requireRole, requireInternal, csrf, checkCsrf };
+module.exports = { canAccounting, requireAccounting, ACCOUNTING_DOCS, ACCOUNTING_EMAILS, ACCOUNTING_FIELDS, ROLES, INTERNAL, SqliteStore, hashPassword, authenticate, loadUser, requireLogin, requireRole, requireInternal, csrf, checkCsrf };

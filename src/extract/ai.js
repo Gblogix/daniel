@@ -11,6 +11,7 @@ const numN = z.number().nullable();
 const Extraction = z.object({
   doc_type: z.enum(['MBL', 'HBL', 'PL', 'CI', 'ISF', 'AWB', 'NOA', 'DO', 'OTHER']),
   mbl_no: str, hbl_no: str, mawb_no: str, hawb_no: str,
+  sub_bl_no: str.describe('SUB B/L no. (e.g. the agent house B/L NSCLGB…)'), agent_ref: str.describe('agent filing / house no., e.g. NSCLGB…'),
   carrier: str, vessel: str, voyage: str, flight_no: str,
   pol: str, pod: str, place_of_delivery: str,
   etd: str.describe('YYYY-MM-DD'), eta: str.describe('YYYY-MM-DD'),
@@ -38,6 +39,7 @@ Extract the fields defined by the output schema. Rules:
 - weight_kg is GROSS weight in kilograms (convert LBS if needed). cbm is total measurement in cubic meters.
 - Container numbers are 4 letters + 7 digits with no spaces (e.g. TCLU1234567).
 - On a house B/L the "B/L No." is the hbl_no; the carrier's master B/L number (if shown) is mbl_no.
+- National Shipping (NSC) numbers: ESSA…######## is the hbl_no; NSCLGB…/NSCXA… is the sub_bl_no and agent_ref (or the hbl_no when no ESSA number exists).
 - items: one entry per packing-list / invoice line (skip subtotal and total rows).
 - For scanned documents read numbers character by character; B/L, container and seal numbers must be exact.`;
 

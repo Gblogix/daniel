@@ -29,7 +29,7 @@ router.get('/dashboard', auth.requireInternal, (req, res) => {
     arriving: active.filter((s) => s.eta && s.eta >= today && s.eta <= in7).length,
     intakes: db.get("SELECT COUNT(*) AS n FROM intakes WHERE status = 'PENDING'").n,
     exam: active.filter((s) => s.customs_status === 'EXAM' || s.customs_status === 'HOLD').length,
-    unpaid: db.get("SELECT COUNT(*) AS n FROM shipments WHERE paid = 0 AND invoice_amount > 0").n,
+    unpaid: auth.canAccounting(req.user) ? db.get("SELECT COUNT(*) AS n FROM invoices WHERE kind = 'AR' AND status = 'OPEN'").n : null,
     failedEmails: db.get("SELECT COUNT(*) AS n FROM emails WHERE status = 'FAILED'").n,
   };
   const events = db.all(`SELECT e.*, s.ref_no FROM events e JOIN shipments s ON s.id = e.shipment_id ORDER BY e.id DESC LIMIT 15`);
@@ -52,8 +52,14 @@ router.get('/shipments/new', auth.requireInternal, (req, res) => {
   res.render('shipments/form', { title: 'New shipment', s: { mode: 'FCL', status: 'BOOKED', customs_status: 'PENDING', containers: [], items: [] }, ...partyLists() });
 });
 
+/** Non-accounting staff cannot set prices / invoice / paid fields. */
+function stripAccounting(req) {
+  if (!auth.canAccounting(req.user)) for (const f of auth.ACCOUNTING_FIELDS) delete req.body[f];
+  return req.body;
+}
+
 router.post('/shipments', auth.requireInternal, (req, res) => {
-  const id = S.create(req.body, { userId: req.user.id });
+  const id = S.create(stripAccounting(req), { userId: req.user.id });
   S.saveLines(id, req.body);
   flash(req, 'ok', 'Shipment created');
   res.redirect(`/shipments/${id}`);
@@ -67,12 +73,15 @@ router.get('/shipments/:id', auth.requireLogin, (req, res) => {
   const internal = auth.INTERNAL.includes(req.user.role) && req.query.view !== 'customer';
   const viewer = internal || !auth.INTERNAL.includes(req.user.role) ? req.user : { role: 'customer' };
   const db = store.db;
-  const docs = db.all(`SELECT * FROM documents WHERE shipment_id = ? ${internal ? '' : docFilter(viewer)} ORDER BY id DESC`, s.id);
+  const hideAcct = auth.canAccounting(req.user) ? '' : `AND doc_type NOT IN (${auth.ACCOUNTING_DOCS.map((t) => `'${t}'`).join(',')})`;
+  const docs = db.all(`SELECT * FROM documents WHERE shipment_id = ? ${hideAcct} ${internal ? '' : docFilter(viewer)} ORDER BY id DESC`, s.id);
   const events = db.all(`SELECT * FROM events WHERE shipment_id = ? ${internal ? '' : 'AND customer_visible = 1'} ORDER BY id DESC`, s.id);
-  const emails = internal ? db.all('SELECT id, kind, to_addr, subject, status, created_at FROM emails WHERE shipment_id = ? ORDER BY id DESC', s.id) : [];
+  const emails = internal ? db.all(`SELECT id, kind, to_addr, subject, status, created_at FROM emails WHERE shipment_id = ?
+    ${auth.canAccounting(req.user) ? '' : `AND kind NOT IN (${auth.ACCOUNTING_EMAILS.map((k) => `'${k}'`).join(',')})`} ORDER BY id DESC`, s.id) : [];
   const A = require('../accounting');
-  const invoices = internal ? A.listInvoices({ shipmentId: s.id }) : [];
-  const profit = internal ? A.shipmentProfit(s.id) : null;
+  const acct = auth.canAccounting(req.user);
+  const invoices = internal && acct ? A.listInvoices({ shipmentId: s.id }) : [];
+  const profit = internal && acct ? A.shipmentProfit(s.id) : null;
   const trackEvents = db.all("SELECT * FROM tracking_events WHERE shipment_id = ? AND classifier IN ('ACT', '') ORDER BY event_time DESC LIMIT 30", s.id);
   const view = internal ? 'shipments/detail' : 'customer/detail';
   res.render(view, { title: s.ref_no, s, tr: S.tracking(s), docs, events, emails, trackEvents, invoices, profit, trackingStatus: require('../tracking').status(), ...(internal ? partyLists() : {}) });
@@ -89,7 +98,7 @@ function docFilter(user) {
 
 router.post('/shipments/:id', auth.requireInternal, async (req, res) => {
   const id = Number(req.params.id);
-  const changes = S.update(id, req.body);
+  const changes = S.update(id, stripAccounting(req));
   S.saveLines(id, req.body);
   await notify.onShipmentChanged(id, changes, { userId: req.user.id });
   flash(req, 'ok', changes.length ? `Saved (${changes.length} field${changes.length > 1 ? 's' : ''} changed)` : 'Saved');
@@ -164,6 +173,9 @@ router.get('/documents/:id', auth.requireLogin, (req, res) => {
   const d = store.db.get('SELECT * FROM documents WHERE id = ?', Number(req.params.id));
   if (!d) return res.status(404).render('error', { title: 'Not found', message: 'Document not found.' });
   const internal = auth.INTERNAL.includes(req.user.role);
+  if (auth.ACCOUNTING_DOCS.includes(d.doc_type) && !auth.canAccounting(req.user)) {
+    return res.status(403).render('error', { title: 'Forbidden', message: 'Accounting documents are limited to authorized staff.' });
+  }
   if (!internal) {
     const s = d.shipment_id && S.find(d.shipment_id, req.user);
     const allowed = s && store.db.get(`SELECT 1 FROM documents WHERE id = ? ${docFilter(req.user)}`, d.id);
@@ -180,3 +192,4 @@ router.get('/documents/:id', auth.requireLogin, (req, res) => {
 });
 
 module.exports = router;
+module.exports.stripAccounting = stripAccounting;

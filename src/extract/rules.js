@@ -130,6 +130,18 @@ function extractRules(text, { filename = '', rows = null } = {}) {
     if (docType === 'HBL' && !out.hbl_no) out.hbl_no = genericBl;
     else if (!out.mbl_no && docType !== 'HBL') out.mbl_no = genericBl;
   }
+  // National Shipping (국민해운) issues both house numbers: ESSASEL######## (house B/L on our documents) and
+  // NSCLGB… / NSCXA… (their own house B/L, shown as SUB B/L and used as the agent filing no.).
+  const essa = firstMatch(U, [/\b(ESSA[A-Z]{2,4}\d{8})\b/]);
+  const nsc = firstMatch(U, [/\b(NSC[A-Z]{2,5}\d{6,9})\b/]);
+  out.sub_bl_no = firstMatch(U, [/SUB\s*B\/?L\s*(?:NO\.?|#)?\s*[:.]?\s*([A-Z0-9][A-Z0-9-]{5,24})/]);
+  if (essa) {
+    out.hbl_no = essa;
+    if (nsc && nsc !== essa) out.sub_bl_no = out.sub_bl_no || nsc;
+  } else if (nsc && (!out.hbl_no || out.hbl_no === out.sub_bl_no)) {
+    out.hbl_no = nsc;
+  }
+  out.agent_ref = [out.sub_bl_no, out.hbl_no].find((v) => v && /^NSC/.test(v)) || null;
   out.mawb_no = firstMatch(U, [/(?:MAWB|MASTER\s+AIR\s*WAYBILL)\s*(?:NO\.?|#)?\s*[:.]?\s*(\d{3}[-\s]?\d{4}\s?\d{4})/]);
   out.hawb_no = firstMatch(U, [/(?:HAWB|HOUSE\s+AIR\s*WAYBILL)\s*(?:NO\.?|#)?\s*[:.]?\s*([A-Z0-9-]{6,20})/]);
   if (!out.mawb_no && docType === 'AWB') out.mawb_no = firstMatch(U, [/\b(\d{3}-\d{4}\s?\d{4})\b/, /\b(\d{3}-\d{8})\b/]);

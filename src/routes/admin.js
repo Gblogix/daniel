@@ -38,6 +38,7 @@ router.get('/admin/users', auth.requireRole('admin'), (req, res) => {
 });
 router.post('/admin/users', auth.requireRole('admin'), (req, res) => {
   const { id, email, name, role, company_id, password, active } = req.body;
+  const acct = role === 'staff' && req.body.can_accounting ? 1 : 0;
   if (!auth.ROLES[role]) { flash(req, 'err', 'Invalid role'); return res.redirect('/admin/users'); }
   const external = !auth.INTERNAL.includes(role);
   const companyId = Number(company_id) || null;
@@ -45,11 +46,11 @@ router.post('/admin/users', auth.requireRole('admin'), (req, res) => {
   try {
     if (id) {
       if (Number(id) === req.user.id && (role !== 'admin' || !active)) { flash(req, 'err', 'You cannot remove your own admin access'); return res.redirect('/admin/users'); }
-      store.db.run('UPDATE users SET email = ?, name = ?, role = ?, company_id = ?, active = ? WHERE id = ?', email, name, role, companyId, active ? 1 : 0, Number(id));
+      store.db.run('UPDATE users SET email = ?, name = ?, role = ?, company_id = ?, active = ?, can_accounting = ? WHERE id = ?', email, name, role, companyId, active ? 1 : 0, acct, Number(id));
       if (password) store.db.run('UPDATE users SET password_hash = ? WHERE id = ?', auth.hashPassword(password), Number(id));
     } else {
       if (!password || password.length < 8) { flash(req, 'err', 'Password must be at least 8 characters'); return res.redirect('/admin/users'); }
-      store.db.run('INSERT INTO users (email, name, role, company_id, password_hash) VALUES (?, ?, ?, ?, ?)', email, name, role, companyId, auth.hashPassword(password));
+      store.db.run('INSERT INTO users (email, name, role, company_id, password_hash, can_accounting) VALUES (?, ?, ?, ?, ?, ?)', email, name, role, companyId, auth.hashPassword(password), acct);
     }
     flash(req, 'ok', 'User saved');
   } catch (e) {
@@ -103,23 +104,26 @@ router.post('/admin/company', auth.requireRole('admin'), (req, res) => {
 
 // ---------- outbox — staff ----------
 router.get('/outbox', auth.requireInternal, (req, res) => {
+  const hide = auth.canAccounting(req.user) ? '' : `WHERE e.kind NOT IN (${auth.ACCOUNTING_EMAILS.map((k) => `'${k}'`).join(',')})`;
   const rows = store.db.all(`SELECT e.id, e.kind, e.to_addr, e.subject, e.status, e.error, e.created_at, e.sent_at, s.ref_no, e.shipment_id
-    FROM emails e LEFT JOIN shipments s ON s.id = e.shipment_id ORDER BY e.id DESC LIMIT 300`);
+    FROM emails e LEFT JOIN shipments s ON s.id = e.shipment_id ${hide} ORDER BY e.id DESC LIMIT 300`);
   res.render('admin/outbox', { title: 'Email outbox', rows });
 });
 router.get('/outbox/:id', auth.requireInternal, (req, res) => {
   const e = store.db.get('SELECT * FROM emails WHERE id = ?', Number(req.params.id));
-  if (!e) return res.status(404).render('error', { title: 'Not found', message: 'Email not found.' });
+  if (!e || (auth.ACCOUNTING_EMAILS.includes(e.kind) && !auth.canAccounting(req.user))) return res.status(404).render('error', { title: 'Not found', message: 'Email not found.' });
   e.attachments = JSON.parse(e.attachments_json || '[]');
   res.render('admin/email', { title: e.subject, e });
 });
 router.get('/outbox/:id/body', auth.requireInternal, (req, res) => {
-  const e = store.db.get('SELECT body_html FROM emails WHERE id = ?', Number(req.params.id));
-  if (!e) return res.status(404).end();
+  const e = store.db.get('SELECT kind, body_html FROM emails WHERE id = ?', Number(req.params.id));
+  if (!e || (auth.ACCOUNTING_EMAILS.includes(e.kind) && !auth.canAccounting(req.user))) return res.status(404).end();
   res.set('Content-Security-Policy', "default-src 'none'; style-src 'unsafe-inline'; img-src data:");
   res.type('html').send(e.body_html);
 });
 router.post('/outbox/:id/resend', auth.requireInternal, async (req, res) => {
+  const k = store.db.get('SELECT kind FROM emails WHERE id = ?', Number(req.params.id));
+  if (!k || (auth.ACCOUNTING_EMAILS.includes(k.kind) && !auth.canAccounting(req.user))) return res.status(404).end();
   await notify.deliver(Number(req.params.id));
   flash(req, 'ok', 'Delivery re-attempted');
   res.redirect(`/outbox/${req.params.id}`);

@@ -39,6 +39,7 @@ const DEMO_PARTIES = [
 
 const DEMO_USERS = [
   { email: 'staff@gblogix.com', name: 'GB Staff', role: 'staff' },
+  { email: 'accounting@gblogix.com', name: 'Accounting (demo)', role: 'staff', can_accounting: 1 },
   { email: 'customer@unlockt.example', name: 'Unlockt Brands (demo)', role: 'customer', company: 'unlockt' },
   { email: 'agent@nsc.example', name: '국민해운 NSC (demo)', role: 'agent', company: 'kukmin' },
   { email: 'agent@zhejiang.example', name: 'Zhejiang (demo)', role: 'agent', company: 'zhejiang' },
@@ -64,8 +65,8 @@ function seedDemo(db = store.db) {
   }
   for (const u of DEMO_USERS) {
     if (db.get('SELECT 1 FROM users WHERE email = ?', u.email)) continue;
-    db.run('INSERT INTO users (email, name, role, company_id, password_hash) VALUES (?, ?, ?, ?, ?)',
-      u.email, u.name, u.role, u.company ? ids[u.company] : null, auth.hashPassword('demo1234'));
+    db.run('INSERT INTO users (email, name, role, company_id, password_hash, can_accounting) VALUES (?, ?, ?, ?, ?, ?)',
+      u.email, u.name, u.role, u.company ? ids[u.company] : null, auth.hashPassword('demo1234'), u.can_accounting || 0);
   }
   if (db.get('SELECT COUNT(*) AS n FROM shipments').n > 0) return ids;
 

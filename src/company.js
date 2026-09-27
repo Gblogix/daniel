@@ -7,7 +7,7 @@ const store = require('./db');
 const DEFAULTS = {
   name: 'GLOBALBRIDGE LOGISTICS',
   legal_name: 'GLOBALBRIDGE LOGISTICS INC',
-  address: '1101 LINDENDALE AVE, FULLERTON, CA 92831',
+  address: '1661 N. RAYMOND AVE., SUITE 140F, ANAHEIM, CA 92801',
   tel: '213-477-0567',
   fax: '213-282-6612',
   email: process.env.COMPANY_EMAIL || 'info@gblogix.com',

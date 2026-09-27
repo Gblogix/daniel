@@ -7,7 +7,7 @@
   <a class="kpi" href="/track"><div class="n"><%= kpi.arriving %></div><div class="l">Arriving in 7 days</div></a>
   <a class="kpi <%= kpi.intakes ? 'warn' : '' %>" href="/intakes"><div class="n"><%= kpi.intakes %></div><div class="l">Docs to review</div></a>
   <a class="kpi <%= kpi.exam ? 'bad' : '' %>" href="/shipments"><div class="n"><%= kpi.exam %></div><div class="l">Customs exam / hold</div></a>
-  <div class="kpi <%= kpi.unpaid ? 'warn' : '' %>"><div class="n"><%= kpi.unpaid %></div><div class="l">Unpaid invoices</div></div>
+  <% if (kpi.unpaid != null) { %><a class="kpi <%= kpi.unpaid ? 'warn' : '' %>" href="/billing"><div class="n"><%= kpi.unpaid %></div><div class="l">Open AR invoices</div></a><% } %>
   <a class="kpi <%= kpi.failedEmails ? 'bad' : '' %>" href="/outbox"><div class="n"><%= kpi.failedEmails %></div><div class="l">Failed emails</div></a>
 </div>
 <% if (lfdWatch.length) { %>
