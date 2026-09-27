@@ -20,6 +20,8 @@
   "homepage": "https://github.com/Gblogix/daniel#readme",
   "dependencies": {
     "@anthropic-ai/sdk": "^0.128.0",
+    "@tesseract.js-data/eng": "^1.0.0",
+    "@tesseract.js-data/kor": "^1.0.0",
     "bcryptjs": "^3.0.3",
     "ejs": "^6.0.1",
     "exceljs": "^4.4.0",
@@ -28,6 +30,8 @@
     "multer": "^2.4.0",
     "nodemailer": "^10.0.10",
     "pdf-parse": "^2.4.5",
+    "pdfjs-dist": "^5.4.296",
+    "tesseract.js": "^7.0.0",
     "zod": "^4.6.5"
   },
   "private": true,

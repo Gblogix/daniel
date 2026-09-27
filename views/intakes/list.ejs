@@ -19,7 +19,7 @@
       <td class="mono small"><%= (r.draft.containers || []).map((c) => c.container_no).join(', ') %></td>
       <td><%= r.draft.eta || '' %></td>
       <td><%= r.ref_no ? r.ref_no : 'New' %></td>
-      <td class="small"><%= r.extraction_method === 'ai' ? 'AI' : 'Rules' %><% if ((r.draft.warnings || []).length) { %> <span class="badge ARRIVED">⚠ <%= r.draft.warnings.length %></span><% } %></td>
+      <td class="small"><%= { ai: 'AI', ocr: 'OCR', rules: 'Text' }[r.extraction_method] || 'Text' %><% if ((r.draft.warnings || []).length) { %> <span class="badge ARRIVED">⚠ <%= r.draft.warnings.length %></span><% } %></td>
       <td><a class="btn small <%= r.status === 'PENDING' ? '' : 'secondary' %>" href="/intakes/<%= r.id %>"><%= r.status === 'PENDING' ? 'Review' : 'View' %></a></td>
     </tr>
   <% }) %>

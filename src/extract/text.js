@@ -1,27 +1,56 @@
 const path = require('node:path');
 
-/** Returns { text, rows } for a file. `rows` is a 2D array for spreadsheets (used for packing-list lines). */
+const { detectDocType } = require('./rules');
+
+/**
+ * Read an uploaded file into one or more "segments" (logical documents).
+ * A merged PDF (e.g. MBL + HBL + P/L in one file) is split by detecting the document type page by page.
+ * Segment: { text, rows (2D table or null), pages: [n], ocr: bool, ocrConfidence, docType }
+ */
 async function readDocument(buffer, filename, mime = '') {
   const ext = path.extname(filename).toLowerCase();
-  if (ext === '.pdf' || mime === 'application/pdf') return { text: await pdfText(buffer), rows: null };
-  if (ext === '.xlsx' || mime.includes('spreadsheetml')) return xlsx(buffer);
+  if (ext === '.pdf' || mime === 'application/pdf') return readPdfSegments(buffer);
+  if (['.jpg', '.jpeg', '.png'].includes(ext) || mime.startsWith('image/')) {
+    const { ocrImage, extractTable } = require('./pdf');
+    const page = await ocrImage(buffer);
+    return { segments: [{ text: page.text, rows: extractTable(page.items), pages: [1], ocr: true, ocrConfidence: page.ocrConfidence }] };
+  }
+  if (ext === '.xlsx' || mime.includes('spreadsheetml')) return { segments: [await xlsx(buffer)] };
   if (ext === '.csv') {
     const text = buffer.toString('utf8');
-    return { text, rows: text.split(/\r?\n/).map((l) => splitCsv(l)) };
+    return { segments: [{ text, rows: text.split(/\r?\n/).map((l) => splitCsv(l)) }] };
   }
-  if (['.txt', '.eml', '.edi', ''].includes(ext) || mime.startsWith('text/')) return { text: buffer.toString('utf8'), rows: null };
-  return { text: '', rows: null };
+  if (['.txt', '.eml', '.edi', ''].includes(ext) || mime.startsWith('text/')) return { segments: [{ text: buffer.toString('utf8'), rows: null }] };
+  return { segments: [{ text: '', rows: null }] };
 }
 
-async function pdfText(buffer) {
-  const { PDFParse } = require('pdf-parse');
-  const parser = new PDFParse({ data: new Uint8Array(buffer) });
-  try {
-    const res = await parser.getText();
-    return res.text || '';
-  } finally {
-    await parser.destroy();
+async function readPdfSegments(buffer) {
+  const { readPdf, extractTable } = require('./pdf');
+  const pdf = await readPdf(buffer);
+  const segments = [];
+  for (const p of pdf.pages) {
+    const type = detectDocType(p.text.split('\n').slice(0, 12).join('\n'));
+    const prev = segments[segments.length - 1];
+    // A page without its own title continues the previous document (multi-page B/L, P/L continuation sheets).
+    if (prev && (type === 'OTHER' || type === prev.docType)) {
+      prev.pages.push(p.num); prev.parts.push(p);
+    } else {
+      segments.push({ docType: type, pages: [p.num], parts: [p] });
+    }
   }
+  return {
+    segments: segments.map((s) => {
+      const tables = s.parts.map((p) => extractTable(p.items)).filter(Boolean);
+      // Continuation pages repeat the header: keep the first header, append the data rows.
+      const rows = tables.length ? [tables[0][0], ...tables.flatMap((t) => t.slice(1))] : null;
+      const ocrParts = s.parts.filter((p) => p.ocr);
+      return {
+        docType: s.docType, pages: s.pages, text: s.parts.map((p) => p.text).join('\n'), rows,
+        ocr: ocrParts.length > 0,
+        ocrConfidence: ocrParts.length ? Math.round(ocrParts.reduce((a, p) => a + (p.ocrConfidence || 0), 0) / ocrParts.length) : null,
+      };
+    }),
+  };
 }
 
 async function xlsx(buffer) {

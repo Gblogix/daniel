@@ -2,29 +2,49 @@ const config = require('../config');
 const { readDocument } = require('./text');
 const { extractRules, isValidContainer } = require('./rules');
 
-/** Extract fields from one uploaded file. `docTypeHint` is what the uploader selected (optional). */
+/**
+ * Extract fields from one uploaded file. Returns an array — one extraction per logical document
+ * (a merged PDF with MBL + HBL + P/L yields three). `docTypeHint` is the upload slot (optional).
+ */
 async function extractFile({ buffer, filename, mime, docTypeHint }) {
-  let text = ''; let rows = null;
-  try { ({ text, rows } = await readDocument(buffer, filename, mime)); } catch (e) { /* unreadable — AI may still help */ }
-  let result = extractRules(text, { filename, rows });
-  let method = 'rules';
-  if (docTypeHint && docTypeHint !== 'AUTO') result.doc_type = docTypeHint;
-  if (config.ai.enabled) {
-    try {
-      const ai = await require('./ai').extractAI({ buffer, filename, mime, text });
-      if (ai) {
-        result = mergeFieldwise(ai, result);
-        if (docTypeHint && docTypeHint !== 'AUTO') result.doc_type = docTypeHint;
-        method = 'ai';
+  let segments;
+  try { ({ segments } = await readDocument(buffer, filename, mime)); } catch (e) {
+    segments = [{ text: '', rows: null, error: e.message }];
+  }
+  const hint = docTypeHint && docTypeHint !== 'AUTO' && docTypeHint !== 'OTHER' ? docTypeHint : null;
+  const out = [];
+  for (const seg of segments) {
+    const single = segments.length === 1;
+    // In a merged file trust the page title; in a single-document file the upload slot / filename wins.
+    let result = extractRules(seg.text, { filename: single ? filename : '', rows: seg.rows });
+    if (!single && seg.docType && seg.docType !== 'OTHER') result.doc_type = seg.docType;
+    if (single && hint) result.doc_type = hint;
+    let method = seg.ocr ? 'ocr' : 'rules';
+    if (config.ai.enabled) {
+      try {
+        const ai = await require('./ai').extractAI({
+          buffer, filename, mime, text: seg.ocr ? '' : seg.text,
+          pages: single ? null : seg.pages, docType: result.doc_type,
+        });
+        if (ai) {
+          const keepType = result.doc_type;
+          result = mergeFieldwise(ai, result);
+          if (!single || hint) result.doc_type = keepType;
+          method = 'ai';
+        }
+      } catch (e) {
+        result.warnings.push(`AI extraction unavailable (${e.message}); used ${method === 'ocr' ? 'OCR' : 'rule-based'} extraction`);
       }
-    } catch (e) {
-      result.warnings.push(`AI extraction unavailable (${e.message}); used rule-based extraction`);
     }
+    if (seg.error) result.warnings.push(`Could not read file: ${seg.error}`);
+    if (!seg.text.trim() && method !== 'ai') {
+      result.warnings.push('No readable text found. Enter the details manually or enable AI extraction.');
+    } else if (seg.ocr && method === 'ocr') {
+      result.warnings.push(`Scanned document read by OCR (confidence ${seg.ocrConfidence ?? '?'}%) — please double-check numbers`);
+    }
+    out.push({ ...result, method, pages: seg.pages || null, ocr: Boolean(seg.ocr), warnings: result.warnings || [] });
   }
-  if (!text.trim() && method === 'rules') {
-    result.warnings.push('No readable text (scanned image?). Enter the details manually or enable AI extraction.');
-  }
-  return { ...result, method, warnings: result.warnings || [] };
+  return out;
 }
 
 /** Prefer `primary` values, fill gaps from `fallback`. */
@@ -47,12 +67,18 @@ function mergeFieldwise(primary, fallback) {
 const PRIORITY = {
   mbl_no: ['MBL', 'HBL', 'ISF', 'AWB'],
   hbl_no: ['HBL', 'ISF', 'PL', 'CI'],
-  default: ['HBL', 'MBL', 'AWB', 'ISF', 'PL', 'CI', 'OTHER'],
+  default: ['HBL', 'MBL', 'AWB', 'NOA', 'ISF', 'PL', 'CI', 'DO', 'OTHER'],
+  firms_code: ['NOA', 'AWB', 'MBL', 'HBL', 'ISF'],
+  freight_location: ['NOA', 'DO', 'MBL', 'HBL'],
+  last_free_day: ['NOA', 'DO'],
+  invoice_no: ['CI', 'PL'],
+  invoice_amount: ['CI'],
   items: ['PL', 'CI'],
 };
 const SCALARS = ['mbl_no', 'hbl_no', 'mawb_no', 'hawb_no', 'carrier', 'vessel', 'voyage', 'flight_no', 'pol', 'pod',
   'place_of_delivery', 'etd', 'eta', 'shipper_name', 'consignee_name', 'notify_party', 'packages', 'package_unit',
-  'weight_kg', 'cbm', 'chargeable_weight', 'commodity'];
+  'weight_kg', 'cbm', 'chargeable_weight', 'commodity', 'firms_code', 'freight_location', 'last_free_day',
+  'invoice_no', 'invoice_amount', 'isf_no', 'telex_release'];
 
 /** Combine per-document extractions into one shipment draft. */
 function mergeExtractions(docs) {
@@ -85,7 +111,15 @@ function mergeExtractions(docs) {
   }
   draft.containers = [...byNo.values()];
   const itemDoc = docs.filter((d) => d.items?.length).sort((a, b) => rank('items', a.doc_type) - rank('items', b.doc_type))[0];
-  draft.items = itemDoc ? itemDoc.items : [];
+  draft.items = itemDoc ? itemDoc.items.map((i) => ({ ...i })) : [];
+  // P/L lines carry cartons/weight; C/I lines carry price/value — join them by PO + description.
+  const ciItems = docs.filter((d) => d.doc_type === 'CI' && d !== itemDoc).flatMap((d) => d.items || []);
+  const key = (i) => `${(i.po_no || '').toUpperCase()}|${(i.description || '').toUpperCase().replace(/\s+/g, ' ')}`;
+  for (const it of draft.items) {
+    const ci = ciItems.find((c) => key(c) === key(it));
+    if (!ci) continue;
+    for (const k of ['unit_price', 'amount', 'hs_code', 'quantity', 'unit']) if (it[k] == null && ci[k] != null) it[k] = ci[k];
+  }
   // HBL on the AWB side
   if (!draft.mbl_no && draft.mawb_no) draft.mbl_no = draft.mawb_no;
   if (!draft.hbl_no && draft.hawb_no) draft.hbl_no = draft.hawb_no;

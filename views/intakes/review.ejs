@@ -1,7 +1,7 @@
 <%- include('../partials/head') %>
 <div class="pagehead">
   <div><h1 style="margin-bottom:4px">Intake #<%= intake.id %> <span class="badge <%= intake.status %>"><%= intake.status %></span></h1>
-    <div class="muted small">From <%= intake.agent_name || 'unknown agent' %> · <%= fmtDateTime(intake.created_at) %> UTC · extracted by <%= intake.extraction_method === 'ai' ? 'AI' : 'rules' %></div></div>
+    <div class="muted small">From <%= intake.agent_name || 'unknown agent' %> · <%= fmtDateTime(intake.created_at) %> UTC · extracted by <%= { ai: 'AI', ocr: 'OCR (scanned)', rules: 'text' }[intake.extraction_method] || 'text' %></div></div>
   <a class="btn secondary" href="/intakes">← Back</a>
 </div>
 <% if (intake.note) { %><div class="card" style="white-space:pre-line"><b>Note:</b> <%= intake.note %></div><% } %>

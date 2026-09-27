@@ -12,13 +12,28 @@ function detectDocType(text, filename = '') {
     [/(^|[^A-Z])(CI|C-I|INVOICE|INV)([^A-Z]|$)/, 'CI'], [/(^|[^A-Z])ISF/, 'ISF'], [/(^|[^A-Z])(AWB|MAWB|HAWB)/, 'AWB'],
   ];
   for (const [re, t] of byName) if (re.test(f)) return t;
+  // Pick the document title that appears first on the page (a C/I may mention the B/L number further down).
   const t = text.toUpperCase();
-  if (/IMPORTER\s+SECURITY\s+FILING|\bISF\s*(10|5|\+2)/.test(t)) return 'ISF';
-  if (/PACKING\s+LIST/.test(t)) return 'PL';
-  if (/COMMERCIAL\s+INVOICE/.test(t)) return 'CI';
-  if (/AIR\s*WAYBILL|\bAWB\b/.test(t)) return 'AWB';
-  if (/HOUSE\s+BILL|\bHBL\b|\bH\.?\s?B\/L\b/.test(t)) return 'HBL';
-  if (/BILL\s+OF\s+LADING|\bB\/L\b/.test(t)) return 'MBL';
+  const TITLES = [
+    [/IMPORTER\s+SECURITY\s+FILING|\bISF\s*(10|5|\+2)\b|\bISF\s+INFORMATION/, 'ISF'],
+    [/PACKING\s+LIST|\bP\/L\b/, 'PL'],
+    [/COMMERCIAL\s+INVOICE/, 'CI'],
+    [/NOTICE\s+OF\s+ARRIVAL|ARRIVAL\s+NOTICE|YOUR\s+SHIPMENT\s+HAS\s+ARRIVED/, 'NOA'],
+    [/DELIVERY\s+ORDER/, 'DO'],
+    [/AIR\s*WAYBILL|\bMAWB\b|\bHAWB\b/, 'AWB'],
+    [/HOUSE\s+BILL|\bHBL\b|\bH\.?\s?B\/L\b/, 'HBL'],
+    [/SEA\s*WAYBILL|BILL\s+OF\s+LADING|\bB\/L\b/, 'MBL'],
+  ];
+  let best = null;
+  for (const [re, type] of TITLES) {
+    const m = re.exec(t);
+    if (m && (!best || m.index < best.index)) best = { index: m.index, type };
+  }
+  if (best) {
+    // "BILL OF LADING (HOUSE)" style titles
+    if (best.type === 'MBL' && /HOUSE/.test(t.slice(best.index, best.index + 40))) return 'HBL';
+    return best.type;
+  }
   return 'OTHER';
 }
 
@@ -39,6 +54,23 @@ function containerCheckDigit(prefix10) {
 }
 function isValidContainer(no) {
   return /^[A-Z]{3}[UJZ]\d{7}$/.test(no) && containerCheckDigit(no.slice(0, 10)) === Number(no[10]);
+}
+
+const TO_DIGIT = { O: '0', Q: '0', D: '0', I: '1', L: '1', T: '7', S: '5', B: '8', Z: '2', G: '6' };
+const TO_LETTER = { 0: 'O', 1: 'I', 5: 'S', 8: 'B', 2: 'Z', 6: 'G' };
+const toDigits = (s) => s.replace(/[A-Z]/g, (c) => TO_DIGIT[c] || c);
+const toLetters = (s) => s.replace(/\d/g, (c) => TO_LETTER[c] || c);
+/** Try single-character OCR substitutions on the serial; return the unique valid variant, if any. */
+function repairContainer(no) {
+  const SWAP = { 0: '86', 1: '7', 2: '7', 3: '8', 5: '6', 6: '58', 7: '12', 8: '036', 9: '4' };
+  const found = new Set();
+  for (let i = 4; i < 11; i++) {
+    for (const d of SWAP[no[i]] || '') {
+      const cand = no.slice(0, i) + d + no.slice(i + 1);
+      if (isValidContainer(cand)) found.add(cand);
+    }
+  }
+  return found.size === 1 ? [...found][0] : null;
 }
 
 function toISODate(s) {
@@ -103,20 +135,27 @@ function extractRules(text, { filename = '', rows = null } = {}) {
   if (!out.mawb_no && docType === 'AWB') out.mawb_no = firstMatch(U, [/\b(\d{3}-\d{4}\s?\d{4})\b/, /\b(\d{3}-\d{8})\b/]);
 
   // Containers: 4 letters + 7 digits, allowing "ABCU 123456-7" styles; validate check digit.
+  // OCR often confuses O/0, I/1, S/5, B/8, Z/2 — a failing number is repaired when exactly one variant validates.
   const seen = new Set();
-  const ctnRe = /\b([A-Z]{3}[UJZ])\s?-?(\d{6})\s?-?(\d)\b/g;
+  const ctnRe = /\b([A-Z0-9]{3}[UJZ])\s?-?([0-9OISBZGTL]{6})\s?-?([0-9OISBZGTL])\b/g;
   let m;
   while ((m = ctnRe.exec(U))) {
-    const no = m[1] + m[2] + m[3];
+    const raw = m[1] + m[2] + m[3];
+    if (!/[A-Z]{2}/.test(m[1]) || !/\d{4}/.test(m[2] + m[3])) continue; // not container-like
+    let no = toLetters(m[1]) + toDigits(m[2] + m[3]);
+    if (!/^[A-Z]{3}[UJZ]\d{7}$/.test(no)) continue;
+    let repaired = false;
+    if (!isValidContainer(no)) { const fix = repairContainer(no); if (fix) { no = fix; repaired = true; } }
     if (seen.has(no)) continue;
     seen.add(no);
     const ctx = U.slice(m.index, m.index + 160);
     // "ABCU1234567/SEAL123" first, then an explicit SEAL label nearby.
-    const seal = /^[A-Z]{4}\s?-?\d{6}\s?-?\d\s*\/\s*(?:SEAL\s*(?:NO\.?|#)?\s*[:.]?\s*)?([A-Z0-9-]{5,20})/.exec(ctx)
+    const seal = /^[A-Z0-9]{4}\s?-?[0-9A-Z]{6}\s?-?[0-9A-Z]\s*\/\s*(?:SEAL\s*(?:NO\.?|#)?\s*[:.]?\s*)?([A-Z0-9-]{5,20})/.exec(ctx)
       || /\bSEAL\s*(?:NO\.?|#|NUMBER)?\s*[:.]?\s*([A-Z0-9-]{5,20})/.exec(ctx);
     const size = /\b(20|40|45)\s*'?\s*(GP|DC|DV|HC|HQ|RF|RH|OT|FR|ST)\b/.exec(ctx);
     const c = { container_no: no, seal_no: seal ? seal[1] : null, size_type: size ? size[1] + normSize(size[2]) : null };
-    if (!isValidContainer(no)) out.warnings.push(`Container ${no}: check digit does not match — please verify`);
+    if (repaired || no !== raw) out.warnings.push(`Container ${raw} read as ${no} (corrected by check digit) — please verify`);
+    else if (!isValidContainer(no)) out.warnings.push(`Container ${no}: check digit does not match — please verify`);
     out.containers.push(c);
   }
   if (out.containers.length === 1 && !out.containers[0].seal_no) {
@@ -157,15 +196,29 @@ function extractRules(text, { filename = '', rows = null } = {}) {
   if (pk.length) { const best = pk.reduce((a, b) => (b.n > a.n ? b : a)); out.packages = best.n; out.package_unit = best.unit; }
   out.chargeable_weight = num(firstMatch(U, [/CHARGEABLE\s+WEIGHT[^0-9\n]{0,20}([\d,]+(?:\.\d+)?)/]));
   out.commodity = labelValue(lines, /DESCRIPTION\s+OF\s+(?:GOODS|PACKAGES\s+AND\s+GOODS)|COMMODITY/i);
+  out.firms_code = firstMatch(U, [/FIRMS?\s*(?:CODE)?\s*(?:NO\.?|#)?\s*[:.]?\s*([A-Z][A-Z0-9]\d{2}|[A-Z]\d[A-Z0-9]\d|[A-Z]{2}[A-Z0-9]\d)\b/]);
+  out.freight_location = labelValue(lines, /(?:FREIGHT|CARGO)\s+LOCATION|DISCHARGE\s+TERMINAL|\bTERMINAL\s*(?:NAME)?\s*:|CFS\s+LOCATION|AVAILABLE\s+AT/i);
+  out.last_free_day = toISODate(firstMatch(T, [new RegExp(String.raw`(?:LAST\s+FREE\s+DAY|\bLFD)\s*[:.-]?\s*${DATE_RE}`, 'i')]));
+  out.invoice_no = firstMatch(U, [/INVOICE\s*(?:NO\.?|#|NUMBER)\s*[:.]?\s*([A-Z0-9][A-Z0-9-]{3,20})/]);
+  out.isf_no = firstMatch(U, [/ISF\s*(?:NO\.?|#|TRANSACTION\s*(?:NO\.?)?)\s*[:.]?\s*([A-Z0-9-]{6,25})/]);
+  out.telex_release = /TELEX\s+RELEASE|SURRENDERED|SEA\s*WAYBILL|EXPRESS\s+RELEASE|电放/.test(U) || null;
 
   if (rows) {
-    out.items = itemsFromRows(rows);
-    // Spreadsheet totals come from the lines, not from free-text matching across cells.
-    if (out.items.length) {
-      const sum = (k) => { const v = out.items.reduce((a, i) => a + (i[k] || 0), 0); return v ? Math.round(v * 1000) / 1000 : null; };
-      out.packages = sum('packages') ?? out.packages;
-      out.weight_kg = sum('weight_kg') ?? out.weight_kg;
-      out.cbm = sum('cbm') ?? out.cbm;
+    const { items, totals } = itemsFromRows(rows);
+    out.items = items;
+    if (items.length) {
+      // Table totals beat free-text matching: use the TOTAL row, else the sum of the lines.
+      const sum = (k) => { const v = items.reduce((a, i) => a + (i[k] || 0), 0); return v ? Math.round(v * 1000) / 1000 : null; };
+      for (const k of ['packages', 'weight_kg', 'cbm']) out[k] = totals?.[k] ?? sum(k) ?? out[k];
+      if (totals) {
+        for (const k of ['packages', 'weight_kg', 'cbm']) {
+          const s = sum(k);
+          if (totals[k] != null && s != null && Math.abs(s - totals[k]) > 0.01 * Math.max(1, totals[k])) {
+            out.warnings.push(`${k}: lines add up to ${s} but TOTAL row says ${totals[k]}`);
+          }
+        }
+      }
+      out.invoice_amount = totals?.amount ?? sum('amount');
     }
   }
   if (out.containers.length === 1) {
@@ -197,12 +250,14 @@ function partyName(lines, labelRe) {
 function itemsFromRows(rows) {
   const COLS = {
     po_no: /^(P\.?O\.?|PO\s*NO|ORDER)/i,
-    description: /DESCRIPTION|ITEM|PRODUCT|GOODS|품명|품목/i,
+    description: /DESCRIPTION|ITEM|PRODUCT|GOODS|COMMODITY|품명|품목/i,
     hs_code: /HS\s*CODE|HTS/i,
+    unit_price: /UNIT\s*PRICE|PRICE|단가/i,
+    amount: /AMOUNT|TOTAL\s*VALUE|VALUE|금액/i,
     quantity: /^(Q'?TY|QUANTITY|PCS|수량)/i,
     unit: /^UNIT$/i,
     packages: /CTNS?|CARTONS?|PKGS?|PACKAGES?|박스/i,
-    weight_kg: /G\.?\s?W|GROSS|WEIGHT|중량/i,
+    weight_kg: /^(?!.*\bN\.?\s?W\b)(?!.*NET).*(G\.?\s?W|GROSS|WEIGHT|중량)/i,
     cbm: /CBM|MEAS|VOLUME|M3/i,
   };
   let header = -1; let map = {};
@@ -214,19 +269,37 @@ function itemsFromRows(rows) {
     });
     if ('description' in m && Object.keys(m).length >= 2) { header = r; map = m; break; }
   }
-  if (header < 0) return [];
+  if (header < 0) return { items: [], totals: null };
   const items = [];
+  let totals = null;
   for (const row of rows.slice(header + 1)) {
-    const desc = String(row[map.description] ?? '').trim();
-    if (!desc || /^(TOTAL|SUB\s*TOTAL|합계)/i.test(desc)) continue;
-    const pick = (k) => (k in map ? String(row[map[k]] ?? '').trim() : '');
-    const n = (k) => { const v = num(pick(k)); return Number.isFinite(v) && pick(k) !== '' ? v : null; };
+    const cells = row.map((c) => String(c ?? '').trim());
+    const pick = (k) => (k in map ? cells[map[k]] || '' : '');
+    const n = (k) => { const v = numIn(pick(k)); return v; };
+    const desc = pick('description');
+    const isTotal = cells.some((c) => /^(TOTAL|SUB\s*-?TOTAL|G(RAND)?\.?\s*TOTAL|합계)\b/i.test(c));
+    if (isTotal) {
+      totals = { packages: n('packages'), weight_kg: n('weight_kg'), cbm: n('cbm'), quantity: n('quantity'), amount: n('amount') };
+      continue;
+    }
+    if (!desc) continue;
+    // "12,000 PCS" in the quantity cell carries the unit
+    const qtyUnit = /[\d.,]+\s*([A-Z]{2,6})\b/i.exec(pick('quantity'));
     items.push({
       po_no: pick('po_no') || null, description: desc, hs_code: pick('hs_code') || null,
-      quantity: n('quantity'), unit: pick('unit') || null, packages: n('packages'), weight_kg: n('weight_kg'), cbm: n('cbm'),
+      quantity: n('quantity'), unit: pick('unit') || (qtyUnit ? qtyUnit[1].toUpperCase() : null),
+      packages: n('packages'), weight_kg: n('weight_kg'), cbm: n('cbm'), unit_price: n('unit_price'), amount: n('amount'),
     });
   }
-  return items;
+  return { items, totals };
+}
+
+/** First number in a cell ("USD 25,200.00" -> 25200, "980 CTNS" -> 980). */
+function numIn(s) {
+  const m = /-?[\d,]*\.?\d+/.exec(String(s || '').replace(/\s/g, ''));
+  if (!m) return null;
+  const v = Number(m[0].replace(/,/g, ''));
+  return Number.isFinite(v) ? v : null;
 }
 
 module.exports = { extractRules, detectDocType, isValidContainer, containerCheckDigit, toISODate, itemsFromRows };

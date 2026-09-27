@@ -52,13 +52,17 @@ async function processUpload(files, { userId, agentId, note, db = store.db }) {
   const perDoc = [];
   for (const f of files) {
     const buffer = fs.readFileSync(f.path);
-    const ex = await extractFile({ buffer, filename: f.originalname, mime: f.mimetype, docTypeHint: f.slot === 'OTHER' ? 'AUTO' : f.slot });
-    perDoc.push({ filename: f.originalname, ...ex });
-    db.run(`INSERT INTO documents (intake_id, doc_type, filename, stored_path, mime, size, extracted_json, uploaded_by)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?)`, intakeId, ex.doc_type, f.originalname, f.path, f.mimetype, f.size, JSON.stringify(ex), userId);
+    const parts = await extractFile({ buffer, filename: f.originalname, mime: f.mimetype, docTypeHint: f.slot === 'OTHER' ? 'AUTO' : f.slot });
+    for (const ex of parts) {
+      // A merged PDF becomes one document row per detected document (same file, page range in the name).
+      const name = parts.length > 1 && ex.pages ? `${f.originalname} [p.${ex.pages.join(',')}]` : f.originalname;
+      perDoc.push({ filename: name, ...ex });
+      db.run(`INSERT INTO documents (intake_id, doc_type, filename, stored_path, mime, size, extracted_json, uploaded_by)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?)`, intakeId, ex.doc_type, name, f.path, f.mimetype, f.size, JSON.stringify(ex), userId);
+    }
   }
   const draft = mergeExtractions(perDoc);
-  const method = perDoc.some((d) => d.method === 'ai') ? 'ai' : 'rules';
+  const method = perDoc.some((d) => d.method === 'ai') ? 'ai' : perDoc.some((d) => d.method === 'ocr') ? 'ocr' : 'rules';
   const match = findMatch(draft, db);
   db.run('UPDATE intakes SET extracted_json = ?, extraction_method = ?, shipment_id = ? WHERE id = ?',
     JSON.stringify({ draft, perDoc }), method, match?.id ?? null, intakeId);
