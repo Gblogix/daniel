@@ -97,7 +97,7 @@ test('Terminal49: register B/L, resolve, map ETA/ATA + container LFD/holds, noti
   const ev = store.db.all("SELECT message FROM events WHERE shipment_id = ? AND type = 'ETA_CHANGED'", s.id);
   assert.equal(ev.length, 1);
   const mail = store.db.get("SELECT subject FROM emails WHERE shipment_id = ? AND kind = 'CUSTOMER_UPDATE' ORDER BY id DESC", s.id);
-  assert.match(mail.subject, /ETA update/);
+  assert.match(mail.subject, /\/\/ ETA update$/);
 
   // second poll: arrival -> status ARRIVED, no re-registration
   f.calls.length = 0;

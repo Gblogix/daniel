@@ -1,0 +1,26 @@
+<%- include('../partials/head') %>
+<div class="pagehead"><h1>Company profile & numbering</h1></div>
+<form class="card" method="post" action="/admin/company" style="max-width:860px">
+  <input type="hidden" name="_csrf" value="<%= csrf %>">
+  <p class="muted small" style="margin-top:0">Printed on A/N, D/O, invoices and debit notes. Bank details are stored only in the system database.</p>
+  <div class="grid g2">
+    <div class="field"><label>Company name</label><input name="name" value="<%= co.name %>"></div>
+    <div class="field"><label>Legal name (checks payable to)</label><input name="legal_name" value="<%= co.legal_name %>"></div>
+    <div class="field"><label>Address</label><input name="address" value="<%= co.address %>"></div>
+    <div class="field"><label>US DOT#</label><input name="dot" value="<%= co.dot %>"></div>
+    <div class="field"><label>Tel</label><input name="tel" value="<%= co.tel %>"></div>
+    <div class="field"><label>Fax</label><input name="fax" value="<%= co.fax %>"></div>
+    <div class="field"><label>Email</label><input name="email" value="<%= co.email %>"></div>
+    <div class="field"><label>Accounting email (A/N)</label><input name="accounting_email" value="<%= co.accounting_email %>"></div>
+    <div class="field"><label>Accounting tel (A/N)</label><input name="accounting_tel" value="<%= co.accounting_tel %>"></div>
+  </div>
+  <div class="field"><label>Payment instructions (DOMESTIC/ACH + INTERNATIONAL/WIRE) — printed on A/N, invoices, debit notes</label>
+    <textarea name="remit" rows="6" placeholder="DOMESTIC/ACH PAYMENT INFO (BANK NAME- …)&#10;BENEFICIARY: …&#10;ACCOUNT# : … // ROUTING# : …&#10;INTERNATIONAL/WIRE PAYMENT INFO&#10;SWIFT CODE : …"><%= co.remit %></textarea></div>
+  <h3>Next numbers</h3>
+  <div class="grid g3">
+    <% seqs.forEach((q) => { %><div class="field"><label><%= q.label %></label><input name="seq_<%= q.k %>" type="number" value="<%= q.v %>"></div><% }) %>
+    <div class="field"><label>Default AR terms (days)</label><input name="ar_terms_days" type="number" value="<%= terms %>"></div>
+  </div>
+  <button class="btn">Save</button>
+</form>
+<%- include('../partials/foot') %>

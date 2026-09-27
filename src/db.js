@@ -197,6 +197,48 @@ CREATE TABLE IF NOT EXISTS mail_imports (
   created_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
 
+-- Accounting: AR invoices to customers, D/N (debit note) / C/N to overseas agents, AP costs from vendors.
+CREATE TABLE IF NOT EXISTS invoices (
+  id INTEGER PRIMARY KEY,
+  shipment_id INTEGER REFERENCES shipments(id) ON DELETE SET NULL,
+  kind TEXT NOT NULL,                  -- AR | DN | AP
+  number TEXT NOT NULL UNIQUE,         -- INV-12214 | DCN-11664 | vendor invoice no.
+  company_id INTEGER REFERENCES companies(id),
+  bill_to TEXT,                        -- printed name + address
+  attn TEXT,
+  ship_to TEXT,
+  invoice_date TEXT NOT NULL,
+  terms_days INTEGER NOT NULL DEFAULT 0,
+  due_date TEXT,
+  currency TEXT NOT NULL DEFAULT 'USD',
+  profit_share REAL,                   -- D/N: % of shipment profit credited to the agent
+  agent_ref TEXT,                      -- D/N: agent's filing no.
+  customer_ref TEXT,
+  memo TEXT,
+  total REAL NOT NULL DEFAULT 0,       -- AR/AP: amount; D/N: debit - credit (positive = due to us)
+  paid_amount REAL NOT NULL DEFAULT 0,
+  paid_at TEXT,
+  status TEXT NOT NULL DEFAULT 'OPEN', -- DRAFT | OPEN | PAID | VOID
+  sent_at TEXT,
+  prepared_by INTEGER REFERENCES users(id),
+  created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+CREATE INDEX IF NOT EXISTS idx_invoices_shipment ON invoices(shipment_id);
+
+CREATE TABLE IF NOT EXISTS invoice_lines (
+  id INTEGER PRIMARY KEY,
+  invoice_id INTEGER NOT NULL REFERENCES invoices(id) ON DELETE CASCADE,
+  mh TEXT,                             -- D/N: M (master) / H (house)
+  bl_no TEXT,
+  description TEXT NOT NULL,
+  unit TEXT,
+  rate REAL,
+  qty REAL,
+  amount REAL NOT NULL DEFAULT 0,      -- rate x qty (REV/COST on D/N)
+  pc TEXT,                             -- D/N: P (prepaid) / C (collect)
+  side TEXT NOT NULL DEFAULT 'DEBIT'   -- D/N: DEBIT (+, due to us) | CREDIT (-, due to agent)
+);
+
 CREATE TABLE IF NOT EXISTS settings (
   key TEXT PRIMARY KEY,
   value TEXT
@@ -221,10 +263,14 @@ const MIGRATIONS = {
     tracking_enabled: 'INTEGER NOT NULL DEFAULT 1',
     vessel_imo: 'TEXT', vessel_mmsi: 'TEXT', vessel_lat: 'REAL', vessel_lon: 'REAL', vessel_speed: 'REAL',
     vessel_course: 'REAL', vessel_pos_at: 'TEXT', vessel_destination: 'TEXT',
+    ams_bl_no: 'TEXT', customer_ref: 'TEXT', sub_bl_no: 'TEXT', it_no: 'TEXT', it_place: 'TEXT', it_date: 'TEXT',
+    devan_location: 'TEXT', freight_location_tel: 'TEXT', available_date: 'TEXT', go_date: 'TEXT', final_destination: 'TEXT',
+    service_term: 'TEXT', release_type: 'TEXT', consignee_address: 'TEXT', notify_address: 'TEXT', marks: 'TEXT',
+    agent_ref: 'TEXT',
   },
   containers: {
     pickup_lfd: 'TEXT', available: 'INTEGER', holds: 'TEXT', discharged_at: 'TEXT', full_out_at: 'TEXT',
-    empty_returned_at: 'TEXT', current_status: 'TEXT', location: 'TEXT',
+    empty_returned_at: 'TEXT', current_status: 'TEXT', location: 'TEXT', pickup_no: 'TEXT',
   },
   cargo_items: { unit_price: 'REAL', amount: 'REAL' },
 };
@@ -242,6 +288,9 @@ const DEFAULT_SETTINGS = {
   auto_notify_status: '1',      // status / ETA / delivery changes -> customer
   auto_tracking: '1',           // poll carrier / GPS tracking and update ETD/ETA automatically
   lfd_alerts: '1',              // daily LFD / pickup digest to staff
+  // Next document numbers (continue from the current system; admin can change them)
+  seq_OI: '11828', seq_AI: '10009', seq_OTH: '10582', seq_INV: '12215', seq_DCN: '11665',
+  ar_terms_days: '25',
 };
 
 function open(file = config.dbPath) {

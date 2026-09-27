@@ -24,17 +24,19 @@ function getTransport() {
 }
 
 /**
- * Subject in the style used in the office inbox: tokens joined by " // ".
- *   ocean: [A/N] CMDUSHZ8105615 // HBL TWS26050088 // EWLU7068201 // 40HC x 1 // ETA 5/31
- *   air:   [A/N] 921-63150570 // 46 CTN // ETA 9/14
+ * Subject exactly as the office writes it (info@gblogix.com Sent Items):
+ *   ocean: MAEU277021276 // NSCLGB26090026 // MNBU3781976, MNBU3416192 // 40RH x 2 // ETA 10/9
+ *   LCL:   SMLMSEL6E2823600 // SMCU1095681 (LCL) // 40HC x 1 // ETA 9/28 // Long Beach
+ *   air:   921-63150570 // 46 CTN // ETA 9/14
+ * `kind` is appended only for customer-facing updates (e.g. "ETA update"), never for A/N or D/O.
  */
 function subjectLine(s, kind) {
   const md = (d) => (d ? `${Number(d.slice(5, 7))}/${Number(d.slice(8, 10))}` : 'TBA');
   const parts = [s.mbl_no || s.ref_no];
-  if (s.hbl_no && !s.direct_shipment) parts.push(`${s.mode === 'AIR' ? 'HAWB' : 'HBL'} ${s.hbl_no}`);
+  if (s.hbl_no && !s.direct_shipment && s.hbl_no !== s.mbl_no) parts.push(s.hbl_no);
   const ctns = s.containers || [];
   if (ctns.length) {
-    parts.push(ctns.map((c) => c.container_no).join(', '));
+    parts.push(ctns.map((c) => c.container_no).join(', ') + (s.mode === 'LCL' ? ' (LCL)' : ''));
     const sizes = {};
     for (const c of ctns) if (c.size_type) sizes[c.size_type] = (sizes[c.size_type] || 0) + 1;
     const sz = Object.entries(sizes).map(([k, v]) => `${k} x ${v}`).join(', ');
@@ -43,8 +45,9 @@ function subjectLine(s, kind) {
     parts.push(`${s.packages} ${s.package_unit === 'PLTS' ? 'PLT' : s.package_unit === 'CTNS' || !s.package_unit ? 'CTN' : s.package_unit}`);
   }
   parts.push(s.ata ? `ATA ${md(s.ata)}` : `ETA ${md(s.eta)}`);
-  if (s.last_free_day && ['D/O', 'A/N'].includes(kind)) parts.push(`LFD ${md(s.last_free_day)}`);
-  return `[${kind}] ${parts.join(' // ')}`;
+  if (s.last_free_day && (kind === 'D/O' || kind === 'A/N')) parts.push(`LFD ${md(s.last_free_day)}`);
+  if (kind && kind !== 'A/N' && kind !== 'D/O') parts.push(kind);
+  return parts.join(' // ');
 }
 
 function recipients(companyId, db = store.db) {
@@ -59,21 +62,33 @@ function generatedDir() {
   return dir;
 }
 
+/** Everything a document template needs besides the shipment. */
+function docContext(s, { db = store.db, userId = null } = {}) {
+  const user = userId ? db.get('SELECT name FROM users WHERE id = ?', userId) : null;
+  // The A/N doubles as freight invoice: print the open AR invoice billed to the customer / consignee.
+  const inv = db.get(`SELECT * FROM invoices WHERE shipment_id = ? AND kind = 'AR' AND status <> 'VOID'
+    ORDER BY (company_id = ?) DESC, id DESC LIMIT 1`, s.id, s.customer_id || 0);
+  if (inv) inv.lines = db.all('SELECT * FROM invoice_lines WHERE invoice_id = ? ORDER BY id', inv.id);
+  return { company: require('./company').get(db), preparedBy: user?.name || 'GB Logix', invoice: inv || null };
+}
+
 /** Render A/N, D/O or ATME for a shipment (PDF when Chromium is available), store it as a document and return the row. */
 async function generateDocument(shipmentId, type, { db = store.db, userId = null } = {}) {
   const s = S.find(shipmentId, null, { db });
   if (!s) throw new Error('Shipment not found');
   // Re-issuing a document marks it as a revision (…_Rev, …_Rev2), as brokers expect.
   const revision = db.get("SELECT COUNT(*) AS n FROM documents WHERE shipment_id = ? AND doc_type = ? AND source = 'generated'", s.id, type).n;
-  const html = GENERATORS[type](s, { revision });
+  const html = GENERATORS[type](s, { ...docContext(s, { db, userId }), revision });
+  return storeGenerated(db, { shipmentId: s.id, type, base: fileName(type, s, revision), html, visible: type === 'AN', userId, refNo: s.ref_no });
+}
+
+async function storeGenerated(db, { shipmentId, type, base, html, visible, userId, refNo }) {
   const pdf = await require('./docs/pdf').htmlToPdf(html);
-  const base = fileName(type, s, revision);
-  const stored = path.join(generatedDir(), `${s.ref_no}_${base}_${Date.now()}.${pdf ? 'pdf' : 'html'}`);
+  const stored = path.join(generatedDir(), `${refNo}_${base}_${Date.now()}.${pdf ? 'pdf' : 'html'}`);
   fs.writeFileSync(stored, pdf || html);
-  const visible = type === 'AN' ? 1 : 0;
   const res = db.run(`INSERT INTO documents (shipment_id, doc_type, filename, stored_path, mime, size, source, customer_visible, uploaded_by)
-    VALUES (?, ?, ?, ?, ?, ?, 'generated', ?, ?)`, s.id, type, `${base}.${pdf ? 'pdf' : 'html'}`, stored,
-  pdf ? 'application/pdf' : 'text/html', pdf ? pdf.length : html.length, visible, userId);
+    VALUES (?, ?, ?, ?, ?, ?, 'generated', ?, ?)`, shipmentId, type, `${base}.${pdf ? 'pdf' : 'html'}`, stored,
+  pdf ? 'application/pdf' : 'text/html', pdf ? pdf.length : html.length, visible ? 1 : 0, userId);
   return db.get('SELECT * FROM documents WHERE id = ?', Number(res.lastInsertRowid));
 }
 
@@ -205,6 +220,20 @@ async function sendDeliveryOrder(shipmentId, { db = store.db, userId = null } = 
   return id;
 }
 
+/** "Please kindly note the vessel name & ETA has been changed" — sent to the trucker once a D/O is out. */
+async function sendTruckerEtaChange(shipmentId, eta, { db = store.db } = {}) {
+  const s = S.find(shipmentId, null, { db });
+  if (!s.do_sent_at) return null;
+  const to = recipients(s.trucker_id, db);
+  if (!to.length) return null;
+  const md = (d) => (d ? `${Number(d.slice(5, 7))}/${Number(d.slice(8, 10))}` : 'TBA');
+  return queueEmail({
+    shipmentId: s.id, kind: 'TRUCKER_ETA', to,
+    subject: subjectLine({ ...s, eta: null }, '').replace(/ \/\/ ETA TBA$/, '') + ` // ETA ${md(eta.from)} > ${md(eta.to)}`,
+    html: `<p>Hello ${esc(s.trucker_name)} Team,</p><p>Please kindly note the vessel name &amp; ETA has been changed for this shipment. Current ETA is <b>${md(eta.to)}</b>${s.vessel ? ` (${esc(s.vessel)} ${esc(s.voyage || '')})` : ''}.</p>`,
+  }, { db });
+}
+
 /** Called after documents from the agent portal were applied to a shipment. */
 async function onDocumentsApplied(shipmentId, { db = store.db, userId = null } = {}) {
   S.addEvent(shipmentId, 'DOCS_RECEIVED', 'Shipping documents received from origin agent', { db, userId });
@@ -225,6 +254,7 @@ async function onShipmentChanged(shipmentId, changes, { db = store.db, userId = 
   if (f.eta && f.eta.from) {
     S.addEvent(shipmentId, 'ETA_CHANGED', `ETA changed ${f.eta.from} → ${f.eta.to}`, { db, userId });
     reasons.push('ETA update');
+    if (notify) await sendTruckerEtaChange(shipmentId, f.eta, { db });
   }
   if (f.delivery_date || f.delivery_time) {
     const s = S.find(shipmentId, null, { db });
@@ -243,6 +273,6 @@ async function onShipmentChanged(shipmentId, changes, { db = store.db, userId = 
 }
 
 module.exports = {
-  subjectLine, recipients, generateDocument, queueEmail, deliver, summaryHtml,
+  docContext, storeGenerated, subjectLine, recipients, generateDocument, queueEmail, deliver, summaryHtml,
   sendBrokerPacket, sendCustomerUpdate, sendDeliveryOrder, onDocumentsApplied, onShipmentChanged,
 };

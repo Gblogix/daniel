@@ -16,10 +16,11 @@
     <%- sel('broker_id', 'Customs broker', brokers) %>
     <%- sel('trucker_id', 'Trucker', truckers) %>
   </div>
+  <% const ta = (k, label) => `<div class="field"><label for="f_${k}">${label}${src(k)}</label><textarea id="f_${k}" name="${k}" rows="2">${e(s[k])}</textarea></div>`; %>
   <div class="grid g3">
-    <%- inp('shipper_name', 'Shipper') %>
-    <%- inp('consignee_name', 'Consignee (as on B/L)') %>
-    <%- inp('notify_party', 'Notify party') %>
+    <div><%- inp('shipper_name', 'Shipper') %><%- ta('shipper_address', 'Shipper address') %></div>
+    <div><%- inp('consignee_name', 'Consignee (as on B/L)') %><%- ta('consignee_address', 'Consignee address') %></div>
+    <div><%- inp('notify_party', 'Notify party') %><%- ta('notify_address', 'Notify address') %></div>
   </div>
 </fieldset>
 
@@ -34,12 +35,28 @@
     <%- inp('pol', 'Port of loading') %>
     <%- inp('pod', 'Port of discharge') %>
     <%- inp('place_of_delivery', 'Place of delivery') %>
-    <%- inp('cfs_location', 'Pick-up location (terminal / CFS / CES)') %>
+    <%- inp('cfs_location', 'Freight location (pick-up: terminal / CFS / CES)') %>
     <%- inp('etd', 'ETD', 'date') %>
     <%- inp('eta', 'ETA', 'date') %>
     <%- inp('atd', 'ATD (actual)', 'date') %>
     <%- inp('ata', 'ATA (actual)', 'date') %>
     <%- inp('last_free_day', 'Last free day', 'date') %>
+    <%- inp('ams_bl_no', 'AMS B/L no.') %>
+    <%- inp('sub_bl_no', 'Sub B/L no.') %>
+    <%- inp('customer_ref', 'Customer ref. no.') %>
+    <%- inp('agent_ref', 'Agent filing no.') %>
+    <%- inp('final_destination', 'Final destination') %>
+    <%- inp('devan_location', 'Devan location / terminal') %>
+    <%- inp('freight_location_tel', 'Freight location tel') %>
+    <%- inp('available_date', 'Available date', 'date') %>
+    <%- inp('go_date', 'G.O. date', 'date') %>
+    <%- inp('it_no', 'I.T. no.') %>
+    <%- inp('it_place', 'I.T. place') %>
+    <%- inp('it_date', 'I.T. date', 'date') %>
+    <div class="field"><label for="f_service_term">Service term</label><select id="f_service_term" name="service_term"><option value="">—</option>
+      <% ['CY/CY', 'CFS/CFS', 'CY/CFS', 'CFS/CY', 'CY/DOOR', 'CFS/DOOR'].forEach((o) => { %><option <%= s.service_term === o ? 'selected' : '' %>><%= o %></option><% }) %></select></div>
+    <div class="field"><label for="f_release_type">Release</label><select id="f_release_type" name="release_type"><option value="">—</option>
+      <% ['EXPRESS RELEASE', 'TELEX RELEASE', 'ORIGINAL B/L', 'SEA WAYBILL'].forEach((o) => { %><option <%= s.release_type === o ? 'selected' : '' %>><%= o %></option><% }) %></select></div>
     <%- inp('firms_code', 'Firms code') %>
     <%- inp('scac', 'Carrier SCAC / airline prefix', 'text', 'placeholder="auto from MBL"') %>
     <%- inp('isf_no', 'ISF / AMS ref') %>
@@ -87,6 +104,7 @@
     <%- inp('cbm', 'CBM', 'number', 'step="0.001"') %>
     <%- inp('chargeable_weight', 'Chargeable wt (air)', 'number', 'step="0.01"') %>
     <%- inp('commodity', 'Commodity') %>
+    <%- inp('marks', 'Marks & numbers') %>
     <%- inp('ci_invoice_no', 'C/I no.') %>
     <%- inp('cargo_value', 'Cargo value (C/I, USD)', 'number', 'step="0.01"') %>
   </div>
@@ -108,25 +126,13 @@
     <%- inp('invoice_amount', 'Invoice amount (USD)', 'number', 'step="0.01"') %>
     <div class="field"><label>&nbsp;</label><label class="check"><input type="checkbox" name="paid" value="1" <%= s.paid ? 'checked' : '' %>> Paid</label></div>
   </div>
-  <label>Charges (printed on the A/N / freight invoice — total becomes the invoice amount)</label>
-  <div class="tablewrap"><table class="t lines" data-lines="charge">
-    <thead><tr><th style="min-width:260px">Description</th><th>Amount (USD)</th><th></th></tr></thead>
-    <tbody>
-    <% const chs = s.charges && s.charges.length ? s.charges : [{}]; chs.forEach((c) => { %>
-      <tr><td><input name="charge_desc" value="<%= c.description || '' %>" placeholder="Ocean freight / ISC / Handling / Customs clearance…" list="charge-list"></td>
-        <td><input name="charge_amt" value="<%= c.amount ?? '' %>" type="number" step="0.01"></td>
-        <td><button type="button" class="btn secondary small" data-remove-row>✕</button></td></tr>
-    <% }) %>
-    </tbody>
-  </table></div>
-  <datalist id="charge-list"><% ['Ocean freight', 'Air freight', 'Handling fee', 'Documentation fee', 'Customs clearance', 'ISF filing', 'ISC (terminal)', 'CES exam fee', 'Storage', 'Drayage / trucking', 'Chassis', 'Pier pass / CTF', 'Warehouse / transload', 'Delivery'].forEach((c) => { %><option value="<%= c %>"><% }) %></datalist>
-  <button type="button" class="btn secondary small" data-add-row="charge" style="margin:8px 0 12px">+ Charge</button>
+  <p class="muted small">Charges are billed with AR invoices / debit notes (Billing section on the shipment page). The A/N prints the customer's AR invoice.</p>
   <div class="field"><label for="f_notes">Internal notes</label><textarea id="f_notes" name="notes" rows="2"><%= s.notes || '' %></textarea></div>
 </fieldset>
 
 <fieldset class="fieldset"><legend>Containers</legend>
   <div class="tablewrap"><table class="t lines" data-lines="ctn">
-    <thead><tr><th>Container No.</th><th>Seal No.</th><th>Size/Type</th><th>Pkgs</th><th>KG</th><th>CBM</th><th>LFD</th><th>Terminal status</th><th></th></tr></thead>
+    <thead><tr><th>Container No.</th><th>Seal No.</th><th>Size/Type</th><th>Pkgs</th><th>KG</th><th>CBM</th><th>Pickup no.</th><th>LFD</th><th>Terminal status</th><th></th></tr></thead>
     <tbody>
     <% const ctns = s.containers && s.containers.length ? s.containers : [{}]; ctns.forEach((c) => { %>
       <tr>
@@ -136,6 +142,7 @@
         <td><input name="ctn_pkgs" value="<%= c.packages ?? '' %>"></td>
         <td><input name="ctn_kg" value="<%= c.weight_kg ?? '' %>"></td>
         <td><input name="ctn_cbm" value="<%= c.cbm ?? '' %>"></td>
+        <td><input name="ctn_pickup" value="<%= c.pickup_no || '' %>"></td>
         <td><input name="ctn_lfd" value="<%= c.pickup_lfd || '' %>" type="date"></td>
         <td class="small nowrap"><%= [c.current_status, c.available === 1 ? 'available' : c.available === 0 ? 'not available' : '', c.holds].filter(Boolean).join(' · ') %></td>
         <td><button type="button" class="btn secondary small" data-remove-row>✕</button></td>

@@ -126,7 +126,7 @@ router.get('/shipments/:id/preview/:type', auth.requireInternal, (req, res) => {
   const s = S.find(Number(req.params.id), null);
   if (!GENERATORS[type] || !s) return res.status(404).render('error', { title: 'Not found', message: 'Unknown document.' });
   res.set('Content-Security-Policy', "default-src 'none'; style-src 'unsafe-inline'; img-src data:");
-  res.type('html').send(GENERATORS[type](s));
+  res.type('html').send(GENERATORS[type](s, notify.docContext(s, { userId: req.user.id })));
 });
 
 // Issue (save) a document without emailing it — e.g. to download and send manually.

@@ -37,6 +37,9 @@ const EDITABLE_FIELDS = [
   'scac', 'direct_shipment', 'isf_no', 'telex_release', 'firms_code', 'entry_no', 'css_no', 'holds', 'cargo_value',
   'ci_invoice_no', 'freight_paid', 'carrier_released', 'storage_start', 'available_for_pickup', 'pickup_appt',
   'picked_up_at', 'pallets', 'pod_received', 'empty_returned_at', 'tracking_enabled', 'vessel_imo', 'vessel_mmsi',
+  'ams_bl_no', 'customer_ref', 'sub_bl_no', 'it_no', 'it_place', 'it_date', 'devan_location', 'freight_location_tel',
+  'available_date', 'go_date', 'final_destination', 'service_term', 'release_type', 'consignee_address', 'notify_address',
+  'marks', 'agent_ref',
 ];
 const NUMERIC_FIELDS = new Set(['customer_id', 'agent_id', 'broker_id', 'trucker_id', 'delivery_company_id',
   'packages', 'weight_kg', 'cbm', 'chargeable_weight', 'service_price', 'invoice_amount', 'cargo_value', 'pallets']);
@@ -59,16 +62,18 @@ function normalizeInput(input) {
   return out;
 }
 
-function nextRefNo(db, date = new Date()) {
-  const prefix = `GBL-${String(date.getFullYear()).slice(2)}${String(date.getMonth() + 1).padStart(2, '0')}-`;
-  const last = db.get("SELECT ref_no FROM shipments WHERE ref_no LIKE ? ORDER BY ref_no DESC LIMIT 1", `${prefix}%`);
-  const n = last ? Number(last.ref_no.slice(prefix.length)) + 1 : 1;
-  return prefix + String(n).padStart(4, '0');
+/** Filing number in the office format: OI-11828 (ocean import), AI-10009 (air import), OTH0010582 (trucking / other). */
+function nextRefNo(db, mode = 'FCL') {
+  const company = require('./company');
+  if (mode === 'AIR') return `AI-${company.nextNumber('AI', db)}`;
+  if (mode === 'TRUCK') return `OTH${String(company.nextNumber('OTH', db)).padStart(7, '0')}`;
+  return `OI-${company.nextNumber('OI', db)}`;
 }
 
 function create(input, { db = store.db, userId } = {}) {
   const data = normalizeInput(input);
-  const ref = nextRefNo(db);
+  let ref = input.ref_no && String(input.ref_no).trim();
+  if (!ref || db.get('SELECT 1 FROM shipments WHERE ref_no = ?', ref)) ref = nextRefNo(db, data.mode || 'FCL');
   const cols = ['ref_no', ...Object.keys(data)];
   const res = db.run(`INSERT INTO shipments (${cols.join(',')}) VALUES (${cols.map(() => '?').join(',')})`,
     ref, ...Object.values(data));
@@ -174,11 +179,11 @@ function saveLines(id, body, { db = store.db } = {}) {
         // Keep tracking data (discharge / LFD / holds) that came from the provider for containers that stay.
         const prev = kept.get(no) || {};
         db.run(`INSERT INTO containers (shipment_id, container_no, seal_no, size_type, packages, weight_kg, cbm, pickup_lfd,
-            available, holds, discharged_at, full_out_at, empty_returned_at, current_status, location) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+            available, holds, discharged_at, full_out_at, empty_returned_at, current_status, location, pickup_no) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
           id, no, arr(body.ctn_seal)[i] || null, arr(body.ctn_size)[i] || null,
           n(arr(body.ctn_pkgs)[i]), n(arr(body.ctn_kg)[i]), n(arr(body.ctn_cbm)[i]), arr(body.ctn_lfd)[i] || prev.pickup_lfd || null,
           prev.available ?? null, prev.holds ?? null, prev.discharged_at ?? null, prev.full_out_at ?? null,
-          prev.empty_returned_at ?? null, prev.current_status ?? null, prev.location ?? null);
+          prev.empty_returned_at ?? null, prev.current_status ?? null, prev.location ?? null, arr(body.ctn_pickup)[i] || prev.pickup_no || null);
       });
     });
   }

@@ -22,6 +22,7 @@
       <% if (user.role === 'admin') { %>
         <a class="<%= on('/admin/users') %>" href="/admin/users">Users</a>
         <a class="<%= on('/admin/settings') %>" href="/admin/settings">Automation</a>
+        <a class="<%= on('/admin/company') %>" href="/admin/company">Company</a>
       <% } %>
     <% } else if (user.role === 'customer') { %>
       <a class="<%= on('/track') %>" href="/track">My shipments</a>

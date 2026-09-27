@@ -82,6 +82,24 @@ router.post('/admin/settings', auth.requireRole('admin'), (req, res) => {
   res.redirect('/admin/settings');
 });
 
+// ---------- company profile & numbering — admin only ----------
+const SEQS = [['OI', 'Ocean import filing no. (OI-#####)'], ['AI', 'Air import filing no. (AI-#####)'], ['OTH', 'Trucking / other filing no. (OTH#######)'],
+  ['INV', 'AR invoice no. (INV-#####)'], ['DCN', 'Debit / credit note no. (DCN-#####)']];
+router.get('/admin/company', auth.requireRole('admin'), (req, res) => {
+  const company = require('../company');
+  res.render('admin/company', { title: 'Company profile', co: company.get(), seqs: SEQS.map(([k, label]) => ({ k, label, v: store.db.setting(`seq_${k}`) })), terms: store.db.setting('ar_terms_days') });
+});
+router.post('/admin/company', auth.requireRole('admin'), (req, res) => {
+  require('../company').set(req.body);
+  for (const [k] of SEQS) {
+    const v = Number(req.body[`seq_${k}`]);
+    if (Number.isInteger(v) && v > 0) store.db.setSetting(`seq_${k}`, v);
+  }
+  if (Number.isInteger(Number(req.body.ar_terms_days))) store.db.setSetting('ar_terms_days', Number(req.body.ar_terms_days));
+  flash(req, 'ok', 'Company profile saved');
+  res.redirect('/admin/company');
+});
+
 // ---------- outbox — staff ----------
 router.get('/outbox', auth.requireInternal, (req, res) => {
   const rows = store.db.all(`SELECT e.id, e.kind, e.to_addr, e.subject, e.status, e.error, e.created_at, e.sent_at, s.ref_no, e.shipment_id

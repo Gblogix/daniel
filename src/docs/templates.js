@@ -1,169 +1,340 @@
 /**
- * Generated documents, modelled on what GB Logix sends today:
- *   A/N   — ARRIVAL NOTICE / FREIGHT INVOICE  (file ARRIVAL_NOTICE___FREIGHT_INVOICE_<ref>.pdf) → broker, customer, partner
- *   D/O   — DELIVERY ORDER                    (file Delivery_Order_<ref>.pdf)                   → trucker / warehouse, driver signs
- *   ATME  — AUTHORITY TO MAKE ENTRY           (file AUTH_HBL_<ref>.pdf)                         → broker / pickup trucker (air)
- * Layouts are generic until the company forms are loaded; field order follows the broker's correction requests
- * (weight must match the B/L, firms code, freight location, piece count).
+ * Company documents, laid out after the current GlobalBridge forms:
+ *   AN    ARRIVAL NOTICE / FREIGHT INVOICE   ARRIVAL_NOTICE___FREIGHT_INVOICE_<HBL>.pdf
+ *   DO    DELIVERY ORDER                     Delivery_Order _<HBL>.pdf
+ *   ATME  AUTHORITY TO MAKE ENTRY            AUTH_HBL_<HAWB>.pdf   (issued in the consignee's name)
+ *   AR    INVOICE (to customers)             AR_INV12214_<Customer>.pdf
+ *   DN    DEBIT NOTE (to overseas agents)    DC_DCN11664-<Agent>.pdf
+ * Company details (address, tel, bank / remittance text) come from the Company profile in admin settings.
  */
+const fs = require('node:fs');
+const path = require('node:path');
 const config = require('../config');
-const { MODES } = require('../shipments');
 
 const esc = (v) => String(v ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
-const n = (v, d = 0) => (v == null || v === '' ? '' : Number(v).toLocaleString('en-US', { minimumFractionDigits: d, maximumFractionDigits: d }));
-const lbs = (kg) => (kg == null ? '' : n(Number(kg) * 2.20462, 1));
-const today = () => new Date().toLocaleDateString('en-CA', { timeZone: config.timezone });
-
-const DOC_TITLES = {
-  AN: 'Arrival Notice / Freight Invoice',
-  DO: 'Delivery Order',
-  ATME: 'Authority to Make Entry',
+const nl = (v) => esc(v).replace(/\n/g, '<br>');
+const n = (v, d = 2) => (v == null || v === '' ? '' : Number(v).toLocaleString('en-US', { minimumFractionDigits: d, maximumFractionDigits: d }));
+const up = (v) => esc(String(v ?? '').toUpperCase());
+/** 2026-09-16 -> 09/16/2026 (forms use US dates) */
+const us = (d) => (d && /^\d{4}-\d{2}-\d{2}/.test(d) ? `${d.slice(5, 7)}/${d.slice(8, 10)}/${d.slice(0, 4)}` : esc(d || ''));
+/** 2026-09-19 -> Sep-19-2026 (invoice / debit note style) */
+const mon = (d) => {
+  if (!d) return '';
+  const [y, m, dd] = d.slice(0, 10).split('-');
+  return `${['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'][Number(m) - 1]}-${dd}-${y}`;
+};
+const nowOffice = () => {
+  const d = new Date();
+  const date = d.toLocaleDateString('en-US', { timeZone: config.timezone, year: 'numeric', month: '2-digit', day: '2-digit' });
+  const time = d.toLocaleTimeString('en-US', { timeZone: config.timezone, hour12: false, hour: '2-digit', minute: '2-digit' });
+  return { date, time, iso: d.toLocaleDateString('en-CA', { timeZone: config.timezone }) };
 };
 
-/** Reference used in file names: MAWB digits for air, MBL without the carrier SCAC for ocean (e.g. SHZ8105615). */
-function docRef(s) {
-  if (s.mode === 'AIR') return String(s.mbl_no || s.ref_no).replace(/\D/g, '') || s.ref_no;
-  const mbl = String(s.mbl_no || '').replace(/\s/g, '');
-  if (!mbl) return s.hbl_no || s.ref_no;
-  return /^[A-Z]{4}[A-Z0-9]{6,}$/.test(mbl) && /^(CMDU|HDMU|ONEY|MAEU|MEDU|MSCU|EGLV|COSU|OOLU|YMLU|ZIMU|HLCU|WHLC|SMLM|KMTU|SKLU)/.test(mbl) ? mbl.slice(4) : mbl;
+let logos;
+function logo(kind) {
+  if (!logos) {
+    const read = (f) => { try { return `data:image/png;base64,${fs.readFileSync(path.join(config.root, 'public', 'img', f)).toString('base64')}`; } catch { return ''; } };
+    logos = { full: read('logo-full.png'), mark: read('logo-mark.png') };
+  }
+  return logos[kind];
 }
-const FILE_PREFIX = { AN: 'ARRIVAL_NOTICE___FREIGHT_INVOICE_', DO: 'Delivery_Order_', ATME: 'AUTH_HBL_' };
+
+const DOC_TITLES = {
+  AN: 'Arrival Notice / Freight Invoice', DO: 'Delivery Order', ATME: 'Authority to Make Entry', AR: 'Invoice', DN: 'Debit Note',
+};
+
+const clean = (v) => String(v || '').replace(/[^A-Za-z0-9-]/g, '');
+/** House B/L (or HAWB digits) is the document reference, as on the current forms. */
+function docRef(s) {
+  if (s.mode === 'AIR') return clean(s.hbl_no && !s.direct_shipment ? s.hbl_no : s.mbl_no).replace(/-/g, '') || s.ref_no;
+  return clean(s.hbl_no) || clean(s.mbl_no) || s.ref_no;
+}
+const FILE_PREFIX = { AN: 'ARRIVAL_NOTICE___FREIGHT_INVOICE_', DO: 'Delivery_Order _', ATME: 'AUTH_HBL_' };
 function fileName(type, s, revision = 0) {
   return `${FILE_PREFIX[type]}${docRef(s)}${revision ? (revision === 1 ? '_Rev' : `_Rev${revision}`) : ''}`;
 }
+const shortName = (name) => String(name || '').replace(/\(.*?\)/g, '').replace(/,?\s*(INC|LLC|LTD|CO)\.?$/i, '').trim().split(/\s+/)[0].replace(/[^A-Za-z0-9가-힣]/g, '') || 'Customer';
+function invoiceFileName(inv) {
+  return inv.kind === 'DN' ? `DC_${clean(inv.number).replace(/-/g, '')}-${shortName(inv.company_name)}`
+    : `AR_${clean(inv.number).replace(/-/g, '')}_${shortName(inv.company_name)}`;
+}
 
-function page(title, s, body, { revision = 0 } = {}) {
-  const c = config.company;
-  return `<!doctype html><html><head><meta charset="utf-8"><title>${esc(title)} — ${esc(docRef(s))}</title>
-<style>
-  @page { size: letter; margin: 12mm; }
+const BASE_CSS = `
+  @page { size: letter; margin: 10mm; }
   * { box-sizing: border-box; }
-  body { font: 10.5px/1.4 Arial, Helvetica, sans-serif; color: #111; margin: 0; padding: 18px; }
-  .head { display: flex; justify-content: space-between; align-items: flex-start; border-bottom: 3px solid #0b3d91; padding-bottom: 8px; margin-bottom: 10px; }
-  .brand { font-size: 19px; font-weight: 700; color: #0b3d91; letter-spacing: .3px; }
-  .muted { color: #444; }
-  h1 { font-size: 16px; margin: 0; text-align: right; letter-spacing: .6px; }
-  .rev { color: #b91c1c; font-weight: 700; }
-  table { width: 100%; border-collapse: collapse; margin: 6px 0 10px; }
-  th, td { border: 1px solid #888; padding: 4px 6px; text-align: left; vertical-align: top; }
-  th { background: #eef2fa; font-size: 9px; text-transform: uppercase; letter-spacing: .3px; width: 18%; }
-  .grid th { width: auto; }
-  .num { text-align: right; }
-  .box { border: 1px solid #888; padding: 6px 8px; min-height: 54px; white-space: pre-line; }
-  .two { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 8px; }
-  .three { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 8px; margin-bottom: 8px; }
-  .label { font-size: 9px; font-weight: 700; text-transform: uppercase; color: #0b3d91; margin-bottom: 2px; letter-spacing: .3px; }
-  .hl { background: #fff7d6; }
-  .total td, .total th { font-weight: 700; font-size: 11.5px; background: #eef2fa; }
-  .sign { margin-top: 26px; display: grid; grid-template-columns: repeat(3, 1fr); gap: 18px; }
-  .sign div { border-top: 1px solid #111; padding-top: 3px; font-size: 9.5px; }
-  .note { font-size: 9.5px; color: #222; border-top: 1px dashed #888; padding-top: 6px; margin-top: 10px; }
-  .stamp { border: 2px solid #b91c1c; color: #b91c1c; display: inline-block; padding: 3px 8px; font-weight: 700; transform: rotate(-3deg); }
-</style></head><body>
-<div class="head">
-  <div><div class="brand">${esc(c.name)}</div>
-    <div class="muted">${esc(c.address)}<br>${c.phone ? `Tel ${esc(c.phone)} · ` : ''}${esc(c.email)}${c.dot ? ` · US DOT# ${esc(c.dot)}` : ''}</div></div>
-  <div><h1>${esc(title.toUpperCase())}</h1>
-    <div class="muted" style="text-align:right">Date: ${today()}<br>Our Ref: <b>${esc(s.ref_no)}</b>${revision ? `<br><span class="rev">REVISED${revision > 1 ? ` #${revision}` : ''}</span>` : ''}</div></div>
-</div>
-${body}
-</body></html>`;
+  body { font: 10px/1.3 Arial, Helvetica, sans-serif; color: #000; margin: 0; }
+  table { border-collapse: collapse; width: 100%; }
+  .b td, .b th { border: 1px solid #000; }
+  td, th { padding: 2px 4px; vertical-align: top; text-align: left; }
+  .lbl { font-size: 8.5px; font-style: italic; display: block; text-transform: uppercase; }
+  .val { font-size: 11px; font-weight: 700; display: block; min-height: 13px; }
+  .big { font-size: 13px; }
+  .r { text-align: right; } .c { text-align: center; }
+  .title { text-align: center; font-size: 19px; font-weight: 700; letter-spacing: .3px; margin: 10px 0 8px; }
+  .small { font-size: 8px; }
+  .nob td { border: none; }
+`;
+const doc = (title, css, body) => `<!doctype html><html><head><meta charset="utf-8"><title>${esc(title)}</title><style>${BASE_CSS}${css || ''}</style></head><body>${body}</body></html>`;
+const cell = (label, value, attrs = '') => `<td ${attrs}><span class="lbl">${esc(label)}</span><span class="val">${value || ''}</span></td>`;
+
+function remitBlock(co) {
+  return co.remit ? nl(co.remit) : '<span style="color:#b91c1c">Payment instructions not set — Admin › Company profile</span>';
 }
 
-const isAir = (s) => s.mode === 'AIR';
-const hblText = (s) => (s.direct_shipment || !s.hbl_no ? (isAir(s) ? 'DIRECT (no HAWB)' : 'DIRECT') : s.hbl_no);
-
-function refsTable(s) {
-  return `<table>
-  <tr><th>${isAir(s) ? 'MAWB No.' : 'MB/L No.'}</th><td class="hl"><b>${esc(s.mbl_no)}</b></td><th>${isAir(s) ? 'HAWB No.' : 'HB/L No.'}</th><td><b>${esc(hblText(s))}</b></td></tr>
-  <tr><th>${isAir(s) ? 'Airline' : 'Carrier'}</th><td>${esc(s.carrier)}</td><th>${isAir(s) ? 'Flight' : 'Vessel / Voyage'}</th><td>${esc(isAir(s) ? s.flight_no : [s.vessel, s.voyage].filter(Boolean).join(' / '))}</td></tr>
-  <tr><th>${isAir(s) ? 'Origin' : 'Port of Loading'}</th><td>${esc(s.pol)}</td><th>${isAir(s) ? 'Destination' : 'Port of Discharge'}</th><td>${esc(s.pod)}</td></tr>
-  <tr><th>ETD${s.atd ? ' / ATD' : ''}</th><td>${esc(s.etd)}${s.atd ? ` / ${esc(s.atd)}` : ''}</td><th>ETA${s.ata ? ' / ATA' : ''}</th><td class="hl"><b>${esc(s.eta)}${s.ata ? ` / ${esc(s.ata)}` : ''}</b></td></tr>
-  <tr><th>Freight Location</th><td class="hl">${esc(s.cfs_location)}</td><th>Firms Code</th><td class="hl"><b>${esc(s.firms_code)}</b></td></tr>
-  <tr><th>Last Free Day</th><td class="hl"><b>${esc(s.last_free_day)}</b></td><th>${isAir(s) ? 'Storage Begins' : 'Place of Delivery'}</th><td>${esc(isAir(s) ? s.storage_start : s.place_of_delivery)}</td></tr>
-  ${s.entry_no || s.isf_no ? `<tr><th>Entry No.</th><td>${esc(s.entry_no)}</td><th>ISF / AMS</th><td>${esc(s.isf_no)}</td></tr>` : ''}
-</table>`;
-}
-
-function cargoTable(s) {
-  const rows = s.containers.length
-    ? s.containers.map((c) => `<tr><td><b>${esc(c.container_no)}</b></td><td>${esc(c.seal_no)}</td><td>${esc(c.size_type)}</td>
-        <td class="num">${n(c.packages)}</td><td class="num">${n(c.weight_kg, 2)}</td><td class="num">${n(c.cbm, 3)}</td></tr>`).join('')
-    : `<tr><td colspan="3">${isAir(s) ? 'Loose — ' : 'LCL — '}${s.pallets ? `${n(s.pallets)} pallet(s)` : 'loose cargo'}</td><td class="num"></td><td class="num"></td><td class="num"></td></tr>`;
-  return `<table class="grid">
-  <tr><th>Container No.</th><th>Seal No.</th><th>Size/Type</th><th class="num">Pieces</th><th class="num">Gross Wt (KG)</th><th class="num">CBM</th></tr>
-  ${rows}
-  <tr class="total"><th colspan="3">Total${s.pallets ? ` — ${n(s.pallets)} pallet(s)` : ''}</th><td class="num">${n(s.packages)} ${esc(s.package_unit)}</td>
-    <td class="num">${n(s.weight_kg, 2)} KG<br><span style="font-weight:400">${lbs(s.weight_kg)} LBS</span></td>
-    <td class="num">${isAir(s) && s.chargeable_weight ? `C/W ${n(s.chargeable_weight, 1)} KG` : `${n(s.cbm, 3)} CBM`}</td></tr>
+// ---------------------------------------------------------------------------------------------------------------
+// ARRIVAL NOTICE / FREIGHT INVOICE
+function arrivalNotice(s, { company: co, preparedBy = '', revision = 0, invoice = null } = {}) {
+  const t = nowOffice();
+  const air = s.mode === 'AIR';
+  const ctnRows = s.containers.length ? s.containers : [{}];
+  const sizes = {};
+  for (const c of s.containers) if (c.size_type) sizes[c.size_type] = (sizes[c.size_type] || 0) + 1;
+  const sizeText = Object.entries(sizes).map(([k, v]) => `${k} X ${v}`).join('<br>');
+  const lines = invoice?.lines?.length ? invoice.lines : (s.charges || []).map((c) => ({ description: c.description, amount: c.amount }));
+  const total = invoice ? invoice.total : lines.reduce((a, l) => a + (Number(l.amount) || 0), 0);
+  const body = `
+<table class="nob"><tr>
+  <td style="width:26%">${logo('full') ? `<img src="${logo('full')}" style="height:52px">` : ''}</td>
+  <td class="c"><div style="font-size:20px;font-weight:700">${esc(co.name)}</div>
+    <div>${esc(co.address)}</div><div>Prepared by ${esc(preparedBy)} &nbsp; ${t.date} ${t.time}</div>
+    <div>TEL: ${esc(co.accounting_tel || co.tel)} FAX: ${esc(co.fax)} EMAIL: ${esc(co.accounting_email || co.email)}</div></td>
+  <td style="width:26%" class="r">${revision ? `<b style="color:#b91c1c">REVISED${revision > 1 ? ` #${revision}` : ''}</b>` : ''}</td>
+</tr></table>
+<div class="title">ARRIVAL NOTICE / FREIGHT INVOICE</div>
+<table class="b" style="table-layout:fixed">
+  <colgroup><col style="width:45%"><col style="width:13%"><col style="width:13%"><col style="width:16%"><col style="width:13%"></colgroup>
+  <tr><td rowspan="3"><span class="lbl">Shipper</span><span class="val">${up(s.shipper_name)}</span><b>${nl(String(s.shipper_address || '').toUpperCase())}</b></td>
+    ${cell(air ? 'MASTER AWB NO.' : 'MASTER B/L NO.', up(s.mbl_no), 'colspan="2" class="big"')}${cell(air ? 'HOUSE AWB NO.' : 'HOUSE B/L NO.', up(s.direct_shipment ? '' : s.hbl_no), 'colspan="2"')}</tr>
+  <tr>${cell('FILING NO.', esc(s.ref_no), 'colspan="2"')}${cell('CUSTOMER REFERENCE NO.', esc(s.customer_ref), 'colspan="2"')}</tr>
+  <tr>${cell(air ? 'AMS AWB NO.' : 'AMS B/L NO.', esc(s.ams_bl_no), 'colspan="2"')}${cell('ISF NO.', esc(s.isf_no), 'colspan="2"')}</tr>
+  <tr><td rowspan="3"><span class="lbl">Consignee</span><span class="val">${up(s.consignee_name || s.customer_name)}</span><b>${nl(String(s.consignee_address || '').toUpperCase())}</b></td>
+    ${cell(air ? 'FLIGHT INFO.' : 'VESSEL INFO.', up(air ? s.flight_no : [s.vessel, s.voyage].filter(Boolean).join(' ')), 'colspan="2"')}${cell('SUB B/L NO.', esc(s.sub_bl_no), 'colspan="2"')}</tr>
+  <tr>${cell(air ? 'AIRPORT OF DEPARTURE' : 'PORT OF LOADING', up(s.pol), 'colspan="3"')}${cell(s.atd ? 'ATD' : 'ETD', us(s.atd || s.etd))}</tr>
+  <tr>${cell(air ? 'AIRPORT OF DESTINATION' : 'PORT OF DISCHARGE', up(s.pod), 'colspan="3"')}${cell(s.ata ? 'ATA' : 'ETA', us(s.ata || s.eta))}</tr>
+  <tr><td rowspan="3"><span class="lbl">Notify Party</span><span class="val">${up(s.notify_party || 'SAME AS CONSIGNEE')}</span><b>${nl(String(s.notify_address || '').toUpperCase())}</b></td>
+    ${cell('PLACE OF DELIVERY', up(s.place_of_delivery), 'colspan="3"')}${cell('ETA', us(s.place_of_delivery ? s.eta : s.eta))}</tr>
+  <tr>${cell('FINAL DESTINATION', up(s.final_destination), 'colspan="3"')}${cell('ETA', us(s.eta))}</tr>
+  <tr>${cell('I.T. NO. & PLACE', esc([s.it_no, s.it_place].filter(Boolean).join(' / ')), 'colspan="3"')}${cell('I.T. DATE', us(s.it_date))}</tr>
+  <tr><td rowspan="3"><span class="lbl">Customs Broker</span><span class="val">${up(s.broker_name)}</span></td>
+    ${cell(air ? 'TERMINAL' : 'DEVAN LOCATION', up(s.devan_location), 'colspan="4"')}</tr>
+  <tr>${cell('FREIGHT LOCATION', `${up(s.cfs_location)}${s.freight_location_tel ? ` T : ${esc(s.freight_location_tel)}` : ''}`, 'colspan="4"')}</tr>
+  <tr>${cell('FIRMS CODE', up(s.firms_code))}${cell('AVAILABLE DATE', us(s.available_date))}${cell('LAST FREE DATE', us(s.last_free_day))}${cell('G.O. DATE', us(s.go_date), 'colspan="2"')}</tr>
 </table>
-<div class="label">Description of Goods</div>
-<div class="box" style="min-height:36px">${esc(s.commodity || s.items.map((i) => i.description).slice(0, 8).join('\n'))}</div>`;
-}
-
-function chargesTable(s) {
-  const lines = s.charges || [];
-  const total = lines.reduce((a, c) => a + (Number(c.amount) || 0), 0);
-  return `<table class="grid" style="margin-top:10px">
-  <tr><th style="width:70%">Charges</th><th class="num">Amount (USD)</th></tr>
-  ${lines.length ? lines.map((c) => `<tr><td>${esc(c.description)}</td><td class="num">${n(c.amount, 2)}</td></tr>`).join('')
-    : '<tr><td class="muted">Charges to follow</td><td></td></tr>'}
-  <tr class="total"><th>Total Due${s.invoice_no ? ` — Invoice ${esc(s.invoice_no)}` : ''}</th><td class="num">$ ${n(lines.length ? total : s.invoice_amount, 2)}</td></tr>
+<table style="margin-top:4px">
+  <tr style="border-bottom:1px solid #000" class="small"><td style="width:22%">CONTAINER NO./SEAL NO.<br>MARKS &amp; NUMBERS</td><td style="width:14%">NO.OF PACKAGES<br>NO. OF CONTAINERS</td>
+    <td>DESCRIPTION OF GOODS</td><td class="r" style="width:15%">WEIGHT</td><td class="r" style="width:13%">MEASUREMENT</td></tr>
+  ${ctnRows.map((c, i) => `<tr><td><b>${esc(c.container_no || '')}${c.seal_no ? `/${esc(c.seal_no)}` : ''}</b></td>
+    <td><b>${i === 0 ? `${n(s.packages, 0)} ${esc(s.package_unit || 'PACKAGE(S)')}` : ''}</b></td>
+    <td><b>${i === 0 ? `${up(s.commodity || s.items.map((it) => it.description).slice(0, 4).join(', '))}<br>${n(s.packages, 0)} ${esc(s.package_unit || 'PACKAGE(S)')}` : ''}</b></td>
+    <td class="r"><b>${i === 0 ? `${n(s.weight_kg)} KGS` : ''}</b></td><td class="r"><b>${i === 0 ? (air && s.chargeable_weight ? `C/W ${n(s.chargeable_weight)} KGS` : `${n(s.cbm, 3)} CBM`) : ''}</b></td></tr>`).join('')}
+  <tr><td></td><td><b>${sizeText}</b></td><td>${nl(String(s.marks || '').toUpperCase())}</td>
+    <td colspan="2" class="r"><b>${up(s.release_type || (s.telex_release ? 'EXPRESS RELEASE' : ''))}</b><br><br><b>${up(s.service_term)}</b></td></tr>
+</table>
+<div style="height:14px"></div>
+<table class="b"><tr><td style="width:7%"><b>REMARK</b></td><td style="height:34px">${nl(s.an_remark || '')}</td></tr></table>
+<table class="b" style="margin-top:4px;table-layout:fixed">
+  <tr><td rowspan="2" style="width:53%;font-size:8.5px">TO ALL CUSTOMERS:<br>
+    1. PLEASE MAKE THE CHECK PAYABLE TO "${esc(co.legal_name)}"<br>
+    2. WE WILL RELEASE THE FREIGHT UPON RECEIVING YOUR FULL PAYMENT AS SHOWN ABOVE AND YOUR PROPERLY ENDORSED ORIGINAL BILL OF LADING.<br>
+    3. ALL STORAGE CHARGE AND DEMURRAGE CHARGES ARE FOR THE ACCOUNT OF THE ULTIMATE CONSIGNEE TO WHOM THIS FREIGHT IS RELEASED.<br>
+    4. WE DO NOT ACCEPT FAXED COPIES OF ORIGINAL B/L OR FAXED COPIES OF CHECK FOR RELEASE.<br>
+    5. PLEASE ALLOW MINIMUM OF 24 HOURS IN ORDER TO RELEASE THE SHIPMENT AFTER RECEIVING YOUR CHECK AND ORIGINAL B/L.<br>
+    6. PLEASE CALL WAREHOUSE/TERMINAL FOR CARGO AVAILABILITY PRIOR TO PICK UP.<br>
+    - IF FREIGHT HAS BEEN DAMAGED, YOU MUST FILE CLAIMS WITHIN 7 DAYS FROM DELIVERED DATE WITH ORIGINAL DOCUMENTS. OTHERWISE, YOUR CLAIMS WILL NOT BE PROCESSED AND WILL BE DECLINED.<br><br>
+    ${remitBlock(co)}</td>
+    <td style="padding:0">
+      <table><tr><td style="font-size:11px"><b>Invoice No : ${esc(invoice?.number || '')}</b></td><td class="r" style="font-size:11px"><b>Due Date: ${invoice ? us(invoice.due_date) : ''}</b></td></tr></table>
+      <table class="b" style="border-left:none"><tr><td class="c small" style="width:72%">DESCRIPTION OF CHARGES</td><td class="c small">Amount</td></tr>
+      ${lines.map((l) => `<tr><td>${up(l.description)}</td><td class="r">${n(l.amount)}</td></tr>`).join('')}
+      ${Array(Math.max(0, 10 - lines.length)).fill('<tr><td>&nbsp;</td><td></td></tr>').join('')}
+      </table></td></tr>
+  <tr><td style="padding:0"><table class="b"><tr><td class="c" style="width:72%"><b>TOTAL DUE</b></td><td class="r"><b>${lines.length ? n(total) : ''}</b></td></tr>
+    <tr><td class="c"><b>PLEASE PAY THIS AMOUNT</b></td><td class="r"><b>${lines.length ? `USD ${n(total - (invoice?.paid_amount || 0))}` : ''}</b></td></tr></table></td></tr>
 </table>`;
+  return doc(`${DOC_TITLES.AN} ${s.hbl_no || s.mbl_no || ''}`, '', body);
 }
 
-function arrivalNotice(s, opts = {}) {
-  return page(DOC_TITLES.AN, s, `
-<div class="three">
-  <div><div class="label">Shipper</div><div class="box">${esc(s.shipper_name)}${s.shipper_address ? `\n${esc(s.shipper_address)}` : ''}</div></div>
-  <div><div class="label">Consignee</div><div class="box">${esc(s.consignee_name || s.customer_name)}</div></div>
-  <div><div class="label">Notify Party</div><div class="box">${esc(s.notify_party || s.customer_name)}</div></div>
-</div>
-${refsTable(s)}
-${cargoTable(s)}
-${chargesTable(s)}
-<div class="two">
-  <div><div class="label">Customs Broker</div><div class="box" style="min-height:30px">${esc(s.broker_name)}</div></div>
-  <div><div class="label">Payment</div><div class="box" style="min-height:30px">${esc(config.company.remit || `Please remit to ${config.company.name}. Quote our ref ${s.ref_no}.`)}</div></div>
-</div>
-<div class="note">Cargo is released upon receipt of all charges, customs clearance (1C) and ${isAir(s) ? 'airline release' : 'original / telex-released B/L'}.
-Storage, demurrage and any exam (CES) fees after the last free day are for the consignee's account. Please check the firms code and freight location before
-dispatching a driver. Questions: ${esc(config.company.email)} — ref ${esc(s.ref_no)}.</div>`, opts);
-}
-
-function deliveryOrder(s, opts = {}) {
+// ---------------------------------------------------------------------------------------------------------------
+// DELIVERY ORDER
+function deliveryOrder(s, { company: co, preparedBy = '', revision = 0 } = {}) {
+  const t = nowOffice();
+  const air = s.mode === 'AIR';
+  const pickup = s.mode === 'FCL' && s.devan_location ? s.devan_location : (s.cfs_location || s.devan_location || s.pod);
   const deliverTo = [s.delivery_company_name || s.customer_name, s.delivery_address].filter(Boolean).join('\n');
-  return page(DOC_TITLES.DO, s, `
-<div class="two">
-  <div><div class="label">To (Trucker)</div><div class="box">${esc(s.trucker_name)}</div></div>
-  <div><div class="label">Pick up at</div><div class="box hl"><b>${esc(s.cfs_location || s.pod)}</b>${s.firms_code ? `\nFirms code: ${esc(s.firms_code)}` : ''}${s.css_no ? `\nCES / CSS#: ${esc(s.css_no)}` : ''}</div></div>
-</div>
-<div class="two">
-  <div><div class="label">Deliver to</div><div class="box hl">${esc(deliverTo)}</div></div>
-  <div><div class="label">Appointment</div><div class="box"><b>${esc(s.delivery_date)} ${esc(s.delivery_time)}</b>${s.pickup_appt ? `\nPickup appt: ${esc(String(s.pickup_appt).replace('T', ' '))}` : ''}${s.last_free_day ? `\nLFD: ${esc(s.last_free_day)}` : ''}</div></div>
-</div>
-<p>Please release the following cargo to the bearer of this Delivery Order. Customs status: <b>${esc(s.customs_status === 'RELEASED' ? 'RELEASED (1C)' : s.customs_status)}</b>${s.entry_no ? ` · Entry ${esc(s.entry_no)}` : ''}.</p>
-${refsTable(s)}
-${cargoTable(s)}
-<div class="note"><b>Driver instructions:</b> present this D/O${isAir(s) ? ' and the ATME' : ''} at pickup; safety vest required at the CES / terminal.
-Count pieces before release and note any shortage or damage below. Have the consignee sign on delivery and return the signed D/O (POD) to ${esc(config.company.email)}.</div>
-<div class="sign"><div>Driver name / truck #</div><div>Pieces received / date & time</div><div>Consignee signature (POD)</div></div>`, opts);
+  const body = `
+<table style="table-layout:fixed"><tr>
+  <td style="width:58%;border:1px solid #000;padding:6px"><div style="font-size:19px;font-weight:700">${esc(co.name)}</div>
+    <div>${esc(co.address)}</div><div>TEL: ${esc(co.tel)} FAX: ${esc(co.fax)} EMAIL: ${esc(co.email)}</div></td>
+  <td style="padding-left:14px"><table class="b"><tr>${cell('DATE', `<span class="c" style="display:block">${t.date}</span>`)}${cell('OUR FILING NO.', `<span class="c" style="display:block">${esc(s.ref_no)}</span>`)}</tr></table>
+    <div style="margin-top:8px;font-size:9.5px">THE MERCHANDISE DESCRIBED BELOW<br>WILL BE ENTERED AND/OR FORWARDED AS FOLLOWS:</div>
+    ${revision ? `<div style="color:#b91c1c;font-weight:700">REVISED${revision > 1 ? ` #${revision}` : ''}</div>` : ''}</td>
+</tr></table>
+<div class="title">DELIVERY ORDER</div>
+<table class="b" style="table-layout:fixed">
+  <colgroup><col style="width:49%"><col style="width:21%"><col style="width:12%"><col style="width:18%"></colgroup>
+  <tr><td rowspan="3"><span class="lbl">Pickup</span><span class="val">${nl(String(pickup || '').toUpperCase())}</span>${s.firms_code ? `<b>FIRMS CODE: ${up(s.firms_code)}</b>` : ''}${s.css_no ? `<br><b>CES / CSS#: ${esc(s.css_no)}</b>` : ''}</td>
+    ${cell('TRUCKER', `${up(s.trucker_name)}${s.service_term ? ` (${up(s.service_term.replace('CFS/CFS', 'CFS / CFS').replace('CY/CY', 'CY / CY'))})` : ''}`, 'colspan="3"')}</tr>
+  <tr>${cell(air ? 'MAWB No.' : 'MB/L No.', up(s.mbl_no))}${cell(air ? 'HAWB No.' : 'HB/L No.', up(s.direct_shipment ? '' : s.hbl_no), 'colspan="2"')}</tr>
+  <tr>${cell(air ? 'AMS AWB No.' : 'AMS B/L No.', esc(s.ams_bl_no))}${cell('CUSTOMER REFERENCE No.', esc(s.customer_ref), 'colspan="2"')}</tr>
+  <tr><td rowspan="3"><span class="lbl">Delivery ( Appointment is required prior delivery )</span><span class="val">${nl(deliverTo.toUpperCase())}</span>
+      ${s.delivery_date ? `<b>APPT: ${us(s.delivery_date)} ${esc(s.delivery_time || '')}</b>` : ''}</td>
+    ${cell('I.T. No. & PLACE', esc([s.it_no, s.it_place].filter(Boolean).join(' / ')))}${cell('DATE OF', us(s.ata || s.eta))}${cell('LAST FREE DATE', us(s.last_free_day))}</tr>
+  <tr>${cell(air ? 'AIRLINE / FLIGHT' : 'CARRIER', up(air ? [s.carrier, s.flight_no].filter(Boolean).join(' / ') : [s.vessel, s.voyage].filter(Boolean).join(' / ')), 'colspan="3"')}</tr>
+  <tr>${cell(air ? 'ORIGIN AIRPORT' : 'ORIGIN PORT', up(s.pol), 'colspan="3"')}</tr>
+  <tr><td style="height:130px"><span class="lbl">Route</span>${nl(s.route_note || '')}</td>
+    <td colspan="3" style="padding:0"><span class="lbl" style="padding:2px 4px">Container Information</span>
+      <table class="small" style="font-size:8.5px"><tr style="border-bottom:1px solid #000"><td><i>CONTAINER No.</i></td><td><i>TYPE</i></td><td><i>SEAL No.</i></td><td><i>WEIGHT</i></td><td><i>PICKUP No.</i></td><td><i>LFD</i></td></tr>
+      ${s.containers.map((c) => `<tr><td>${esc(c.container_no)}</td><td>${esc(c.size_type || '')}</td><td>${esc(c.seal_no || '')}</td><td>${c.weight_kg ? `${n(c.weight_kg)} K` : ''}</td><td>${esc(c.pickup_no || '')}</td><td>${us(c.pickup_lfd)}</td></tr>`).join('')}
+      ${!s.containers.length && s.pallets ? `<tr><td colspan="6">${n(s.pallets, 0)} PALLET(S)</td></tr>` : ''}</table></td></tr>
+</table>
+<table class="b" style="margin-top:6px">
+  <tr style="background:#ccc"><th class="c" style="width:21%">MARK</th><th class="c">DESCRIPTION</th><th class="c" style="width:12%">PKGS</th><th class="c" style="width:14%">WEIGHT</th><th class="c" style="width:14%">MEASURMENT</th></tr>
+  <tr style="height:130px"><td>${nl(String(s.marks || '').toUpperCase())}</td><td>${up(s.commodity || s.items.map((i) => i.description).join(', '))}</td>
+    <td class="r">${n(s.packages, 0)}<br>${esc(s.package_unit || 'PACKAGE(S)')}</td><td class="r">${n(s.weight_kg)} KGS</td><td class="r">${air && s.chargeable_weight ? `C/W ${n(s.chargeable_weight)} KGS` : `${n(s.cbm, 3)} CBM`}</td></tr>
+</table>
+<table style="margin-top:6px;table-layout:fixed"><tr>
+  <td style="width:50%"><b>ORIGINAL DELIVERY ORDER</b><br><b>INLAND FREIGHT :</b> &nbsp; PREPAID
+    <table class="b" style="margin-top:4px"><tr><td><b>${esc(co.name)}</b></td></tr><tr><td>PREPARED BY &nbsp;&nbsp; ${esc(preparedBy)} &nbsp; ${t.date} ${t.time}</td></tr></table></td>
+  <td style="padding-left:30px;font-size:10px">NOTICE: BAD ORDER PACKAGES MUST BE SIGNED FOR<br>AS IN CONDITION RECEIVED.<br>ALL PIER CHARGES FOR ACCOUNT OF RECEIVER UNLESS<br>OTHERWISE SPECIFIED.</td></tr></table>
+<table style="margin-top:4px;table-layout:fixed"><tr>
+  <td style="border:1px solid #000;padding:6px">CARRIER SIGNATURE / DATE<br><br>CARRIER : ______________________ Date : ________________</td><td style="width:20px"></td>
+  <td style="border:1px solid #000;padding:6px">RECEIVED IN GOOD ORDER / DATE<br><br>BY : ______________________ Date : ________________</td></tr></table>
+<table class="b" style="margin-top:6px"><tr><td style="width:7%;vertical-align:middle">REMARK</td><td style="height:110px">BAD ORDER PACKAGES MUST BE SIGNED FOR AS IN CONDITION RECEIVED. PROPERLY DOCUMENTED AND SIGNED POD REQUIRED. PLEASE EMAIL THE PROOF OF DELIVERY TO ${up(co.email)} REMARK: IF THE RECEIVING PARTY HAS PROBLEMS RECEIVING THE GOODS, PLEASE NOTIFY ${up(co.legal_name)} IMMEDIATELY. OTHERWISE, THE TRANSPORTATION COMPANY IS LIABLE FOR ANY ACCRUED CHARGES DUE.
+  ${s.do_remark ? `<br><br>${nl(s.do_remark)}` : ''}</td></tr></table>`;
+  return doc(`${DOC_TITLES.DO} ${s.hbl_no || s.mbl_no || ''}`, '', body);
 }
 
-function authorityToMakeEntry(s, opts = {}) {
-  return page(DOC_TITLES.ATME, s, `
-<div class="two">
-  <div><div class="label">To</div><div class="box">${esc(s.broker_name || 'Customs Broker')}${s.trucker_name ? `\n& ${esc(s.trucker_name)} (pickup)` : ''}</div></div>
-  <div><div class="label">Importer / Consignee</div><div class="box">${esc(s.consignee_name || s.customer_name)}</div></div>
-</div>
-<p>${esc(config.company.name)}, as ${isAir(s) ? 'consignee / agent on the air waybill' : 'party named on the bill of lading'}, hereby authorizes
-<b>${esc(s.broker_name || 'the customs broker named above')}</b> to make customs entry, and the carrier / terminal to release the shipment below
-to the importer of record <b>${esc(s.consignee_name || s.customer_name)}</b> or its designated trucker.</p>
-${refsTable(s)}
-${cargoTable(s)}
-<div class="sign"><div>${esc(config.company.name)} — authorized signature</div><div>Name / title</div><div>Date</div></div>`, opts);
+// ---------------------------------------------------------------------------------------------------------------
+// AUTHORITY TO MAKE ENTRY — issued on the consignee's letterhead, signed by the consignee as attorney-in-fact
+function authorityToMakeEntry(s, { preparedBy = '' } = {}) {
+  const t = nowOffice();
+  const air = s.mode === 'AIR';
+  const cons = s.consignee_name || s.customer_name || '';
+  const lb = (kg) => (kg == null ? '' : `${n(Number(kg) * 2.20462, 3)} LBS`);
+  const row = (a, b, c, d, e = '') => `<tr><td style="width:15%">${a}</td><td style="width:2%">:</td><td style="width:22%"><b>${b}</b></td><td style="width:15%">${c}</td><td style="width:2%">:</td><td><b>${d}</b></td><td class="r" style="width:22%">${e}</td></tr>`;
+  const hr = '<div style="border-top:3px double #000;margin:6px 0"></div>';
+  const body = `
+<div class="c" style="font-size:14px">${up(cons)}</div><div class="c">${nl(String(s.consignee_address || '').toUpperCase())}</div>
+<div class="title" style="font-size:20px;margin-top:16px">AUTHORITY TO MAKE ENTRY</div>${hr}
+<table><tr><td style="width:33%">SHIPPER :<br><b>${up(s.shipper_name)}<br>${nl(String(s.shipper_address || '').toUpperCase())}</b></td>
+  <td style="width:34%">CONSIGNEE :<br><b>${up(cons)}<br>${nl(String(s.consignee_address || '').toUpperCase())}</b></td>
+  <td>NOTIFY PARTY :<br><b>${up(s.notify_party || 'SAME AS CONSIGNEE')}</b></td></tr></table>${hr}
+<table><tr><td>Merchandise Imported at</td><td><b>${up(s.pod)}</b></td><td>on</td><td><b>${us(s.ata || s.eta)}</b></td><td>Via</td><td><b>${up(s.carrier || s.vessel)}</b></td></tr></table>${hr}
+<table>
+  ${row('FILING NO.', esc(s.ref_no), 'DATE', t.date)}
+  ${row(air ? 'MAWB NO.' : 'MB/L NO.', up(s.mbl_no), 'PREP. BY', esc(preparedBy))}
+  ${row(air ? 'SUB-AWB NO.' : 'SUB B/L NO.', esc(s.sub_bl_no), air ? 'DEP. AIRPORT' : 'PORT OF LOADING', up(s.pol), `${s.atd ? 'ATD' : 'ETD'} : <b>${us(s.atd || s.etd)}</b>`)}
+  ${row(air ? 'HAWB NO.' : 'HB/L NO.', up(s.direct_shipment ? docRef(s) : s.hbl_no), 'ENTRY PORT', up(s.it_place), `ETA : <b>${us(s.eta)}</b>`)}
+  ${row('MANIFEST NO.', esc(s.ams_bl_no), air ? 'DEST. AIRPORT' : 'PORT OF DISCHARGE', up(s.pod), `ETA : <b>${us(s.ata || s.eta)}</b>`)}
+  ${row(air ? 'FLIGHT NO.' : 'VESSEL / VOY.', up(air ? s.flight_no : [s.vessel, s.voyage].filter(Boolean).join(' ')), 'FINAL DEST.', up(s.final_destination || s.pod), `ETA : <b>${us(s.eta)}</b>`)}
+  <tr><td colspan="3"></td><td colspan="4">EFFECTIVE STORAGE DATE : <b>${us(s.storage_start)}</b></td></tr>
+</table>${hr}
+<table>
+  <tr><td style="width:15%">FREIGHT LOC.</td><td style="width:2%">:</td><td style="width:40%"><b>${up(s.cfs_location)}</b></td><td style="width:15%">I.T.NO.</td><td>: <b>${esc(s.it_no)}</b></td></tr>
+  <tr><td></td><td></td><td>Tel: ${esc(s.freight_location_tel)} &nbsp;&nbsp;&nbsp;&nbsp; Fax:</td><td>I.T.ISSUE PLACE</td><td>: <b>${up(s.it_place)}</b></td></tr>
+  <tr><td>FIRM CODE</td><td>:</td><td><b>${up(s.firms_code)}</b></td><td>I.T.DATE</td><td>: <b>${us(s.it_date)}</b></td></tr>
+</table>
+<table style="border-top:2px solid #000;border-bottom:1px solid #000;margin-top:4px"><tr><th style="width:22%">MARKS</th><th style="width:20%">PACKAGE</th><th>DESCRIPTION</th><th class="r" style="width:16%">Gros. WEIGHT</th><th class="r" style="width:16%">Vol. WEIGHT</th></tr></table>
+<table style="height:90px"><tr><td style="width:22%">${nl(String(s.marks || '').toUpperCase())}</td><td style="width:20%"><b>${n(s.packages, 0)} ${up(s.package_unit === 'CTNS' ? 'CARTON(S)' : s.package_unit || 'PACKAGE(S)')}</b></td>
+  <td><b>${up(s.commodity || s.items.map((i) => i.description).join(', '))}</b></td>
+  <td class="r" style="width:16%"><b>${n(s.weight_kg, 3)} KGS<br>${lb(s.weight_kg)}</b></td>
+  <td class="r" style="width:16%"><b>${n(s.chargeable_weight || s.weight_kg, 3)} KGS<br>${lb(s.chargeable_weight || s.weight_kg)}</b></td></tr></table>
+<div style="border-top:3px double #000;margin-top:10px"></div><div class="c"><b>REMARK</b></div><div style="border-top:1px solid #000;height:56px"></div>
+<div style="border-top:3px double #000;margin-top:4px;padding-top:10px;font-style:italic;line-height:2.1">
+  <b>WE,</b> &nbsp;&nbsp;&nbsp;<span style="font-style:normal;border-bottom:1px solid #000;display:inline-block;min-width:60%">${up(cons)}</span> ,<br>
+  THE CONSIGNEE FOR ABOVE MENTIONED BILL OF LADING COVERING<br>MERCHANDISE FOR VARIOUS ULTIMATE CONSIGNEE, HEREBY AUTHORIZES<br>
+  <span style="font-style:normal;border-bottom:1px solid #000;display:inline-block;min-width:44%">${up(s.broker_name)}</span> TO MAKE CUSTOMS<br>
+  ENTRY FOR THE ABOVE DESCRIBED MERCHANDISE.</div>
+<div style="margin:6px 0 0 60px;width:50%;text-align:center"><div style="border-bottom:1px solid #000;padding:14px 0 2px">${up(cons)}</div>
+  <div style="border-bottom:1px solid #000;height:26px"></div><div style="padding-top:4px">Attorney - In - Fact</div></div>
+<table style="border:1px solid #000;margin-top:10px"><tr><td style="height:34px;width:50%">DOCUMENT PICKED BY :</td><td style="width:25%">DATE :</td><td>TIME :</td></tr></table>`;
+  return doc(`${DOC_TITLES.ATME} ${docRef(s)}`, '', body);
+}
+
+// ---------------------------------------------------------------------------------------------------------------
+// AR INVOICE and DEBIT NOTE share the header / reference block
+function invoiceHeader(co, title, numLabel, number) {
+  return `<table class="nob"><tr>
+  <td style="width:62%"><table class="nob"><tr><td style="width:60px">${logo('mark') ? `<img src="${logo('mark')}" style="height:52px">` : ''}</td>
+    <td><div style="font-size:17px;font-weight:700">${esc(co.name)}</div><div style="font-size:10.5px">${esc(co.address)}<br>TEL: ${esc(co.tel)} FAX: ${esc(co.fax)}<br>EMAIL: ${esc(co.email)}</div></td></tr></table></td>
+  <td class="r"><div style="font-size:26px;font-weight:700">${title}</div><div style="font-size:14px;font-weight:700;margin-top:14px">${numLabel} : ${esc(number)}</div></td></tr></table>`;
+}
+function refBlock(s, inv, leftExtra = '') {
+  const air = s?.mode === 'AIR';
+  const kv = (k, v) => `<tr><td style="width:36%">${k}</td><td style="width:4%">:</td><td>${v || ''}</td></tr>`;
+  const ctn = s ? (s.containers.length ? s.containers.map((c) => c.container_no).join(', ') : '') : '';
+  return `<table style="margin-top:6px;table-layout:fixed"><tr><td style="padding:0"><table>
+    ${leftExtra}
+    ${kv(air ? 'MASTER AWB NO.' : 'MASTER B/L NO.', up(s?.mbl_no))}${kv(air ? 'HOUSE AWB NO.' : 'HOUSE B/L NO.', up(s?.hbl_no))}
+    ${kv('Vessel(Flight) NO.', up(air ? s?.flight_no : [s?.vessel, s?.voyage].filter(Boolean).join(' ')))}
+    ${kv('POL / ETD', s ? `${up(s.pol)}${s.etd ? ` / ${us(s.etd)}` : ''}` : '')}${kv('POD / ETA', s ? `${up(s.pod)}${s.eta ? ` / ${us(s.eta)}` : ''}` : '')}
+    ${kv('F.DEST. / ETA', s?.final_destination ? `${up(s.final_destination)} / ${us(s.eta)}` : '')}${kv('COMMODITY', up(s?.commodity))}</table></td>
+  <td style="padding:0"><table>
+    ${kv('NO. OF PKGS', s?.packages ? `${n(s.packages, 0)} ${esc(s.package_unit || '')}` : '')}
+    ${kv('KGS / LBS', s?.weight_kg ? `${n(s.weight_kg)} / ${n(s.weight_kg * 2.20462)}` : '')}
+    ${kv('CBM / CFT', s?.cbm ? `${n(s.cbm, 3)} / ${n(s.cbm * 35.3147)}` : '')}
+    ${kv('CNTR. NO.', esc(ctn || inv.cntr_text || ''))}${kv('SHIPPER', up(s?.shipper_name))}${kv('CONSIGNEE', up(s?.consignee_name))}${kv('NOTIFY', up(s?.notify_party))}</table></td></tr></table>`;
+}
+
+function arInvoice(inv, { company: co, shipment: s = null, preparedBy = '' } = {}) {
+  const box = (k, v) => `<tr><td style="width:48%;font-weight:700;font-size:11px">${k}</td><td style="font-size:11px">${v || ''}</td></tr>`;
+  const lines = inv.lines || [];
+  const body = `${invoiceHeader(co, 'INVOICE', 'INVOICE No.', inv.number)}
+<table style="margin-top:10px;table-layout:fixed;border-bottom:1px solid #000"><tr>
+  <td style="width:57%"><table class="nob"><tr><td style="width:18%">Bill To :</td><td>${nl(String(inv.bill_to || '').toUpperCase())}</td></tr>
+    <tr><td style="padding-top:18px">Attn To :</td><td style="padding-top:18px">${up(inv.attn)}</td></tr>
+    <tr><td>Ship To :</td><td>${up(inv.ship_to || (inv.bill_to || '').split('\n')[0])}</td></tr></table></td>
+  <td><table class="b">${box('INVOICE DATE', mon(inv.invoice_date))}${box('TERMS', `${inv.terms_days} days`)}${box('DUE DATE', mon(inv.due_date))}
+    ${box('OUR FILING NO.', esc(s?.ref_no || inv.filing_no || ''))}${box('Customer Ref. No.', esc(inv.customer_ref || s?.customer_ref || ''))}</table></td></tr></table>
+${refBlock(s, inv)}
+<table style="margin-top:10px"><tr style="border-top:1px solid #000;border-bottom:1px solid #000"><th>DESCRIPTION OF CHARGES</th><th class="r" style="width:10%">UNIT</th><th class="r" style="width:14%">RATE</th><th class="r" style="width:9%">QTY</th><th class="r" style="width:14%">AMOUNT</th></tr>
+  ${lines.map((l) => `<tr><td>${up(l.description)}</td><td class="r">${esc(l.unit || '')}</td><td class="r">${l.rate != null ? n(l.rate, 3) : ''}</td><td class="r">${l.qty != null ? n(l.qty, 0) : ''}</td><td class="r">${n(l.amount)}</td></tr>`).join('')}
+</table>
+<div style="min-height:${Math.max(40, 300 - lines.length * 18)}px"></div>
+<table style="border-top:1px solid #000"><tr><td style="width:58%"></td><td class="r"><b>TOTAL DUE</b></td><td style="width:10%"></td><td class="r" style="width:16%"><b>${n(inv.total)}</b></td></tr>
+  <tr><td></td><td class="r"><b>PAID AMOUNT</b></td><td></td><td class="r"><b>${n(inv.paid_amount || 0)}</b></td></tr>
+  <tr><td></td><td class="r"><b>PLEASE PAY THIS AMOUNT</b></td><td class="c"><b>${esc(inv.currency || 'USD')}</b></td><td class="r"><b>${n(inv.total - (inv.paid_amount || 0))}</b></td></tr></table>
+<table class="b" style="margin-top:10px"><tr><td class="c" style="width:9%;vertical-align:middle"><b>MEMO</b></td><td style="height:48px;font-size:11px">${nl(inv.memo || '')}</td></tr>
+  <tr><td class="c" style="vertical-align:middle"><b>REMARK</b></td><td class="small">${remitBlock(co)}</td></tr></table>
+<table style="margin-top:6px"><tr><td style="width:45%;border-bottom:1px solid #000"></td><td></td><td class="c" style="width:40%;border-bottom:1px solid #000">${esc(preparedBy)}</td></tr>
+  <tr><td class="c"><b>${esc(co.name)}</b></td><td></td><td class="c"><b>PREPARED BY</b></td></tr></table>`;
+  return doc(`${DOC_TITLES.AR} ${inv.number}`, '', body);
+}
+
+function debitNote(inv, { company: co, shipment: s = null } = {}) {
+  const lines = inv.lines || [];
+  const debit = lines.filter((l) => l.side !== 'CREDIT').reduce((a, l) => a + (Number(l.amount) || 0), 0);
+  const credit = lines.filter((l) => l.side === 'CREDIT').reduce((a, l) => a + (Number(l.amount) || 0), 0);
+  const balance = Math.round((debit - credit) * 100) / 100;
+  const isCredit = balance < 0;
+  const box = (k, v, cls = '') => `<tr><td style="width:40%;font-weight:700;font-size:11px">${k}</td><td class="${cls}" style="font-size:11px">${v || ''}</td></tr>`;
+  const agentName = (inv.bill_to || '').split('\n')[0];
+  const body = `${invoiceHeader(co, isCredit ? 'CREDIT NOTE' : 'DEBIT NOTE', 'D/C No.', inv.number)}
+<table style="margin-top:12px;table-layout:fixed"><tr>
+  <td style="width:57%"><table class="nob"><tr><td style="width:16%">AGENT :</td><td style="font-size:11px">${nl(String(inv.bill_to || '').toUpperCase())}</td></tr></table></td>
+  <td><table class="b">${box('D/C DATE', mon(inv.invoice_date))}${box('TERMS', `${inv.terms_days} days`)}${box('DUE DATE', mon(inv.due_date))}
+    ${box('PROFIT SHARE', `${n(inv.profit_share || 0, 0)} %`)}${box('CURRENCY', esc(inv.currency || 'USD'))}${box('TOTAL AMOUNT', n(Math.abs(balance)), 'r')}</table></td></tr></table>
+${refBlock(s, inv, `<tr><td style="width:36%">OUR FILING NO.</td><td style="width:4%">:</td><td>${esc(s?.ref_no || inv.filing_no || '')}</td></tr>
+  <tr><td>AGENT FILING NO.</td><td>:</td><td>${esc(inv.agent_ref || s?.agent_ref || '')}</td></tr>`)}
+<table class="b" style="margin-top:10px"><tr><th class="c" style="width:5%">M/H</th><th class="c" style="width:13%">BL NO</th><th class="c">DESCRIPTION</th><th class="c" style="width:7%">UNIT</th>
+  <th class="c" style="width:8%">RATE</th><th class="c" style="width:5%">QTY</th><th class="c" style="width:9%">REV/COST</th><th class="c" style="width:4%">P/C</th><th class="c" style="width:10%">DEBIT(+)</th><th class="c" style="width:10%">CREDIT(-)</th></tr>
+  ${lines.map((l) => `<tr><td class="c">${esc(l.mh || 'M')}</td><td>${esc(l.bl_no || '')}</td><td>${up(l.description)}</td><td>${esc(l.unit || '')}</td>
+    <td class="r">${l.rate != null ? n(l.rate, 3) : ''}</td><td class="r">${l.qty != null ? n(l.qty, 0) : ''}</td><td class="r">${n(l.amount)}</td><td class="c">${esc(l.pc || 'C')}</td>
+    <td class="r">${l.side === 'CREDIT' ? '' : n(l.amount)}</td><td class="r">${l.side === 'CREDIT' ? n(l.amount) : ''}</td></tr>`).join('')}
+</table>
+<div style="min-height:${Math.max(40, 330 - lines.length * 18)}px"></div>
+<table style="border-top:1px solid #000"><tr><td style="width:60%" class="r"><b>TOTAL</b></td><td></td><td class="r" style="width:13%"><b>${n(debit)}</b></td><td class="r" style="width:13%"><b>${n(credit)}</b></td></tr></table>
+<table style="border-top:1px solid #000;border-bottom:3px double #000"><tr><td style="font-size:12px"><b>GRAND TOTAL BALANCE DUE TO &nbsp;${isCredit ? up(agentName) : esc(co.name)}</b></td>
+  <td class="c" style="width:12%"><b>${esc(inv.currency || 'USD')}</b></td><td class="r" style="width:16%;font-size:12px"><b>${n(Math.abs(balance))}</b></td></tr></table>
+<table class="b" style="margin-top:14px"><tr><td class="c" style="width:12%;vertical-align:middle"><b>REMARK</b></td><td class="small" style="height:60px">${remitBlock(co)}</td></tr>
+  <tr><td class="c" style="vertical-align:middle"><b>MEMO</b></td><td style="height:60px;font-size:11px">${nl(inv.memo || '')}</td></tr></table>`;
+  return doc(`${isCredit ? 'Credit' : 'Debit'} Note ${inv.number}`, '', body);
 }
 
 const GENERATORS = { AN: arrivalNotice, DO: deliveryOrder, ATME: authorityToMakeEntry };
+const INVOICE_GENERATORS = { AR: arInvoice, DN: debitNote };
 
-module.exports = { GENERATORS, DOC_TITLES, FILE_PREFIX, esc, docRef, fileName, arrivalNotice, deliveryOrder, authorityToMakeEntry };
+module.exports = {
+  GENERATORS, INVOICE_GENERATORS, DOC_TITLES, FILE_PREFIX, esc, docRef, fileName, invoiceFileName,
+  arrivalNotice, deliveryOrder, authorityToMakeEntry, arInvoice, debitNote,
+};
