@@ -8,6 +8,7 @@ process.env.UPLOAD_DIR = fs.mkdtempSync(path.join(os.tmpdir(), 'gbl-ol-'));
 Object.assign(process.env, { MS_TENANT_ID: 'tenant', MS_CLIENT_ID: 'client', MS_CLIENT_SECRET: 'secret', MS_MAILBOX: 'info@gblogix.com' });
 
 const store = require('../src/db');
+test.after(() => require('../src/docs/pdf').close());
 store.db = store.open(':memory:');
 const graph = require('../src/graph');
 const mailin = require('../src/mailin');

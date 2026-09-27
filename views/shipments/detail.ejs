@@ -54,12 +54,13 @@
       <button class="btn" data-confirm="Send D/O to <%= s.trucker_name || 'trucker' %>?" <%= s.trucker_id ? '' : 'disabled title="Assign a trucker first"' %>>✉ Send D/O → trucker</button></form>
     <form method="post" action="/shipments/<%= s.id %>/actions/send-update"><input type="hidden" name="_csrf" value="<%= csrf %>">
       <button class="btn" data-confirm="Email a status update to <%= s.customer_name || 'customer' %>?" <%= s.customer_id ? '' : 'disabled title="Assign a customer first"' %>>✉ Status update → customer</button></form>
-    <% ['AN', 'DO', 'ATME'].forEach((t) => { %>
-      <form method="post" action="/shipments/<%= s.id %>/generate/<%= t %>" target="_blank"><input type="hidden" name="_csrf" value="<%= csrf %>">
-        <button class="btn secondary">Preview <%= { AN: 'A/N', DO: 'D/O', ATME: 'ATME' }[t] %></button></form>
+    <% ['AN', 'DO', 'ATME'].forEach((t) => { const label = { AN: 'A/N', DO: 'D/O', ATME: 'ATME' }[t]; %>
+      <a class="btn secondary" href="/shipments/<%= s.id %>/preview/<%= t %>" target="_blank">Preview <%= label %></a>
+      <form method="post" action="/shipments/<%= s.id %>/issue/<%= t %>"><input type="hidden" name="_csrf" value="<%= csrf %>">
+        <button class="btn secondary" title="Save the document (PDF) without emailing">Issue <%= label %></button></form>
     <% }) %>
   </div>
-  <p class="muted small" style="margin:8px 0 0">Email subject format: <span class="mono">[A/N] MBL# … / HBL# … / CTN# … / ETA …</span>. Automatic sending rules are in Automation settings.</p>
+  <p class="muted small" style="margin:8px 0 0">Subject: <span class="mono">[A/N] MBL // HBL // Container // 40HC x 1 // ETA m/d // LFD m/d</span>. Re-issued documents are marked _Rev. Automatic sending rules are in Automation settings.</p>
 </div>
 
 <div class="grid" style="grid-template-columns: minmax(0, 2fr) minmax(300px, 1fr); align-items: start">

@@ -13,6 +13,7 @@ process.env.DATALASTIC_API_KEY = 'dlkey';
 process.env.DCSA_CARRIERS = JSON.stringify({ HLCU: { baseUrl: 'https://api.hlag.test/hlag/external', headers: { 'X-IBM-Client-Id': 'id' } } });
 
 const store = require('../src/db');
+test.after(() => require('../src/docs/pdf').close());
 store.db = store.open(':memory:');
 const S = require('../src/shipments');
 const tracking = require('../src/tracking');

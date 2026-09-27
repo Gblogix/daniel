@@ -9,6 +9,7 @@ process.env.UPLOAD_DIR = tmp;
 delete process.env.SMTP_HOST;
 
 const store = require('../src/db');
+test.after(() => require('../src/docs/pdf').close());
 store.db = store.open(':memory:');
 const S = require('../src/shipments');
 const notify = require('../src/notify');
@@ -49,10 +50,11 @@ test('documents applied -> broker packet with A/N + customer update, subject for
   const emails = store.db.all('SELECT * FROM emails WHERE shipment_id = ? ORDER BY id', s.id);
   assert.deepEqual(emails.map((e) => e.kind), ['BROKER_PACKET', 'CUSTOMER_UPDATE']);
   assert.equal(emails[0].to_addr, 'entry@ohmycustoms.example');
-  assert.equal(emails[0].subject, '[A/N] MBL# HDMUPUSA1234567 / HBL# KMHB2409001 / CTN# TCLU1234567 / ETA ' + s.eta);
+  const md = (d) => `${Number(d.slice(5, 7))}/${Number(d.slice(8, 10))}`;
+  assert.equal(emails[0].subject, `[A/N] HDMUPUSA1234567 // HBL KMHB2409001 // TCLU1234567 // 40HC x 1 // ETA ${md(s.eta)}`);
   assert.equal(emails[0].status, 'LOGGED');
   const att = JSON.parse(emails[0].attachments_json);
-  assert.ok(att.some((a) => a.filename.includes('Arrival Notice')));
+  assert.ok(att.some((a) => /^ARRIVAL_NOTICE___FREIGHT_INVOICE_PUSA1234567\.(pdf|html)$/.test(a.filename)), JSON.stringify(att));
   assert.ok(fs.existsSync(att[0].path));
   assert.ok(S.find(s.id).an_sent_at);
 });
@@ -85,4 +87,28 @@ test('unchanged save reports no changes', () => {
 test('ref numbers are sequential per month', () => {
   const ref = S.nextRefNo(store.db);
   assert.match(ref, /^GBL-\d{4}-0006$/);
+});
+
+test('air D/O goes out with the ATME; re-issued A/N is marked _Rev', async () => {
+  const s = S.list({ role: 'staff' }).find((x) => x.mbl_no === '921-63150570');
+  await notify.sendDeliveryOrder(s.id);
+  const mail = store.db.get("SELECT * FROM emails WHERE shipment_id = ? AND kind = 'DELIVERY_ORDER'", s.id);
+  const names = JSON.parse(mail.attachments_json).map((a) => a.filename);
+  assert.deepEqual(names.map((n) => n.replace(/\.(pdf|html)$/, '')), ['Delivery_Order_92163150570', 'AUTH_HBL_92163150570']);
+  assert.match(mail.subject, /^\[D\/O\] 921-63150570 \/\/ 46 CTN \/\/ ATA \d+\/\d+ \/\/ LFD \d+\/\d+$/);
+  const d1 = await notify.generateDocument(s.id, 'AN');
+  const d2 = await notify.generateDocument(s.id, 'AN');
+  assert.match(d1.filename, /^ARRIVAL_NOTICE___FREIGHT_INVOICE_92163150570\./);
+  assert.match(d2.filename, /^ARRIVAL_NOTICE___FREIGHT_INVOICE_92163150570_Rev\./);
+});
+
+test('LFD digest lists shipments with LFD within 3 days, once per day', async () => {
+  const alerts = require('../src/alerts');
+  const rows = alerts.lfdDigest();
+  assert.ok(rows.some((r) => r.s.mbl_no === '921-63150570'));
+  const id = await alerts.sendDigest({ force: true });
+  const mail = store.db.get('SELECT * FROM emails WHERE id = ?', id);
+  assert.match(mail.subject, /^\[LFD watch\]/);
+  assert.match(mail.body_html, /921-63150570/);
+  assert.equal(await alerts.sendDigest(), null); // already sent today
 });

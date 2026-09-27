@@ -119,11 +119,23 @@ router.post('/shipments/:id/track', auth.requireInternal, async (req, res) => {
   res.redirect(`/shipments/${req.params.id}#tracking`);
 });
 
-router.post('/shipments/:id/generate/:type', auth.requireInternal, (req, res) => {
+// Preview renders the document without saving it (saved copies are created when a notice is sent).
+router.get('/shipments/:id/preview/:type', auth.requireInternal, (req, res) => {
+  const type = req.params.type.toUpperCase();
+  const { GENERATORS } = require('../docs/templates');
+  const s = S.find(Number(req.params.id), null);
+  if (!GENERATORS[type] || !s) return res.status(404).render('error', { title: 'Not found', message: 'Unknown document.' });
+  res.set('Content-Security-Policy', "default-src 'none'; style-src 'unsafe-inline'; img-src data:");
+  res.type('html').send(GENERATORS[type](s));
+});
+
+// Issue (save) a document without emailing it — e.g. to download and send manually.
+router.post('/shipments/:id/issue/:type', auth.requireInternal, async (req, res) => {
   const type = req.params.type.toUpperCase();
   if (!['AN', 'DO', 'ATME'].includes(type)) return res.status(400).render('error', { title: 'Unknown document', message: 'Unknown document type.' });
-  const d = notify.generateDocument(Number(req.params.id), type, { userId: req.user.id });
-  res.redirect(`/documents/${d.id}`);
+  const d = await notify.generateDocument(Number(req.params.id), type, { userId: req.user.id });
+  flash(req, 'ok', `${d.filename} issued`);
+  res.redirect(`/shipments/${req.params.id}#docs`);
 });
 
 // ---------- documents ----------

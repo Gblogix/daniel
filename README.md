@@ -52,35 +52,69 @@ Demo users (password `demo1234`): `staff@gblogix.com`, `customer@unlockt.example
 
 Data lives in `data/gblogix.db` (SQLite) and uploaded/generated files in `uploads/` — back both up.
 
-## Email
-Without `SMTP_HOST` every email is stored in **Outbox** with status `LOGGED` (safe for testing).
-With SMTP configured (e.g. Google Workspace / Microsoft 365 SMTP relay), emails are sent with attachments.
-Automatic rules can be switched on/off in **Automation** (admin).
+## Email — Outlook / Microsoft 365
+Notices are sent from `info@gblogix.com` through Microsoft Graph (they appear in Sent Items). Setup:
+1. Azure portal → App registrations → New registration.
+2. API permissions → Microsoft Graph → **Application**: `Mail.Send` (and `Mail.ReadWrite` for email intake) → Grant admin consent.
+3. Certificates & secrets → new client secret. Put tenant ID, client ID, secret into `MS_TENANT_ID`, `MS_CLIENT_ID`, `MS_CLIENT_SECRET`.
+4. Recommended: limit the app to the one mailbox with an Exchange `New-ApplicationAccessPolicy`.
 
-## Document extraction
-* **Rule-based (default, offline):** PDF text, Excel/CSV packing lists (column headers auto-detected), text files.
-  Validates container numbers with the ISO 6346 check digit and flags values that disagree between documents.
-* **AI (optional):** set `ANTHROPIC_API_KEY` to also read scanned PDFs and unusual layouts with Claude.
-  Rule-based extraction remains the fallback.
+`MS_MAIL_INTAKE=on` also imports agent emails with PDF/Excel attachments into **Document intake** (senders are matched
+to agents by email domain on the Parties page), so agents who keep emailing are handled too.
+SMTP is supported as a fallback. With neither configured, emails are stored in **Outbox** as `LOGGED`.
 
-## Document templates
-`src/docs/templates.js` holds generic Arrival Notice, Delivery Order and Authority to Make Entry layouts
-(print-ready HTML, "Save as PDF" in the browser). Replace them with the company forms when ready.
+## Tracking — carrier & GPS
+ETD / ETA / ATD / ATA, vessel, container LFD, terminal availability, holds, out-gate and empty return are updated every
+`TRACKING_INTERVAL_HOURS` (and instantly via webhook). Status advances automatically and ETA changes email the customer.
+
+| Mode | Source |
+|---|---|
+| Ocean | the carrier's own API (DCSA standard — Maersk, Hapag-Lloyd, CMA CGM, ONE, …) when credentials exist, else **Terminal49**, else ShipsGo |
+| Air | **ShipsGo** by MAWB |
+| Vessel position | **Datalastic** (by IMO, mid-ocean) and/or **aisstream.io** (free, by MMSI, coastal) — shown on a map |
+
+Carrier websites are not scraped: carriers' terms forbid automated access and scrapers break silently.
+Note: Terminal49 lists HMM as "partial" (tracks by MBL, not container).
+
+## Reading documents (PDF)
+* PDF text layer with positions → B/L fields and **packing-list / invoice tables rebuilt row by row** (wrapped cells, totals, units).
+* **Scanned PDFs and photos → OCR** (offline; English bundled, Korean optional). OCR results are flagged for checking.
+* **Merged PDFs** (MBL + HBL + P/L + C/I in one file) are split by page title.
+* Container numbers are validated (ISO 6346) and common OCR misreads are corrected only when exactly one fix is valid.
+* Also read: firms code, freight location, LFD, C/I number & value, ISF no., telex release.
+* **AI (optional):** `ANTHROPIC_API_KEY` adds Claude's native PDF reading for scans and unusual layouts.
+
+## Documents
+Issued as PDF (needs Chromium; otherwise HTML) with the names used today:
+`ARRIVAL_NOTICE___FREIGHT_INVOICE_<ref>.pdf`, `Delivery_Order_<ref>.pdf`, `AUTH_HBL_<ref>.pdf`
+(ref = MAWB digits or MBL without SCAC; re-issues get `_Rev`, `_Rev2`). The A/N doubles as freight invoice (charges table).
+Air D/Os go out with the ATME. Layouts live in `src/docs/templates.js` — swap in the company forms when provided.
+
+## Daily LFD watch
+Dashboard lists shipments with LFD ≤ 5 days (holds + next step); a 7:00 digest email goes to the office mailbox.
 
 ## Project layout
 ```
 src/server.js            Express app
 src/db.js                SQLite schema
 src/shipments.js         shipment model, statuses, tracking-bar math, access scoping
-src/extract/             text extraction, rule-based + optional AI field extraction, merge
+src/extract/             PDF (text + OCR + tables), rule-based + optional AI extraction, merge
+src/tracking/            Terminal49, ShipsGo, DCSA carrier APIs, AIS vessel position, poller
+src/graph.js, mailin.js  Outlook send + email intake        src/alerts.js  daily LFD digest
+src/docs/pdf.js          HTML → PDF (Chromium)
 src/notify.js            outbox, email bodies, automation rules
 src/docs/templates.js    A/N, D/O, ATME
 src/routes/              auth, shipments, intake (portal), customer tracking, admin
 views/                   EJS pages      public/  CSS/JS
 ```
 
+## Go-live checklist
+* [ ] Change the admin password (default `changeme123`) and delete / re-password the demo users (`demo1234`)
+* [ ] Set `SESSION_SECRET`, `BASE_URL` (https)
+* [ ] Outlook app registration (`MS_*`), tracking API keys
+* [ ] Install Chromium for PDF output
+* [ ] Back up `data/` and `uploads/`
+
 ## Next steps
 * Plug in the real A/N, D/O, ATME forms
-* PDF rendering of generated documents (currently HTML)
-* Invoice generation & payment tracking, Smartsheet import of existing shipments
-* Live vessel position (carrier / AIS API) instead of schedule-based progress
+* Smartsheet import of existing shipments

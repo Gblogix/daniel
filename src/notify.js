@@ -8,7 +8,7 @@ const path = require('node:path');
 const config = require('./config');
 const store = require('./db');
 const S = require('./shipments');
-const { GENERATORS, DOC_TITLES, esc } = require('./docs/templates');
+const { GENERATORS, DOC_TITLES, esc, fileName } = require('./docs/templates');
 
 let transporter;
 function getTransport() {
@@ -23,11 +23,28 @@ function getTransport() {
   return transporter;
 }
 
-/** Whiteboard subject format: MBL# / HBL# / CTN# / ETA */
+/**
+ * Subject in the style used in the office inbox: tokens joined by " // ".
+ *   ocean: [A/N] CMDUSHZ8105615 // HBL TWS26050088 // EWLU7068201 // 40HC x 1 // ETA 5/31
+ *   air:   [A/N] 921-63150570 // 46 CTN // ETA 9/14
+ */
 function subjectLine(s, kind) {
-  const ctn = (s.containers || []).map((c) => c.container_no).join(', ') || '-';
-  const isAir = s.mode === 'AIR';
-  return `[${kind}] ${isAir ? 'MAWB' : 'MBL'}# ${s.mbl_no || '-'} / ${isAir ? 'HAWB' : 'HBL'}# ${s.hbl_no || '-'} / CTN# ${ctn} / ETA ${s.eta || 'TBA'}`;
+  const md = (d) => (d ? `${Number(d.slice(5, 7))}/${Number(d.slice(8, 10))}` : 'TBA');
+  const parts = [s.mbl_no || s.ref_no];
+  if (s.hbl_no && !s.direct_shipment) parts.push(`${s.mode === 'AIR' ? 'HAWB' : 'HBL'} ${s.hbl_no}`);
+  const ctns = s.containers || [];
+  if (ctns.length) {
+    parts.push(ctns.map((c) => c.container_no).join(', '));
+    const sizes = {};
+    for (const c of ctns) if (c.size_type) sizes[c.size_type] = (sizes[c.size_type] || 0) + 1;
+    const sz = Object.entries(sizes).map(([k, v]) => `${k} x ${v}`).join(', ');
+    if (sz) parts.push(sz);
+  } else if (s.packages) {
+    parts.push(`${s.packages} ${s.package_unit === 'PLTS' ? 'PLT' : s.package_unit === 'CTNS' || !s.package_unit ? 'CTN' : s.package_unit}`);
+  }
+  parts.push(s.ata ? `ATA ${md(s.ata)}` : `ETA ${md(s.eta)}`);
+  if (s.last_free_day && ['D/O', 'A/N'].includes(kind)) parts.push(`LFD ${md(s.last_free_day)}`);
+  return `[${kind}] ${parts.join(' // ')}`;
 }
 
 function recipients(companyId, db = store.db) {
@@ -42,17 +59,21 @@ function generatedDir() {
   return dir;
 }
 
-/** Render A/N, D/O or ATME for a shipment, store it as a document and return the document row. */
-function generateDocument(shipmentId, type, { db = store.db, userId = null } = {}) {
+/** Render A/N, D/O or ATME for a shipment (PDF when Chromium is available), store it as a document and return the row. */
+async function generateDocument(shipmentId, type, { db = store.db, userId = null } = {}) {
   const s = S.find(shipmentId, null, { db });
   if (!s) throw new Error('Shipment not found');
-  const html = GENERATORS[type](s);
-  const filename = `${s.ref_no}_${type}_${Date.now()}.html`;
-  const stored = path.join(generatedDir(), filename);
-  fs.writeFileSync(stored, html);
+  // Re-issuing a document marks it as a revision (…_Rev, …_Rev2), as brokers expect.
+  const revision = db.get("SELECT COUNT(*) AS n FROM documents WHERE shipment_id = ? AND doc_type = ? AND source = 'generated'", s.id, type).n;
+  const html = GENERATORS[type](s, { revision });
+  const pdf = await require('./docs/pdf').htmlToPdf(html);
+  const base = fileName(type, s, revision);
+  const stored = path.join(generatedDir(), `${s.ref_no}_${base}_${Date.now()}.${pdf ? 'pdf' : 'html'}`);
+  fs.writeFileSync(stored, pdf || html);
   const visible = type === 'AN' ? 1 : 0;
   const res = db.run(`INSERT INTO documents (shipment_id, doc_type, filename, stored_path, mime, size, source, customer_visible, uploaded_by)
-    VALUES (?, ?, ?, ?, 'text/html', ?, 'generated', ?, ?)`, s.id, type, `${s.ref_no} ${DOC_TITLES[type]}.html`, stored, html.length, visible, userId);
+    VALUES (?, ?, ?, ?, ?, ?, 'generated', ?, ?)`, s.id, type, `${base}.${pdf ? 'pdf' : 'html'}`, stored,
+  pdf ? 'application/pdf' : 'text/html', pdf ? pdf.length : html.length, visible, userId);
   return db.get('SELECT * FROM documents WHERE id = ?', Number(res.lastInsertRowid));
 }
 
@@ -143,8 +164,8 @@ async function sendBrokerPacket(shipmentId, { db = store.db, userId = null } = {
   const s = S.find(shipmentId, null, { db });
   const to = recipients(s.broker_id, db);
   if (!to.length) { S.addEvent(s.id, 'NOTICE_SKIPPED', 'Broker packet not sent: no customs broker email on file', { db, customerVisible: false }); return null; }
-  const an = generateDocument(s.id, 'AN', { db, userId });
-  const extra = s.mode === 'AIR' ? [generateDocument(s.id, 'ATME', { db, userId })] : [];
+  const an = await generateDocument(s.id, 'AN', { db, userId });
+  const extra = s.mode === 'AIR' ? [await generateDocument(s.id, 'ATME', { db, userId })] : [];
   const docs = [an, ...extra, ...latestDocs(s.id, ['HBL', 'MBL', 'PL', 'CI', 'ISF'], db)];
   const id = await queueEmail({
     shipmentId: s.id, kind: 'BROKER_PACKET', to, subject: subjectLine(s, 'A/N'),
@@ -171,11 +192,13 @@ async function sendDeliveryOrder(shipmentId, { db = store.db, userId = null } = 
   const s = S.find(shipmentId, null, { db });
   const to = recipients(s.trucker_id, db);
   if (!to.length) { S.addEvent(s.id, 'NOTICE_SKIPPED', 'D/O not sent: no trucker email on file', { db, customerVisible: false }); return null; }
-  const d = generateDocument(s.id, 'DO', { db, userId });
+  const d = await generateDocument(s.id, 'DO', { db, userId });
+  // Air pickups need the ATME with the D/O (terminal / CES release).
+  const atme = s.mode === 'AIR' ? (latestDocs(s.id, ['ATME'], db)[0] || await generateDocument(s.id, 'ATME', { db, userId })) : null;
   const id = await queueEmail({
     shipmentId: s.id, kind: 'DELIVERY_ORDER', to, subject: subjectLine(s, 'D/O'),
     html: summaryHtml(s, `Dear ${esc(s.trucker_name)},<br>Please find attached the delivery order. Pick up at <b>${esc(s.cfs_location || s.pod || '')}</b> and deliver to <b>${esc(s.delivery_address || '')}</b>.`),
-    documents: [d],
+    documents: atme ? [d, atme] : [d],
   }, { db });
   db.run("UPDATE shipments SET do_sent_at = datetime('now') WHERE id = ?", s.id);
   S.addEvent(s.id, 'DO_SENT', `Delivery order sent to trucker (${s.trucker_name})`, { db, userId });

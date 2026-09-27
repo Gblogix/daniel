@@ -68,6 +68,7 @@ if (require.main === module) {
   createApp().listen(config.port, () => console.log(`GlobalBridge Logistics running at ${config.baseUrl}`));
   console.log(`Email: ${config.mailTransport}${config.graph.enabled && config.graph.intake ? ' · Outlook intake on' : ''}`);
   require('./mailin').start();
+  require('./alerts').start();
   const t = require('./tracking').start();
   console.log(`Tracking: ${t.any ? [t.terminal49 && 'Terminal49', t.shipsgo && 'ShipsGo', t.dcsa.length && `carrier APIs (${t.dcsa.join(', ')})`].filter(Boolean).join(', ') : 'no provider configured'}${t.datalastic || t.aisstream ? ' · vessel GPS on' : ''}`);
 }

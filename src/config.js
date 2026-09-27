@@ -12,8 +12,10 @@ const cfg = module.exports = {
   company: {
     name: 'GlobalBridge Logistics',
     short: 'GB Logix',
-    address: process.env.COMPANY_ADDRESS || '',
+    address: process.env.COMPANY_ADDRESS || '1661 N. Raymond Ave., Suite 140F, Anaheim, CA 92801',
     phone: process.env.COMPANY_PHONE || '',
+    dot: process.env.COMPANY_DOT || '4406045',
+    remit: process.env.COMPANY_REMIT || '',   // bank / payment instructions printed on the freight invoice
     email: process.env.COMPANY_EMAIL || 'info@gblogix.com',
   },
   // Email: when SMTP_HOST is unset, messages are stored in the outbox only ("logged").
@@ -36,6 +38,8 @@ const cfg = module.exports = {
     intakeFolder: process.env.MS_INTAKE_FOLDER || 'inbox',
     intakeMinutes: Number(process.env.MS_INTAKE_MINUTES || 10),
   },
+  timezone: process.env.TZ_OFFICE || 'America/Los_Angeles',
+  chromiumPath: process.env.CHROMIUM_PATH || '',
   // Optional AI document extraction. Without a key, rule-based extraction is used.
   ai: {
     enabled: Boolean(process.env.ANTHROPIC_API_KEY) && process.env.AI_EXTRACTION !== 'off',
