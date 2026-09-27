@@ -5,9 +5,19 @@
     <div class="right"><b><%= s.pod || 'Destination' %></b><br><%= s.ata ? 'ATA' : 'ETA' %> <%= s.ata || s.eta || 'TBA' %></div>
   </div>
   <% if (tr.days.length) { %>
+    <% const n = tr.days.length; const every = Math.max(1, Math.ceil(n / (locals.big ? 16 : 8)));
+       const WD = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']; %>
     <div class="track-bar" role="img" aria-label="<%= tr.percent %>% of transit time elapsed">
       <span class="vessel <%= ["FCL","LCL","TRUCK"].includes(s.mode) ? "flip" : "" %>" style="left: <%= Math.min(98, Math.max(2, tr.percent)) %>%"><%= tr.mode.icon %></span>
-      <% tr.days.forEach((d) => { %><span class="cell <%= d.state %>" title="<%= d.date %>"></span><% }) %>
+      <div class="track-dates" aria-hidden="true">
+        <% const cur = tr.days.findIndex((d) => d.state === 'current'); const half = Math.ceil(every / 2);
+           tr.days.forEach((d, i) => { const dt = new Date(`${d.date}T00:00:00Z`);
+             const near = (j) => every > 1 && j >= 0 && j !== i && Math.abs(j - i) < half;
+             const show = i === cur || i === n - 1 || (i % every === 0 && n - 1 - i >= half && !near(cur)); %>
+          <span class="<%= i === cur ? 'today' : '' %>"><% if (show) { %><b><%= dt.getUTCMonth() + 1 %>/<%= dt.getUTCDate() %></b><% if (locals.big) { %><i><%= i === cur ? 'Today' : WD[dt.getUTCDay()] %></i><% } %><% } %></span>
+        <% }) %>
+      </div>
+      <div class="track-cells"><% tr.days.forEach((d) => { %><span class="cell <%= d.state %>" title="<%= d.date %>"></span><% }) %></div>
     </div>
     <div class="track-meta">
       <span class="left">

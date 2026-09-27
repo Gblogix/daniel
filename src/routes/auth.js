@@ -5,7 +5,22 @@ const router = express.Router();
 
 router.get('/', (req, res) => {
   if (!req.user) return res.redirect('/login');
+  if (auth.INTERNAL.includes(req.user.role)) return res.redirect('/app');
   res.redirect(auth.ROLES[req.user.role]?.home || '/shipments');
+});
+
+// Staff workspace: left menu, favorites bar, and every page in its own tab (like OPUS).
+router.get('/app', auth.requireInternal, (req, res) => {
+  const menu = require('../menu');
+  const open = typeof req.query.open === 'string' && /^\/(?!\/)/.test(req.query.open) && !req.query.open.startsWith('/app') ? req.query.open : '';
+  res.render('app', { title: 'GB Logix', menu: menu.menuFor(req.user), favorites: menu.favoritesFor(req.user), open });
+});
+router.post('/me/favorites', auth.requireInternal, (req, res) => {
+  const menu = require('../menu');
+  const allowed = new Set(menu.items(req.user).map((i) => i.id));
+  const ids = (Array.isArray(req.body.ids) ? req.body.ids : []).filter((id) => allowed.has(id)).slice(0, 20);
+  require('../db').db.run('UPDATE users SET favorites = ? WHERE id = ?', JSON.stringify([...new Set(ids)]), req.user.id);
+  res.json({ ok: true, ids });
 });
 
 router.get('/login', (req, res) => {

@@ -114,6 +114,11 @@ Company name, address, tel/fax, accounting contact and **payment instructions** 
 (stored in the database only — keep bank details out of source control). Filing numbers continue the current sequence:
 `OI-#####` ocean import, `AI-#####` air import, `OTH#######` other; `INV-#####`, `DCN-#####` (next numbers editable).
 
+## Staff workspace
+Staff sign in to **/app**: ☰ opens the menu (Main, Shipments, Documents, Accounting, Master Code, Administration — like OPUS);
+☆ next to any page adds it to the favorites bar at the top (saved per user). Every page opens in its own tab
+(Main, Shipments, HANIL COSMETICS · TCLU…); shipment / invoice / party links open a new tab, and open tabs come back after a reload.
+
 ## Billing
 * **AR invoices** per shipment; bill-to can be a sister entity (Unlockt / Heyhae / PGP), Ship To = importer (e.g. Solvenza).
   Customer default terms (Unlockt 25 days, PGP 0) set on the Parties page. Batch email per customer.

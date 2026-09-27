@@ -46,3 +46,21 @@ document.querySelectorAll('form[data-settle]').forEach((form) => {
   }));
   calc();
 });
+
+// Inside the workspace, detail pages open in their own tab (like OPUS): shipment, invoice, party / agent statement.
+if (document.documentElement.classList.contains('embedded') && window.top.gbOpenTab) {
+  const DETAIL = /^\/(shipments\/(\d+|new)|invoices\/(\d+|new)|billing\/(parties|agents)\/\d+|billing\/profit|history)(?:[?#]|$)/;
+  document.addEventListener('click', (e) => {
+    const a = e.target.closest('a[href]');
+    if (!a || a.target || a.hasAttribute('download') || e.ctrlKey || e.metaKey || e.shiftKey || e.defaultPrevented) return;
+    const url = new URL(a.href, location.href);
+    if (url.origin !== location.origin) return;
+    const here = location.pathname + location.search;
+    const path = url.pathname + url.search;
+    if (path === here) return; // in-page anchors
+    if (DETAIL.test(url.pathname + url.search) && !/\/preview|\.xlsx|format=/.test(path)) {
+      e.preventDefault();
+      window.top.gbOpenTab(path + url.hash, a.textContent.trim().slice(0, 40));
+    }
+  });
+}

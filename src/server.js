@@ -4,6 +4,15 @@ const session = require('express-session');
 const config = require('./config');
 const auth = require('./auth');
 const S = require('./shipments');
+
+// Cache-buster for /css and /js so browsers pick up a new release immediately.
+const ASSET_VERSION = (() => {
+  const fs = require('node:fs');
+  try {
+    return ['css/app.css', 'js/app.js', 'js/shell.js', 'js/embed.js']
+      .map((f) => fs.statSync(require('node:path').join(__dirname, '..', 'public', f)).mtimeMs).reduce((a, b) => Math.max(a, b), 0).toString(36).slice(-6);
+  } catch { return Date.now().toString(36); }
+})();
 const { bootstrap } = require('./seed');
 
 function createApp() {
@@ -33,7 +42,7 @@ function createApp() {
   app.use(auth.csrf);
   app.use((req, res, next) => {
     Object.assign(res.locals, {
-      S, config, path: req.path, flash: req.session.flash || null,
+      S, config, path: req.path, flash: req.session.flash || null, v: ASSET_VERSION,
       fmtNum: (v, d = 0) => (v == null || v === '' ? '' : Number(v).toLocaleString('en-US', { minimumFractionDigits: d, maximumFractionDigits: d })),
       fmtDate: (v) => (v ? String(v).slice(0, 10) : ''),
       fmtDateTime: (v) => (v ? String(v).replace('T', ' ').slice(0, 16) : ''),

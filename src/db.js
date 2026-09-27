@@ -309,7 +309,7 @@ const MIGRATIONS = {
   cargo_items: { unit_price: 'REAL', amount: 'REAL', source: 'TEXT' },
   companies: { billing_emails: 'TEXT', terms_days: 'INTEGER', short_name: 'TEXT' },
   invoices: { document_id: 'INTEGER' },
-  users: { can_accounting: 'INTEGER NOT NULL DEFAULT 0' },
+  users: { can_accounting: 'INTEGER NOT NULL DEFAULT 0', favorites: 'TEXT' },
 };
 
 function migrate(db) {

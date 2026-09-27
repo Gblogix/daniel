@@ -31,7 +31,9 @@ async function login(email) {
     body: new URLSearchParams({ _csrf: csrf, email, password: email.startsWith('admin') ? 'changeme123' : 'demo1234' }) });
   keep(r2);
   assert.equal(r2.status, 302, `login ${email}`);
-  return (p) => fetch(base + p, { headers: { cookie }, redirect: 'manual' });
+  const get = (p) => fetch(base + p, { headers: { cookie }, redirect: 'manual' });
+  get.post = (p, body, csrf) => fetch(base + p, { method: 'POST', redirect: 'manual', headers: { cookie, 'content-type': 'application/json', 'x-csrf-token': csrf }, body: JSON.stringify(body) });
+  return get;
 }
 
 test('accounting pages: admin and accounting staff only', async () => {
@@ -76,4 +78,29 @@ test('accounting pages: admin and accounting staff only', async () => {
   assert.equal((await customer('/my/invoices')).status, 404);
   const custPage = await (await customer(`/shipments/${s.id}`)).text();
   assert.doesNotMatch(custPage, /Service price|Invoice|\$\d/);
+});
+
+test('staff workspace: tabs shell, menu by permission, favorites saved per user', async () => {
+  const staff = await login('staff@gblogix.com');
+  const acct = await login('accounting@gblogix.com');
+  const customer = await login('customer@unlockt.example');
+  assert.equal((await staff('/')).headers.get('location'), '/app');
+  assert.equal((await customer('/')).headers.get('location'), '/track');
+  assert.equal((await customer('/app')).status, 403);
+  const page = await (await staff('/app?open=/shipments')).text();
+  const data = JSON.parse(/<script type="application\/json" id="shell-data">([^<]*)<\/script>/.exec(page)[1]);
+  assert.equal(data.open, '/shipments');
+  assert.ok(!data.items.some((i) => i.href.startsWith('/billing')), 'no accounting menu for staff');
+  assert.ok(!data.favorites.includes('ar-entry'));
+  const acctData = JSON.parse(/id="shell-data">([^<]*)</.exec(await (await acct('/app')).text())[1]);
+  assert.ok(acctData.items.some((i) => i.id === 'pl'));
+  // Staff cannot favorite an accounting page; the rest is saved.
+  const r = await staff.post('/me/favorites', { ids: ['track', 'pl', 'history'] }, data.csrf);
+  assert.deepEqual((await r.json()).ids, ['track', 'history']);
+  const again = JSON.parse(/id="shell-data">([^<]*)</.exec(await (await staff('/app')).text())[1]);
+  assert.deepEqual(again.favorites, ['track', 'history']);
+  assert.equal((await staff.post('/me/favorites', { ids: [] }, 'bad')).status, 403);
+  // An absolute URL cannot be smuggled into ?open=
+  const evil = JSON.parse(/id="shell-data">([^<]*)</.exec(await (await staff('/app?open=//evil.example')).text())[1]);
+  assert.equal(evil.open, '');
 });

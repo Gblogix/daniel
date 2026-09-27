@@ -1,0 +1,50 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>GB Logix · GlobalBridge Logistics</title>
+<link rel="stylesheet" href="/css/app.css?v=<%= v %>">
+</head>
+<body class="shell">
+<header class="shell-top">
+  <button type="button" class="burger" id="burger" aria-label="Menu" aria-expanded="false">☰</button>
+  <a class="brand" href="/app">GB Logix</a>
+  <nav class="favbar" id="favbar" aria-label="Favorites"></nav>
+  <div class="who">
+    <span><%= user.name %></span>
+    <span class="role-chip"><%= ROLES[user.role].label %></span>
+    <form method="post" action="/logout"><input type="hidden" name="_csrf" value="<%= csrf %>"><button>Sign out</button></form>
+  </div>
+</header>
+
+<aside class="drawer" id="drawer" aria-hidden="true">
+  <ul class="cats">
+    <% menu.forEach((m, i) => { %>
+      <li><button type="button" class="cat <%= i === 0 ? 'on' : '' %>" data-cat="<%= m.key %>"><span class="ico"><%= m.icon %></span><%= m.label %><span class="chev">›</span></button></li>
+    <% }) %>
+  </ul>
+  <% menu.forEach((m, i) => { %>
+    <div class="flyout" data-panel="<%= m.key %>" <%= i === 0 ? '' : 'hidden' %>>
+      <% m.cols.forEach((c) => { %><div class="col"><div class="head"><%= c.head %></div>
+        <% c.items.forEach((it) => { %><div class="item">
+          <a href="<%= it.href %>" data-open="<%= it.href %>" data-title="<%= it.label %>"><%= it.label %></a>
+          <button type="button" class="star" data-star="<%= it.id %>" title="Add to / remove from favorites">☆</button>
+        </div><% }) %>
+      </div><% }) %>
+    </div>
+  <% }) %>
+  <p class="hint">☆ = add to the favorites bar at the top</p>
+</aside>
+<div class="scrim" id="scrim" hidden></div>
+
+<div class="tabbar" id="tabbar" role="tablist"></div>
+<div class="panes" id="panes"></div>
+
+<script type="application/json" id="shell-data"><%- JSON.stringify({
+  items: menu.flatMap((m) => m.cols.flatMap((c) => c.items)).map(({ id, label, href }) => ({ id, label, href })),
+  favorites, open, csrf, userId: user.id,
+}).replace(/</g, '\\u003c') %></script>
+<script src="/js/shell.js?v=<%= v %>"></script>
+</body>
+</html>

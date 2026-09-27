@@ -1,10 +1,11 @@
 <!doctype html>
-<html lang="en">
+<html lang="en"<%- locals.user && isInternal ? ' data-shell="1"' : '' %>>
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title><%= title %> · GlobalBridge Logistics</title>
-<link rel="stylesheet" href="/css/app.css">
+<link rel="stylesheet" href="/css/app.css?v=<%= v %>">
+<script src="/js/embed.js?v=<%= v %>"></script>
 </head>
 <body>
 <% if (user) { %>
@@ -12,39 +13,8 @@
   <a class="brand" href="/">GB Logix <span>GlobalBridge Logistics</span></a>
   <nav class="nav">
     <% const on = (p) => path === p || path.startsWith(p + '/') ? 'on' : ''; %>
-    <% if (isInternal) {
-      const group = (label, match, cols) => ({ label, on: match.some((m) => path === m || path.startsWith(m + '/')), cols });
-      const menus = [
-        group('Shipments', ['/shipments', '/track', '/history'], [
-          ['Files', [['Shipment list (open)', '/shipments'], ['New shipment', '/shipments/new'], ['Active — before delivery', '/shipments?stage=active'],
-            ['Delivered — billing open', '/shipments?stage=delivered'], ['History (closed)', '/history']]],
-          ['Tracking', [['Tracking board', '/track'], ['Arrivals / LFD watch', '/dashboard#lfd'], ['Delivered cards', '/track?filter=delivered']]],
-        ]),
-        group('Documents', ['/intakes', '/portal', '/outbox'], [
-          ['Intake', [['Document intake (review)', '/intakes'], ['Upload documents', '/portal']]],
-          ['Email', [['Outbox / sent notices', '/outbox']]],
-        ]),
-        ...(canAccounting ? [group('Accounting', ['/billing', '/invoices'], [
-          ['Operation', [['A/R invoice entry', '/invoices/new?kind=AR'], ['A/P vendor bill entry', '/invoices/new?kind=AP'], ['Debit / credit note (agent)', '/invoices/new?kind=DN']]],
-          ['Banking', [['Check & settle / payments', '/billing#payables'], ['Record payment', '/billing#pay'], ['Agent statement (SOA)', '/billing#agents']]],
-          ['Report', [['AR aging', '/billing#aging'], ['P&L by file', '/billing/profit'], ['Delivered — not invoiced', '/shipments?stage=delivered&bill=not_invoiced'],
-            ['Invoiced — not paid', '/shipments?stage=delivered&bill=unpaid'], ['Recent payments', '/billing#payments']]],
-        ])] : []),
-        group('Master', ['/companies', '/admin'], [
-          ['Master code', [['Parties (customers, agents, vendors)', '/companies']]],
-          ...(user.role === 'admin' ? [['Administration', [['Users & access', '/admin/users'], ['Automation / Smartsheet / tracking', '/admin/settings'], ['Company profile & numbering', '/admin/company']]]] : []),
-        ]),
-      ]; %>
-      <a class="<%= on('/dashboard') %>" href="/dashboard">Dashboard</a>
-      <% menus.forEach((m) => { %>
-        <div class="menu">
-          <button type="button" class="menu-btn <%= m.on ? 'on' : '' %>"><%= m.label %> <span class="caret">▾</span></button>
-          <div class="drop">
-            <% m.cols.forEach(([head, links]) => { %><div class="col"><div class="head"><%= head %></div>
-              <% links.forEach(([label, href]) => { %><a href="<%= href %>"><%= label %></a><% }) %></div><% }) %>
-          </div>
-        </div>
-      <% }) %>
+    <% if (isInternal) { %>
+      <a href="/app">☰ Workspace</a>
     <% } else if (user.role === 'customer') { %>
       <a class="<%= on('/track') %>" href="/track">My shipments</a>
     <% } else if (user.role === 'agent') { %>

@@ -49,7 +49,7 @@ function authenticate(email, password) {
 function loadUser(req, res, next) {
   const id = req.session?.userId;
   if (id) {
-    const u = store.db.get(`SELECT u.id, u.email, u.name, u.role, u.company_id, u.can_accounting, c.name AS company_name
+    const u = store.db.get(`SELECT u.id, u.email, u.name, u.role, u.company_id, u.can_accounting, u.favorites, c.name AS company_name
       FROM users u LEFT JOIN companies c ON c.id = u.company_id WHERE u.id = ? AND u.active = 1`, id);
     if (u) { req.user = u; res.locals.user = u; }
   }
