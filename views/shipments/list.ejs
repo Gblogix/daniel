@@ -1,37 +1,48 @@
 <%- include('../partials/head') %>
-<div class="pagehead"><h1><%= isInternal ? 'Shipments' : 'Assigned shipments' %></h1>
-  <% if (isInternal) { %><a class="btn" href="/shipments/new">+ New shipment</a><% } %>
+<div class="pagehead"><h1><%= history ? 'Shipment history' : isInternal ? 'Shipments' : 'Assigned shipments' %></h1>
+  <% if (isInternal && !history) { %><a class="btn" href="/shipments/new">+ New shipment</a><% } %>
 </div>
+<% if (history) { %><p class="muted small" style="margin-top:-8px">Closed files — the customer's invoices are paid. Kept here for look-up; reopen a file from its page if something comes up.</p><% } %>
 <form class="filters" method="get">
-  <input name="q" value="<%= q %>" placeholder="Search ref, MBL, HBL, container, customer…">
-  <select name="status"><option value="">All statuses</option><% S.STATUSES.forEach((x) => { %><option value="<%= x.code %>" <%= status === x.code ? 'selected' : '' %>><%= x.label %></option><% }) %></select>
+  <% if (isInternal && !history) { %>
+    <div class="seg">
+      <% Object.entries(STAGES).forEach(([k, label]) => { %><a class="<%= stage === k && !bill ? 'on' : '' %>" href="?stage=<%= k %>"><%= label %></a><% }) %>
+      <a href="/history">History (closed)</a>
+    </div>
+    <input type="hidden" name="stage" value="<%= stage %>">
+  <% } %>
+  <input name="q" value="<%= q %>" placeholder="Search shipper, container, MBL, HBL, customer, file no…">
+  <% if (!history) { %><select name="status"><option value="">All statuses</option><% S.STATUSES.forEach((x) => { %><option value="<%= x.code %>" <%= status === x.code ? 'selected' : '' %>><%= x.label %></option><% }) %></select><% } %>
   <select name="mode"><option value="">All modes</option><% Object.entries(S.MODES).forEach(([k, m]) => { %><option value="<%= k %>" <%= mode === k ? 'selected' : '' %>><%= m.label %></option><% }) %></select>
+  <% if (canAccounting && !history) { %><select name="bill"><option value="">Any billing</option>
+    <option value="not_invoiced" <%= bill === 'not_invoiced' ? 'selected' : '' %>>Delivered — not invoiced</option>
+    <option value="unpaid" <%= bill === 'unpaid' ? 'selected' : '' %>>Invoiced — not paid</option>
+    <option value="overdue" <%= bill === 'overdue' ? 'selected' : '' %>>Overdue</option></select><% } %>
   <button class="btn secondary">Filter</button>
 </form>
 <div class="tablewrap">
 <table class="t">
   <thead><tr>
-    <th>Ref</th><th>Mode</th><th>Customer</th><th>Shipper</th><th>MBL / HBL</th><th>Container</th><th>ETD</th><th>ETA</th>
-    <th>Status</th><th>Customs</th><th>A/N</th><th>D/O</th><% if (canAccounting) { %><th>Invoice</th><% } %><th>Delivery</th>
+    <th>File (Shipper · Container)</th><th>Mode</th><th>Customer</th><th>MBL / HBL</th><th>ETD</th><th>ETA</th>
+    <th>Status</th><th>Customs</th><th>A/N</th><th>D/O</th><% if (canAccounting) { %><th>Billing</th><% if (history) { %><th class="right">Profit</th><% } %><% } %><th><%= history ? 'Closed' : 'Delivery' %></th>
   </tr></thead>
   <tbody>
   <% if (!rows.length) { %><tr><td colspan="14" class="muted">No shipments found.</td></tr><% } %>
-  <% rows.forEach((s) => { %>
+  <% rows.forEach((s) => { const b = canAccounting ? S.billingState(s) : null; %>
     <tr>
-      <td class="nowrap"><a href="/shipments/<%= s.id %>"><b><%= s.ref_no %></b></a></td>
+      <td><a href="/shipments/<%= s.id %>"><b><%= S.fileName(s) %></b></a><br><span class="muted small mono"><%= s.ref_no %></span></td>
       <td class="nowrap"><%= S.MODES[s.mode].icon %> <%= s.mode %></td>
       <td><%= s.customer_name || '—' %></td>
-      <td><%= s.shipper_name || '' %></td>
       <td class="mono small"><%= s.mbl_no || '—' %><br><%= s.hbl_no || '—' %></td>
-      <td class="mono small"><%= s.containers.map((c) => c.container_no).join(', ') %></td>
       <td class="nowrap"><%= s.etd || '' %></td>
       <td class="nowrap"><b><%= s.eta || '' %></b></td>
       <td><span class="badge <%= s.status %>"><%= S.statusLabel(s.status) %></span></td>
       <td><span class="badge <%= s.customs_status %>"><%= s.customs_status %></span></td>
       <td><%= s.an_sent_at ? '✔' : '' %></td>
       <td><%= s.do_sent_at ? '✔' : '' %></td>
-      <% if (canAccounting) { %><td class="nowrap"><% if (s.invoice_amount) { %>$<%= fmtNum(s.invoice_amount, 2) %> <span class="badge <%= s.paid ? 'paid' : 'unpaid' %>"><%= s.paid ? 'PAID' : 'OPEN' %></span><% } %></td><% } %>
-      <td class="small"><%= s.delivery_date || '' %> <%= s.delivery_time || '' %></td>
+      <% if (canAccounting) { %><td class="nowrap small"><% if (b) { %><span class="badge bill-<%= b.level %>"><%= b.label %></span><% if (b.amount) { %><br>$<%= fmtNum(b.amount, 2) %> open<% } %><% } %></td>
+        <% if (history) { %><td class="right nowrap"><% if (s.pl) { %><b style="color:<%= s.pl.profit >= 0 ? 'var(--green)' : 'var(--red)' %>"><%= fmtNum(s.pl.profit, 2) %></b><% } %></td><% } %><% } %>
+      <td class="small"><%= history ? fmtDate(s.closed_at) : `${s.delivery_date || ''} ${s.delivery_time || ''}` %></td>
     </tr>
   <% }) %>
   </tbody>

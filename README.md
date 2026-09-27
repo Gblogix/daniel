@@ -121,7 +121,16 @@ Company name, address, tel/fax, accounting contact and **payment instructions** 
 * **Payments**: one ACH can be applied across many invoices (oldest first); AR aging (current / 30 / 60 / 90 / 90+).
 * **Agent statement of account** (NSC): open debit notes, credit notes and agent invoices with running balance and
   "sent to agent" date; select items to settle by netting (the rest is carried forward); Excel export / email.
-* Customers see their invoices under **Invoices** in the portal.
+* **Files are named Shipper · Container** (e.g. `HANIL COSMETICS · TCLU1234567`, `+1` for more boxes; air = shipper · AWB).
+  The OPUS-style file number (OI-11828 / AI-10009) stays as the internal number shown under the name.
+* **Accounting inside the file** (shipment page › Accounting): add vendor bills (with the vendor's invoice no.), AR invoices
+  and D/Ns line by line; revenue / cost / profit / margin per file. **Billing › P&L by file**: by month / customer, Excel export.
+* **Check & settle** (Billing › a vendor or customer): every open invoice with its lines, a checkbox per invoice, editable
+  amount for partial payments; checking both sides with an agent nets them off.
+* **Closing files**: once the delivered file's customer invoices (and agent D/Ns) are paid, it closes automatically and moves to
+  **History**. A new invoice reopens it. Accounting staff can also close / reopen by hand.
+  Delivered files that are *not invoiced*, *invoice not sent*, *awaiting payment* or *overdue* are flagged on the dashboard,
+  the shipment list (Billing filter) and the tracking board — visible to accounting users only.
 
 ## Daily LFD watch
 Dashboard lists shipments with LFD ≤ 5 days (holds + next step); a 7:00 digest email goes to the office mailbox.
@@ -135,7 +144,7 @@ src/extract/             PDF (text + OCR + tables), rule-based + optional AI ext
 src/tracking/            Terminal49, ShipsGo, DCSA carrier APIs, AIS vessel position, poller
 src/graph.js, mailin.js  Outlook send + email intake        src/alerts.js  daily LFD digest
 src/docs/pdf.js          HTML → PDF (Chromium)          src/accounting.js  invoices, D/N, payments, SOA, aging
-src/company.js           company profile + document numbering
+src/company.js           company profile + document numbering   src/reset.js  remove test data
 src/notify.js            outbox, email bodies, automation rules
 src/docs/templates.js    A/N, D/O, ATME
 src/routes/              auth, shipments, intake (portal), customer tracking, admin
@@ -143,6 +152,7 @@ views/                   EJS pages      public/  CSS/JS
 ```
 
 ## Go-live checklist
+* [ ] Admin › Automation › **Delete test data** (removes demo shipments, invoices and demo logins; keeps parties and settings)
 * [ ] Change the admin password (default `changeme123`) and delete / re-password the demo users (`demo1234`)
 * [ ] Set `SESSION_SECRET`, `BASE_URL` (https)
 * [ ] Outlook app registration (`MS_*`), tracking API keys

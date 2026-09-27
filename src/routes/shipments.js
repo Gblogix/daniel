@@ -24,15 +24,22 @@ router.get('/dashboard', auth.requireInternal, (req, res) => {
   const active = S.list(req.user, { active: true });
   const in7 = new Date(Date.now() + 7 * 86400000).toISOString().slice(0, 10);
   const today = new Date().toISOString().slice(0, 10);
+  const acct = auth.canAccounting(req.user);
+  const delivered = acct ? S.list(req.user, { stage: 'delivered' }).map((s) => S.billingState(s)) : [];
   const kpi = {
     active: active.length,
+    notInvoiced: acct ? delivered.filter((b) => b?.code === 'not_invoiced').length : null,
+    awaiting: acct ? delivered.filter((b) => ['unsent', 'awaiting', 'overdue'].includes(b?.code)).length : null,
     arriving: active.filter((s) => s.eta && s.eta >= today && s.eta <= in7).length,
     intakes: db.get("SELECT COUNT(*) AS n FROM intakes WHERE status = 'PENDING'").n,
     exam: active.filter((s) => s.customs_status === 'EXAM' || s.customs_status === 'HOLD').length,
     unpaid: auth.canAccounting(req.user) ? db.get("SELECT COUNT(*) AS n FROM invoices WHERE kind = 'AR' AND status = 'OPEN'").n : null,
     failedEmails: db.get("SELECT COUNT(*) AS n FROM emails WHERE status = 'FAILED'").n,
   };
-  const events = db.all(`SELECT e.*, s.ref_no FROM events e JOIN shipments s ON s.id = e.shipment_id ORDER BY e.id DESC LIMIT 15`);
+  const events = db.all(`SELECT e.*, s.ref_no, s.shipper_name, s.hbl_no, s.mbl_no,
+      (SELECT k.container_no FROM containers k WHERE k.shipment_id = s.id ORDER BY k.id LIMIT 1) AS first_ctn,
+      (SELECT COUNT(*) FROM containers k WHERE k.shipment_id = s.id) AS ctn_count
+    FROM events e JOIN shipments s ON s.id = e.shipment_id ORDER BY e.id DESC LIMIT 15`);
   // LFD watch: not yet picked up, sorted by days left.
   const lfdWatch = active.map((s) => ({ s, lfd: S.lfdInfo(s), next: S.checklist(s).find((x) => x.next) }))
     .filter((x) => x.lfd && x.lfd.days <= 5).sort((a, b) => a.lfd.days - b.lfd.days);
@@ -41,11 +48,26 @@ router.get('/dashboard', auth.requireInternal, (req, res) => {
 });
 
 // ---------- list ----------
+const STAGES = { open: 'All open', active: 'Active (before delivery)', delivered: 'Delivered — billing open', all: 'All' };
 router.get('/shipments', auth.requireLogin, (req, res) => {
   if (req.user.role === 'customer') return res.redirect('/track');
   const { q = '', status = '', mode = '' } = req.query;
-  const rows = S.list(req.user, { q, status, mode });
-  res.render('shipments/list', { title: 'Shipments', rows, q, status, mode });
+  const internal = auth.INTERNAL.includes(req.user.role);
+  const stage = internal && STAGES[req.query.stage] ? req.query.stage : internal ? 'open' : 'all';
+  let rows = S.list(req.user, { q, status, mode, stage: stage === 'all' ? null : stage });
+  // Accounting follow-up filters on delivered files.
+  const bill = auth.canAccounting(req.user) ? req.query.bill || '' : '';
+  if (bill) rows = rows.filter((s) => (S.billingState(s)?.code || '') === bill || (bill === 'unpaid' && ['unsent', 'awaiting', 'overdue'].includes(S.billingState(s)?.code)));
+  res.render('shipments/list', { title: 'Shipments', rows, q, status, mode, stage, STAGES, bill, history: false });
+});
+
+/** Shipment history: closed files (customer paid), kept for look-up later. */
+router.get('/history', auth.requireInternal, (req, res) => {
+  const { q = '', mode = '' } = req.query;
+  const rows = S.list(req.user, { q, mode, stage: 'closed' });
+  const A = require('../accounting');
+  if (auth.canAccounting(req.user)) for (const r of rows) r.pl = A.shipmentProfit(r.id);
+  res.render('shipments/list', { title: 'Shipment history', rows, q, status: '', mode, stage: 'closed', STAGES, bill: '', history: true });
 });
 
 router.get('/shipments/new', auth.requireInternal, (req, res) => {
@@ -82,9 +104,12 @@ router.get('/shipments/:id', auth.requireLogin, (req, res) => {
   const acct = auth.canAccounting(req.user);
   const invoices = internal && acct ? A.listInvoices({ shipmentId: s.id }) : [];
   const profit = internal && acct ? A.shipmentProfit(s.id) : null;
+  const plLines = internal && acct ? A.shipmentLines(s.id) : [];
+  const acctParties = internal && acct ? db.all('SELECT id, name, type FROM companies ORDER BY type, name') : [];
   const trackEvents = db.all("SELECT * FROM tracking_events WHERE shipment_id = ? AND classifier IN ('ACT', '') ORDER BY event_time DESC LIMIT 30", s.id);
   const view = internal ? 'shipments/detail' : 'customer/detail';
-  res.render(view, { title: s.ref_no, s, tr: S.tracking(s), docs, events, emails, trackEvents, invoices, profit, trackingStatus: require('../tracking').status(), ...(internal ? partyLists() : {}) });
+  res.render(view, { title: S.fileName(s), s, tr: S.tracking(s), docs, events, emails, trackEvents, invoices, profit, plLines, acctParties,
+    codes: A.CHARGE_CODES, billing: acct ? S.billingState(s) : null, trackingStatus: require('../tracking').status(), ...(internal ? partyLists() : {}) });
 });
 
 /** Which documents each external role may download. */
@@ -102,6 +127,40 @@ router.post('/shipments/:id', auth.requireInternal, async (req, res) => {
   S.saveLines(id, req.body);
   await notify.onShipmentChanged(id, changes, { userId: req.user.id });
   flash(req, 'ok', changes.length ? `Saved (${changes.length} field${changes.length > 1 ? 's' : ''} changed)` : 'Saved');
+  res.redirect(`/shipments/${id}`);
+});
+
+// ---------- accounting inside the file ----------
+/** Quick entry from the shipment page: one invoice / vendor bill with its lines, booked to this file. */
+router.post('/shipments/:id/accounting', auth.requireAccounting, (req, res) => {
+  const id = Number(req.params.id);
+  const s = S.find(id, null);
+  if (!s) return res.status(404).end();
+  const A = require('../accounting');
+  const arr = (v) => (Array.isArray(v) ? v : v == null ? [] : [v]);
+  const lines = arr(req.body.l_desc).map((d, i) => ({ description: d, rate: arr(req.body.l_rate)[i], qty: arr(req.body.l_qty)[i], amount: arr(req.body.l_amount)[i] }))
+    .filter((l) => String(l.description || '').trim() && [l.amount, l.rate].some((v) => String(v ?? '').trim() !== ''));
+  if (!lines.length) { flash(req, 'err', 'Add at least one line with a description and amount'); return res.redirect(`/shipments/${id}#accounting`); }
+  const kind = ['AR', 'DN', 'AP'].includes(req.body.kind) ? req.body.kind : 'AR';
+  if (kind === 'AP' && !String(req.body.number || '').trim()) { flash(req, 'err', 'Enter the vendor invoice number'); return res.redirect(`/shipments/${id}#accounting`); }
+  const data = { kind, shipment_id: id, company_id: req.body.company_id, number: req.body.number, invoice_date: req.body.invoice_date, terms_days: req.body.terms_days, memo: req.body.memo, lines };
+  if (kind === 'AR') Object.assign(data, { ship_to: s.consignee_name || '', customer_ref: s.customer_ref || '' });
+  if (kind === 'DN') Object.assign(data, { agent_ref: s.agent_ref || s.sub_bl_no || s.hbl_no || '', profit_share: 0, lines: lines.map((l) => ({ ...l, mh: 'H', bl_no: s.hbl_no, pc: 'C',
+    side: Number(String(l.amount ?? '').replace(/,/g, '')) < 0 ? 'CREDIT' : 'DEBIT', amount: l.amount === '' || l.amount == null ? l.amount : Math.abs(Number(String(l.amount).replace(/,/g, ''))) })) });
+  try {
+    const invId = A.saveInvoice(data, { userId: req.user.id });
+    const inv = A.getInvoice(invId);
+    flash(req, 'ok', `${inv.number} saved — ${inv.lines.length} line(s), USD ${inv.total.toLocaleString('en-US', { minimumFractionDigits: 2 })}`);
+  } catch (e) {
+    flash(req, 'err', /UNIQUE/.test(e.message) ? 'That invoice number already exists' : e.message);
+  }
+  res.redirect(`/shipments/${id}#accounting`);
+});
+
+router.post('/shipments/:id/close', auth.requireAccounting, (req, res) => {
+  const id = Number(req.params.id);
+  S.setClosed(id, req.body.closed === '1', { userId: req.user.id });
+  flash(req, 'ok', req.body.closed === '1' ? 'File closed — moved to Shipment history' : 'File reopened');
   res.redirect(`/shipments/${id}`);
 });
 

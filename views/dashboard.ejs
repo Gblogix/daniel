@@ -2,12 +2,13 @@
 <div class="pagehead"><h1>Dashboard</h1>
   <div class="actions"><a class="btn" href="/shipments/new">+ New shipment</a><a class="btn secondary" href="/portal">Upload documents</a></div>
 </div>
-<div class="grid g6" style="margin-bottom:18px">
+<div class="grid g7" style="margin-bottom:18px">
   <a class="kpi" href="/shipments"><div class="n"><%= kpi.active %></div><div class="l">Active shipments</div></a>
   <a class="kpi" href="/track"><div class="n"><%= kpi.arriving %></div><div class="l">Arriving in 7 days</div></a>
   <a class="kpi <%= kpi.intakes ? 'warn' : '' %>" href="/intakes"><div class="n"><%= kpi.intakes %></div><div class="l">Docs to review</div></a>
   <a class="kpi <%= kpi.exam ? 'bad' : '' %>" href="/shipments"><div class="n"><%= kpi.exam %></div><div class="l">Customs exam / hold</div></a>
-  <% if (kpi.unpaid != null) { %><a class="kpi <%= kpi.unpaid ? 'warn' : '' %>" href="/billing"><div class="n"><%= kpi.unpaid %></div><div class="l">Open AR invoices</div></a><% } %>
+  <% if (kpi.notInvoiced != null) { %><a class="kpi <%= kpi.notInvoiced ? 'bad' : '' %>" href="/shipments?stage=delivered&bill=not_invoiced"><div class="n"><%= kpi.notInvoiced %></div><div class="l">Delivered — not invoiced</div></a>
+  <a class="kpi <%= kpi.awaiting ? 'warn' : '' %>" href="/shipments?stage=delivered&bill=unpaid"><div class="n"><%= kpi.awaiting %></div><div class="l">Invoiced — awaiting payment</div></a><% } %>
   <a class="kpi <%= kpi.failedEmails ? 'bad' : '' %>" href="/outbox"><div class="n"><%= kpi.failedEmails %></div><div class="l">Failed emails</div></a>
 </div>
 <% if (lfdWatch.length) { %>
@@ -17,7 +18,7 @@
     <thead><tr><th>LFD</th><th>Ref</th><th>MBL / MAWB</th><th>Container</th><th>Pick-up at</th><th>Holds</th><th>Next step</th></tr></thead>
     <% lfdWatch.forEach(({ s, lfd, next }) => { %>
       <tr><td class="nowrap"><span class="badge lfd-<%= lfd.level %>"><%= lfd.date %> · <%= lfd.days < 0 ? `${-lfd.days}d over` : lfd.days === 0 ? 'TODAY' : `${lfd.days}d` %></span></td>
-        <td><a href="/shipments/<%= s.id %>"><b><%= s.ref_no %></b></a></td><td class="mono small"><%= s.mbl_no || '' %></td>
+        <td><a href="/shipments/<%= s.id %>"><b><%= S.fileName(s) %></b></a></td><td class="mono small"><%= s.mbl_no || '' %></td>
         <td class="mono small"><%= s.containers.map((c) => c.container_no).join(', ') %></td><td class="small"><%= s.cfs_location || '' %><%= s.firms_code ? ` (${s.firms_code})` : '' %></td>
         <td><% if (s.holds) { %><span class="badge EXAM"><%= s.holds %></span><% } %></td><td class="small"><b><%= next ? next.label : '' %></b></td></tr>
     <% }) %>
@@ -31,7 +32,7 @@
     <% active.slice(0, 12).forEach((s) => { const tr = S.tracking(s); %>
       <div style="padding:10px 0;border-bottom:1px solid var(--line)">
         <div style="display:flex;justify-content:space-between;gap:8px;align-items:center">
-          <div><a href="/shipments/<%= s.id %>"><b><%= s.ref_no %></b></a> · <%= S.MODES[s.mode].icon %> <%= S.MODES[s.mode].label %> · <%= s.customer_name || '—' %></div>
+          <div><a href="/shipments/<%= s.id %>"><b><%= S.fileName(s) %></b></a> · <%= S.MODES[s.mode].icon %> <%= S.MODES[s.mode].label %> · <%= s.customer_name || '—' %></div>
           <div class="chips"><span class="badge <%= s.status %>"><%= S.statusLabel(s.status) %></span><span class="badge <%= s.customs_status %>"><%= s.customs_status %></span></div>
         </div>
         <%- include('partials/trackbar', { s, tr, big: false }) %>
@@ -42,7 +43,7 @@
     <h2>Recent activity</h2>
     <ul class="timeline">
       <% events.forEach((e) => { %>
-        <li><a href="/shipments/<%= e.shipment_id %>"><%= e.ref_no %></a> — <%= e.message %><br><span class="when"><%= fmtDateTime(e.created_at) %> UTC</span></li>
+        <li><a href="/shipments/<%= e.shipment_id %>"><%= S.fileName(e) %></a> — <%= e.message %><br><span class="when"><%= fmtDateTime(e.created_at) %> UTC</span></li>
       <% }) %>
     </ul>
   </div>

@@ -10,8 +10,9 @@
 <form class="filters" method="get">
   <div class="seg">
     <a class="<%= filter === 'active' ? 'on' : '' %>" href="?filter=active">Active</a>
-    <a class="<%= filter === 'delivered' ? 'on' : '' %>" href="?filter=delivered">Delivered</a>
+    <a class="<%= filter === 'delivered' ? 'on' : '' %>" href="?filter=delivered"><%= isInternal ? 'Delivered (billing open)' : 'Delivered' %></a>
     <a class="<%= filter === 'all' ? 'on' : '' %>" href="?filter=all">All</a>
+    <% if (isInternal) { %><a class="<%= filter === 'history' ? 'on' : '' %>" href="?filter=history">History (closed)</a><% } %>
   </div>
   <input type="hidden" name="filter" value="<%= filter %>">
   <input name="q" value="<%= q %>" placeholder="Search PO, B/L, container…">
@@ -22,9 +23,11 @@
 <% cards.forEach(({ s, tr }) => { %>
   <a class="scard" href="/shipments/<%= s.id %>">
     <div class="top">
-      <div><span class="ref"><%= s.ref_no %></span> <span class="muted small">· <%= tr.mode.icon %> <%= tr.mode.label %></span></div>
+      <div><span class="ref"><%= S.fileName(s) %></span> <span class="muted small">· <%= tr.mode.icon %> <%= tr.mode.label %></span></div>
       <span class="badge <%= s.status %>"><%= S.statusLabel(s.status) %></span>
     </div>
+    <% const b = canAccounting && isInternal ? S.billingState(s) : null; if (b && b.code !== 'paid') { %>
+    <div style="margin:-2px 0 6px"><span class="badge bill-<%= b.level %>">💲 <%= b.label %><%= b.amount ? ` · $${fmtNum(b.amount, 2)}` : '' %></span></div><% } %>
     <%- include('../partials/trackbar', { s, tr, big: false }) %>
     <div class="facts">
       <div><span>Shipper</span><%= s.shipper_name || '—' %></div>

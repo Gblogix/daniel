@@ -22,7 +22,14 @@ router.get('/billing', auth.requireAccounting, (req, res) => {
     FROM payments p LEFT JOIN companies c ON c.id = p.company_id ORDER BY p.paid_on DESC, p.id DESC LIMIT 30`);
   const unsent = db.all(`SELECT i.*, c.name AS company_name, s.hbl_no FROM invoices i LEFT JOIN companies c ON c.id = i.company_id
     LEFT JOIN shipments s ON s.id = i.shipment_id WHERE i.kind IN ('AR','DN') AND i.sent_at IS NULL AND i.status = 'OPEN' ORDER BY c.name, i.number`);
-  res.render('billing/index', { title: 'Billing', aging, agents, payments, unsent, parties: parties() });
+  // Everyone we owe money to (vendor bills, agent credit notes), and everyone who owes us — for checkbox settlement.
+  const open = db.all(`SELECT c.id, c.name, c.type,
+      ROUND(SUM(CASE WHEN i.kind = 'AR' OR (i.kind = 'DN' AND i.total > 0) THEN ABS(i.total) - i.paid_amount ELSE 0 END), 2) AS due_to_us,
+      ROUND(SUM(CASE WHEN i.kind = 'AP' OR (i.kind = 'DN' AND i.total < 0) THEN ABS(i.total) - i.paid_amount ELSE 0 END), 2) AS due_to_them,
+      COUNT(*) AS n, MIN(i.due_date) AS oldest_due
+    FROM invoices i JOIN companies c ON c.id = i.company_id WHERE i.status = 'OPEN' GROUP BY c.id ORDER BY c.name`);
+  const vendors = open.filter((o) => o.due_to_them > 0);
+  res.render('billing/index', { title: 'Billing', aging, agents, payments, unsent, vendors, parties: parties() });
 });
 
 // ---------- invoice editor ----------
@@ -168,6 +175,50 @@ router.post('/billing/payments', auth.requireAccounting, (req, res) => {
   const r = A.recordPayment({ ...req.body, company_id: Number(req.body.company_id), allocations }, { userId: req.user.id });
   flash(req, 'ok', `Payment recorded${r.unapplied > 0 ? ` — USD ${r.unapplied} unapplied (no more open items)` : ''}`);
   res.redirect(req.body.back || '/billing');
+});
+
+// ---------- open items by party — check the items to settle ----------
+router.get('/billing/parties/:id', auth.requireAccounting, (req, res) => {
+  const party = store.db.get('SELECT * FROM companies WHERE id = ?', Number(req.params.id));
+  if (!party) return res.status(404).render('error', { title: 'Not found', message: 'Party not found.' });
+  const items = A.openItems(party.id);
+  const paid = store.db.all(`SELECT i.*, s.ref_no, s.shipper_name, s.hbl_no, s.mbl_no, s.mode,
+      (SELECT k.container_no FROM containers k WHERE k.shipment_id = s.id ORDER BY k.id LIMIT 1) AS first_ctn,
+      (SELECT COUNT(*) FROM containers k WHERE k.shipment_id = s.id) AS ctn_count
+    FROM invoices i LEFT JOIN shipments s ON s.id = i.shipment_id WHERE i.company_id = ? AND i.status = 'PAID' ORDER BY i.paid_at DESC, i.id DESC LIMIT 50`, party.id);
+  res.render('billing/party', { title: `Open items — ${party.name}`, party, items, paid });
+});
+router.post('/billing/parties/:id/settle', auth.requireAccounting, (req, res) => {
+  const companyId = Number(req.params.id);
+  const picked = arr(req.body.invoice_ids).map((id) => ({ invoice_id: Number(id), amount: req.body[`amt_${id}`] }));
+  if (!picked.length) { flash(req, 'err', 'Check at least one item'); return res.redirect(`/billing/parties/${companyId}`); }
+  const r = A.settleSelected({ company_id: companyId, items: picked, paid_on: req.body.paid_on, method: req.body.method, reference: req.body.reference, memo: req.body.memo }, { userId: req.user.id });
+  const fmt = (v) => v.toLocaleString('en-US', { minimumFractionDigits: 2 });
+  flash(req, 'ok', `${picked.length} item(s) settled — ${r.direction === 'IN' ? 'received' : 'paid'} USD ${fmt(r.amount)}${r.netted ? ` (USD ${fmt(r.netted)} offset by netting)` : ''}`);
+  res.redirect(`/billing/parties/${companyId}`);
+});
+
+// ---------- profit & loss by file ----------
+router.get('/billing/profit', auth.requireAccounting, async (req, res) => {
+  const month = /^\d{4}-\d{2}$/.test(req.query.month || '') ? req.query.month : '';
+  const from = month ? `${month}-01` : req.query.from || '';
+  const to = month ? `${month}-31` : req.query.to || '';
+  const f = { from, to, customerId: Number(req.query.customer) || null, stage: req.query.stage || '' };
+  const report = A.profitReport(f);
+  if (req.query.format === 'xlsx') {
+    const ExcelJS = require('exceljs');
+    const wb = new ExcelJS.Workbook();
+    const ws = wb.addWorksheet('P&L by file');
+    ws.addRow(['File', 'File no.', 'Customer', 'Mode', 'ETA', 'MBL', 'HBL', 'Revenue', 'Cost', 'Profit', 'Margin %', 'Closed']).font = { bold: true };
+    for (const r of report.rows) ws.addRow([S.fileName(r), r.ref_no, r.customer_name || '', r.mode, r.eta || '', r.mbl_no || '', r.hbl_no || '', r.revenue, r.cost, r.profit, r.margin, r.closed_at ? r.closed_at.slice(0, 10) : '']);
+    ws.addRow(['Total', '', '', '', '', '', '', report.total.revenue, report.total.cost, report.total.profit, report.total.margin]).font = { bold: true };
+    [8, 9, 10].forEach((c) => { ws.getColumn(c).numFmt = '#,##0.00;[Red]-#,##0.00'; ws.getColumn(c).width = 14; });
+    ws.getColumn(1).width = 36;
+    res.set('Content-Disposition', `attachment; filename="PL_by_file_${month || new Date().toISOString().slice(0, 10)}.xlsx"`);
+    return res.type('application/vnd.openxmlformats-officedocument.spreadsheetml.sheet').send(Buffer.from(await wb.xlsx.writeBuffer()));
+  }
+  const customers = store.db.all("SELECT id, name FROM companies WHERE type IN ('customer', 'importer') ORDER BY name");
+  res.render('billing/profit', { title: 'Profit & loss by file', report, q: { ...req.query, month }, customers });
 });
 
 // ---------- agent statement of account ----------

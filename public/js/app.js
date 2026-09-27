@@ -18,3 +18,31 @@ document.addEventListener('click', (e) => {
   const confirmEl = e.target.closest('[data-confirm]');
   if (confirmEl && !window.confirm(confirmEl.dataset.confirm)) e.preventDefault();
 });
+
+// Quick accounting entry on the shipment page: pick the usual party for the chosen type.
+document.querySelectorAll('[data-kind-select]').forEach((sel) => {
+  const party = sel.form.querySelector('select[name="company_id"]');
+  const apply = () => { const id = sel.dataset[sel.value.toLowerCase()]; if (id) party.value = id; };
+  sel.addEventListener('change', apply);
+  apply();
+});
+
+// Checkbox settlement: live total of the checked items.
+document.querySelectorAll('form[data-settle]').forEach((form) => {
+  const out = form.querySelector('[data-settle-total]');
+  const calc = () => {
+    let t = 0;
+    form.querySelectorAll('input[name="invoice_ids"]:checked').forEach((cb) => {
+      const amt = form.querySelector(`input[name="amt_${cb.value}"]`);
+      t += Number(String(amt ? amt.value : cb.dataset.balance).replace(/,/g, '')) * Number(cb.dataset.sign || 1) || 0;
+    });
+    out.textContent = t.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  };
+  form.addEventListener('input', calc);
+  form.addEventListener('change', calc);
+  form.querySelectorAll('[data-check-all]').forEach((all) => all.addEventListener('change', () => {
+    form.querySelectorAll(`input[name="invoice_ids"][data-group="${all.dataset.checkAll}"]`).forEach((cb) => { cb.checked = all.checked; });
+    calc();
+  }));
+  calc();
+});

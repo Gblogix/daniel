@@ -1,13 +1,15 @@
 <%- include('../partials/head') %>
 <div class="pagehead">
   <div>
-    <h1 style="margin-bottom:4px"><%= s.ref_no %> <span class="muted" style="font-weight:400">· <%= S.MODES[s.mode].icon %> <%= S.MODES[s.mode].label %></span></h1>
+    <h1 style="margin-bottom:4px"><%= S.fileName(s) %> <span class="muted" style="font-weight:400">· <%= S.MODES[s.mode].icon %> <%= S.MODES[s.mode].label %></span></h1>
+    <div class="muted small" style="margin-bottom:6px">File no. <span class="mono"><%= s.ref_no %></span><%= s.customer_name ? ` · ${s.customer_name}` : '' %></div>
     <div class="chips">
+      <% if (s.closed_at) { %><span class="badge closed">Closed <%= fmtDate(s.closed_at) %> · in history</span><% } %>
+      <% if (billing && !s.closed_at) { %><span class="badge bill-<%= billing.level %>"><%= billing.label %></span><% } %>
       <span class="badge <%= s.status %>"><%= S.statusLabel(s.status) %></span>
       <span class="badge <%= s.customs_status %>">Customs: <%= s.customs_status %></span>
       <% if (s.an_sent_at) { %><span class="badge SENT">A/N sent <%= fmtDate(s.an_sent_at) %></span><% } %>
       <% if (s.do_sent_at) { %><span class="badge SENT">D/O sent <%= fmtDate(s.do_sent_at) %></span><% } %>
-      <% if (canAccounting && s.invoice_amount) { %><span class="badge <%= s.paid ? 'paid' : 'unpaid' %>"><%= s.paid ? 'Paid' : 'Unpaid' %></span><% } %>
       <% if (s.holds) { %><span class="badge EXAM">Hold: <%= s.holds %></span><% } %>
       <% const lfd = S.lfdInfo(s); if (lfd) { %><span class="badge lfd-<%= lfd.level %>">LFD <%= lfd.date %></span><% } %>
     </div>
@@ -63,6 +65,70 @@
   <p class="muted small" style="margin:8px 0 0">Subject: <span class="mono">[A/N] MBL // HBL // Container // 40HC x 1 // ETA m/d // LFD m/d</span>. Re-issued documents are marked _Rev. Automatic sending rules are in Automation settings.</p>
 </div>
 
+<% if (canAccounting) { const m = (v) => fmtNum(v, 2); %>
+<div class="card" id="accounting">
+  <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap">
+    <h2 style="margin:0">Accounting — profit / loss for this file</h2>
+    <div class="actions">
+      <a class="btn secondary small" href="/invoices/new?kind=AR&shipment=<%= s.id %>">Full AR invoice form</a>
+      <a class="btn secondary small" href="/invoices/new?kind=DN&shipment=<%= s.id %>">Full D/N form</a>
+      <form method="post" action="/shipments/<%= s.id %>/close"><input type="hidden" name="_csrf" value="<%= csrf %>"><input type="hidden" name="closed" value="<%= s.closed_at ? '0' : '1' %>">
+        <button class="btn secondary small" data-confirm="<%= s.closed_at ? 'Reopen this file?' : 'Close this file and move it to Shipment history?' %>"><%= s.closed_at ? '↺ Reopen file' : '✔ Close file' %></button></form>
+    </div>
+  </div>
+  <div class="pl-tiles" style="margin-top:12px">
+    <div><span>Revenue (AR + D/N)</span><b><%= m(profit.revenue) %></b></div>
+    <div><span>Cost (vendor bills + agent credit)</span><b><%= m(profit.cost) %></b></div>
+    <div><span>Profit</span><b style="color:<%= profit.profit >= 0 ? 'var(--green)' : 'var(--red)' %>"><%= m(profit.profit) %></b></div>
+    <div><span>Margin</span><b><%= profit.margin != null ? `${profit.margin}%` : '—' %></b></div>
+  </div>
+  <% if (plLines.length) { %>
+  <div class="tablewrap"><table class="t small">
+    <thead><tr><th>Invoice</th><th>Party</th><th>Item</th><th class="right">Revenue</th><th class="right">Cost</th><th>Status</th></tr></thead>
+    <% let last = null; plLines.forEach((l) => { const first = l.invoice_id !== last; last = l.invoice_id; %>
+      <tr class="<%= first ? '' : 'sub' %>">
+        <td class="nowrap"><% if (first) { %><a href="/invoices/<%= l.invoice_id %>"><b><%= l.number %></b></a> <span class="muted"><%= { AR: 'AR', DN: l.invoice_total < 0 ? 'C/N' : 'D/N', AP: 'Vendor' }[l.kind] %></span><% } %></td>
+        <td><%= first ? (l.company_name || '') : '' %></td>
+        <td><%= l.description %><%= l.rate != null && l.qty != null ? ` (${fmtNum(l.rate, 2)} × ${l.qty})` : '' %></td>
+        <td class="right"><%= l.revenue ? m(l.revenue) : '' %></td><td class="right"><%= l.cost ? m(l.cost) : '' %></td>
+        <td class="nowrap"><% if (first) { %><span class="badge <%= l.status === 'PAID' ? 'paid' : 'unpaid' %>"><%= l.status %></span><%= l.status === 'OPEN' && l.paid_amount ? ` ${m(l.paid_amount)} paid` : '' %><%= l.kind !== 'AP' && l.status === 'OPEN' && !l.sent_at ? ' · not sent' : '' %><% } %></td>
+      </tr>
+    <% }) %>
+    <tr><td colspan="3" class="right"><b>Total</b></td><td class="right"><b><%= m(profit.revenue) %></b></td><td class="right"><b><%= m(profit.cost) %></b></td><td></td></tr>
+  </table></div>
+  <% } else { %><p class="muted small">No invoices or vendor bills on this file yet — add them below.</p><% } %>
+
+  <details <%= plLines.length ? '' : 'open' %> style="margin-top:12px"><summary><b>+ Add invoice / vendor bill to this file</b></summary>
+  <form method="post" action="/shipments/<%= s.id %>/accounting" style="margin-top:10px">
+    <input type="hidden" name="_csrf" value="<%= csrf %>">
+    <div class="grid g4">
+      <div class="field"><label>Type</label>
+        <select name="kind" data-kind-select data-ar="<%= s.customer_id || '' %>" data-dn="<%= s.agent_id || '' %>" data-ap="<%= s.trucker_id || '' %>">
+          <option value="AP">Vendor bill (cost) — trucker, broker, warehouse, carrier…</option>
+          <option value="AR">AR invoice to customer (revenue)</option>
+          <option value="DN">D/N to agent (revenue; negative = credit)</option>
+        </select></div>
+      <div class="field"><label>Party</label>
+        <select name="company_id" required><option value="">—</option>
+          <% acctParties.forEach((p) => { %><option value="<%= p.id %>" data-type="<%= p.type %>"><%= p.name %> (<%= p.type %>)</option><% }) %></select>
+        <span class="muted small">Customer: <%= s.customer_name || '—' %> · Agent: <%= s.agent_name || '—' %> · Trucker: <%= s.trucker_name || '—' %> · Broker: <%= s.broker_name || '—' %></span></div>
+      <div class="field"><label>Vendor invoice no. <span class="muted">(bills only — ours are numbered automatically)</span></label><input name="number" placeholder="e.g. CTC-7781"></div>
+      <div class="field"><label>Invoice date</label><input type="date" name="invoice_date" value="<%= new Date().toISOString().slice(0, 10) %>"></div>
+      <div class="field"><label>Terms (days)</label><input type="number" name="terms_days" placeholder="party default"></div>
+      <div class="field" style="grid-column: span 3"><label>Memo</label><input name="memo" placeholder="e.g. IPSY DELIVERY - 133 PLTS"></div>
+    </div>
+    <div class="tablewrap"><table class="t lines" data-lines="acct">
+      <thead><tr><th style="min-width:240px">Item</th><th>Rate</th><th>Qty</th><th>Amount</th><th></th></tr></thead>
+      <tbody><% [0, 1, 2].forEach(() => { %><tr>
+        <td><input name="l_desc" list="charge-codes"></td><td><input name="l_rate" style="width:100px"></td><td><input name="l_qty" style="width:60px"></td>
+        <td><input name="l_amount" placeholder="= rate × qty" style="width:120px"></td><td><button type="button" class="btn secondary small" data-remove-row>✕</button></td></tr><% }) %></tbody>
+    </table></div>
+    <datalist id="charge-codes"><% codes.forEach((c) => { %><option value="<%= c %>"><% }) %></datalist>
+    <div class="actions" style="margin-top:8px"><button type="button" class="btn secondary small" data-add-row="acct">+ Line</button><button class="btn">Save to this file</button></div>
+  </form></details>
+</div>
+<% } %>
+
 <div class="grid" style="grid-template-columns: minmax(0, 2fr) minmax(300px, 1fr); align-items: start">
   <form method="post" action="/shipments/<%= s.id %>">
     <input type="hidden" name="_csrf" value="<%= csrf %>">
@@ -71,18 +137,6 @@
   </form>
 
   <div>
-    <% if (canAccounting) { %><div class="card" id="billing"><h2>Billing</h2>
-      <table class="t small">
-        <% invoices.forEach((i) => { %><tr><td><a href="/invoices/<%= i.id %>"><%= i.number %></a></td><td><%= { AR: 'Invoice', DN: i.total < 0 ? 'C/N' : 'D/N', AP: 'Cost' }[i.kind] %></td>
-          <td><%= i.company_name || '' %></td><td class="right"><%= fmtNum(i.total, 2) %></td><td><span class="badge <%= i.status === 'PAID' ? 'paid' : i.status === 'VOID' ? 'FAILED' : 'unpaid' %>"><%= i.status %></span></td></tr><% }) %>
-      </table>
-      <% if (profit.revenue || profit.cost) { %><p class="small" style="margin:8px 0">Revenue <b><%= fmtNum(profit.revenue, 2) %></b> · Cost <b><%= fmtNum(profit.cost, 2) %></b> · Profit <b style="color:<%= profit.profit >= 0 ? 'var(--green)' : 'var(--red)' %>"><%= fmtNum(profit.profit, 2) %></b><%= profit.margin != null ? ` (${profit.margin}%)` : '' %></p><% } %>
-      <div class="actions" style="margin-top:8px">
-        <a class="btn secondary small" href="/invoices/new?kind=AR&shipment=<%= s.id %>">+ Invoice (AR)</a>
-        <a class="btn secondary small" href="/invoices/new?kind=DN&shipment=<%= s.id %>">+ D/N to agent</a>
-        <a class="btn secondary small" href="/invoices/new?kind=AP&shipment=<%= s.id %>">+ Cost (AP)</a>
-      </div>
-    </div><% } %>
     <div class="card"><h2>Clearance & release</h2><%- include('../partials/checklist', { s }) %></div>
     <div class="card" id="docs">
       <h2>Documents</h2>
@@ -131,7 +185,7 @@
 
     <% if (user.role === 'admin') { %>
       <form method="post" action="/shipments/<%= s.id %>/delete"><input type="hidden" name="_csrf" value="<%= csrf %>">
-        <button class="btn danger small" data-confirm="Delete shipment <%= s.ref_no %> and all its documents? This cannot be undone.">Delete shipment</button></form>
+        <button class="btn danger small" data-confirm="Delete shipment <%= S.fileName(s) %> (<%= s.ref_no %>) and all its documents? This cannot be undone.">Delete shipment</button></form>
     <% } %>
   </div>
 </div>

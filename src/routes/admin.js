@@ -86,6 +86,15 @@ router.post('/admin/tracking/run', auth.requireRole('admin'), async (req, res) =
   flash(req, 'ok', `Tracking: checked ${r.checked}, updated ${r.updated}, errors ${r.errors}`);
   res.redirect('/admin/settings');
 });
+router.post('/admin/reset', auth.requireRole('admin'), (req, res) => {
+  if (String(req.body.confirm || '').trim().toUpperCase() !== 'DELETE') {
+    flash(req, 'err', 'Type DELETE to confirm');
+    return res.redirect('/admin/settings#reset');
+  }
+  const r = require('../reset').clearData({ keepUserId: req.user.id });
+  flash(req, 'ok', `Test data removed — ${r.shipments} shipments, ${r.invoices} invoices, ${r.documents} files, ${r.users} demo logins. Parties, company profile and settings kept.`);
+  res.redirect('/dashboard');
+});
 router.post('/admin/settings', auth.requireRole('admin'), (req, res) => {
   for (const [k] of SETTINGS) store.db.setSetting(k, req.body[k] ? '1' : '0');
   flash(req, 'ok', 'Settings saved');

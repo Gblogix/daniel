@@ -1,0 +1,29 @@
+<%- include('../partials/head') %>
+<% const m = (v) => fmtNum(v, 2); const color = (v) => (v >= 0 ? 'var(--green)' : 'var(--red)'); %>
+<div class="pagehead"><h1>Profit &amp; loss by file</h1>
+  <div class="actions"><a class="btn secondary" href="/billing">← Billing</a>
+    <a class="btn secondary" href="?<%= new URLSearchParams({ ...q, format: 'xlsx' }).toString() %>">⬇ Excel</a></div>
+</div>
+<form class="filters" method="get">
+  <label class="small">Month (ETA) <input type="month" name="month" value="<%= q.month || '' %>"></label>
+  <select name="customer"><option value="">All customers</option><% customers.forEach((c) => { %><option value="<%= c.id %>" <%= String(q.customer) === String(c.id) ? 'selected' : '' %>><%= c.name %></option><% }) %></select>
+  <select name="stage"><option value="">Open + closed</option><option value="open" <%= q.stage === 'open' ? 'selected' : '' %>>Open files</option><option value="closed" <%= q.stage === 'closed' ? 'selected' : '' %>>Closed files</option></select>
+  <button class="btn secondary">Show</button>
+</form>
+<div class="pl-tiles">
+  <div><span>Revenue</span><b><%= m(report.total.revenue) %></b></div>
+  <div><span>Cost</span><b><%= m(report.total.cost) %></b></div>
+  <div><span>Profit</span><b style="color:<%= color(report.total.profit) %>"><%= m(report.total.profit) %></b></div>
+  <div><span>Margin · files</span><b><%= report.total.margin != null ? `${report.total.margin}%` : '—' %> · <%= report.rows.length %></b></div>
+</div>
+<div class="tablewrap"><table class="t">
+  <thead><tr><th>File (Shipper · Container)</th><th>Customer</th><th>ETA</th><th class="right">Revenue</th><th class="right">Cost</th><th class="right">Profit</th><th class="right">Margin</th><th></th></tr></thead>
+  <% if (!report.rows.length) { %><tr><td colspan="8" class="muted">No files with invoices in this period.</td></tr><% } %>
+  <% report.rows.forEach((r) => { %><tr>
+    <td><a href="/shipments/<%= r.id %>#accounting"><b><%= S.fileName(r) %></b></a><br><span class="muted small mono"><%= r.ref_no %></span></td>
+    <td><%= r.customer_name || '' %></td><td class="nowrap"><%= r.eta || '' %></td>
+    <td class="right"><%= m(r.revenue) %></td><td class="right"><%= m(r.cost) %></td>
+    <td class="right"><b style="color:<%= color(r.profit) %>"><%= m(r.profit) %></b></td><td class="right"><%= r.margin != null ? `${r.margin}%` : '' %></td>
+    <td><% if (r.closed_at) { %><span class="badge closed">Closed</span><% } %></td></tr><% }) %>
+</table></div>
+<%- include('../partials/foot') %>

@@ -30,4 +30,13 @@
   <form method="post" action="/admin/tracking/run" style="margin-top:10px"><input type="hidden" name="_csrf" value="<%= csrf %>">
     <button class="btn secondary small" <%= tracking.any ? '' : 'disabled' %>>↻ Refresh all active shipments now</button></form>
 </div>
+<div class="card" id="reset" style="max-width:760px;border-color:#fecaca">
+  <h2>Start fresh — remove test / demo data</h2>
+  <p class="small">Deletes <b>all shipments</b> with their documents, invoices, payments, document intakes and email log, plus the demo logins
+    (<span class="mono">*.example</span>, "(demo)"). Keeps admin accounts, parties (Unlockt, NSC, CTC…), company profile, numbering and settings.
+    If Smartsheet is connected, the next sync brings the real files back in. This cannot be undone.</p>
+  <form method="post" action="/admin/reset" class="actions"><input type="hidden" name="_csrf" value="<%= csrf %>">
+    <input name="confirm" placeholder="Type DELETE" style="width:160px" autocomplete="off">
+    <button class="btn danger" data-confirm="Delete all shipments and test data? This cannot be undone.">Delete test data</button></form>
+</div>
 <%- include('../partials/foot') %>

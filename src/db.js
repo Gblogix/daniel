@@ -300,7 +300,7 @@ const MIGRATIONS = {
     ams_bl_no: 'TEXT', customer_ref: 'TEXT', sub_bl_no: 'TEXT', it_no: 'TEXT', it_place: 'TEXT', it_date: 'TEXT',
     devan_location: 'TEXT', freight_location_tel: 'TEXT', available_date: 'TEXT', go_date: 'TEXT', final_destination: 'TEXT',
     service_term: 'TEXT', release_type: 'TEXT', consignee_address: 'TEXT', notify_address: 'TEXT', marks: 'TEXT',
-    agent_ref: 'TEXT',
+    agent_ref: 'TEXT', closed_at: 'TEXT', closed_by: 'INTEGER',
   },
   containers: {
     pickup_lfd: 'TEXT', available: 'INTEGER', holds: 'TEXT', discharged_at: 'TEXT', full_out_at: 'TEXT',

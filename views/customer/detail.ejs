@@ -1,7 +1,8 @@
 <%- include('../partials/head') %>
 <div class="pagehead">
   <div>
-    <h1 style="margin-bottom:4px"><%= s.ref_no %> <span class="muted" style="font-weight:400">· <%= tr.mode.icon %> <%= tr.mode.label %></span></h1>
+    <h1 style="margin-bottom:4px"><%= S.fileName(s) %> <span class="muted" style="font-weight:400">· <%= tr.mode.icon %> <%= tr.mode.label %></span></h1>
+    <div class="muted small" style="margin-bottom:6px">Ref. <span class="mono"><%= s.ref_no %></span></div>
     <div class="chips"><span class="badge <%= s.status %>"><%= S.statusLabel(s.status) %></span><span class="badge <%= s.customs_status %>">Customs: <%= s.customs_status %></span>
       <% if (s.customs_status === 'EXAM') { %><span class="badge EXAM">Customs exam</span><% } %></div>
   </div>

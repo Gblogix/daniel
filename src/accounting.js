@@ -117,10 +117,18 @@ function refreshStatus(id, db = store.db) {
   const full = Math.abs(inv.total) > 0 && paid >= round(Math.abs(inv.total)) - 0.005;
   db.run(`UPDATE invoices SET paid_amount = ?, status = ?, paid_at = CASE WHEN ? THEN COALESCE(paid_at, date('now')) ELSE NULL END WHERE id = ?`,
     paid, full ? 'PAID' : 'OPEN', full ? 1 : 0, id);
+  closeCheck(id, db);
+}
+
+/** Customer paid in full → the file closes and moves to Shipment history. */
+function closeCheck(invoiceId, db) {
+  const sid = db.get('SELECT shipment_id FROM invoices WHERE id = ?', invoiceId)?.shipment_id;
+  if (sid) require('./shipments').refreshClosed(sid, { db });
 }
 
 function voidInvoice(id, db = store.db) {
   db.run("UPDATE invoices SET status = 'VOID' WHERE id = ?", id);
+  closeCheck(id, db);
 }
 
 /** Which invoices a payment in this direction can settle. */
@@ -297,15 +305,91 @@ function arAging({ db = store.db, asOf = today() } = {}) {
   return [...by.values()].sort((a, b) => b.total - a.total);
 }
 
-/** Revenue / cost / profit for a shipment. D/N lines recover costs (revenue); credit notes and AP are costs. */
+/**
+ * Revenue / cost / profit for a shipment, line by line: AR lines and D/N debit lines are revenue (money due to us),
+ * AP lines and D/N credit lines (profit share / charges owed to the agent) are cost.
+ */
+function shipmentLines(shipmentId, db = store.db) {
+  return db.all(`SELECT l.*, i.id AS invoice_id, i.kind, i.number, i.status, i.invoice_date, i.due_date, i.sent_at, i.total AS invoice_total,
+      i.paid_amount, i.company_id, c.name AS company_name
+    FROM invoice_lines l JOIN invoices i ON i.id = l.invoice_id LEFT JOIN companies c ON c.id = i.company_id
+    WHERE i.shipment_id = ? AND i.status <> 'VOID' ORDER BY CASE i.kind WHEN 'AR' THEN 0 WHEN 'DN' THEN 1 ELSE 2 END, i.id, l.id`, shipmentId)
+    .map((l) => {
+      const cost = l.kind === 'AP' || (l.kind === 'DN' && l.side === 'CREDIT');
+      return { ...l, revenue: cost ? 0 : l.amount, cost: cost ? l.amount : 0 };
+    });
+}
+
 function shipmentProfit(shipmentId, db = store.db) {
-  const inv = db.all("SELECT kind, total FROM invoices WHERE shipment_id = ? AND status <> 'VOID'", shipmentId);
-  const revenue = round(inv.filter((i) => i.kind === 'AR' || (i.kind === 'DN' && i.total > 0)).reduce((a, i) => a + i.total, 0));
-  const cost = round(inv.filter((i) => i.kind === 'AP').reduce((a, i) => a + i.total, 0) - inv.filter((i) => i.kind === 'DN' && i.total < 0).reduce((a, i) => a + i.total, 0));
+  const lines = shipmentLines(shipmentId, db);
+  const revenue = round(lines.reduce((a, l) => a + l.revenue, 0));
+  const cost = round(lines.reduce((a, l) => a + l.cost, 0));
   return { revenue, cost, profit: round(revenue - cost), margin: revenue ? Math.round(((revenue - cost) / revenue) * 1000) / 10 : null };
+}
+
+/** Profit & loss per file for a period (by ETA, else created date), with totals. */
+function profitReport({ db = store.db, from, to, customerId, stage } = {}) {
+  const where = ['1=1']; const p = [];
+  if (from) { where.push('COALESCE(s.eta, date(s.created_at)) >= ?'); p.push(from); }
+  if (to) { where.push('COALESCE(s.eta, date(s.created_at)) <= ?'); p.push(to); }
+  if (customerId) { where.push('s.customer_id = ?'); p.push(customerId); }
+  if (stage === 'closed') where.push('s.closed_at IS NOT NULL');
+  if (stage === 'open') where.push('s.closed_at IS NULL');
+  const rows = db.all(`SELECT s.id, s.ref_no, s.mode, s.status, s.eta, s.shipper_name, s.hbl_no, s.mbl_no, s.closed_at, c.name AS customer_name,
+      (SELECT k.container_no FROM containers k WHERE k.shipment_id = s.id ORDER BY k.id LIMIT 1) AS first_ctn,
+      (SELECT COUNT(*) FROM containers k WHERE k.shipment_id = s.id) AS ctn_count
+    FROM shipments s LEFT JOIN companies c ON c.id = s.customer_id WHERE ${where.join(' AND ')}
+      AND EXISTS (SELECT 1 FROM invoices i WHERE i.shipment_id = s.id AND i.status <> 'VOID')
+    ORDER BY COALESCE(s.eta, s.created_at) DESC`, ...p).map((r) => ({ ...r, ...shipmentProfit(r.id, db) }));
+  const total = { revenue: round(rows.reduce((a, r) => a + r.revenue, 0)), cost: round(rows.reduce((a, r) => a + r.cost, 0)) };
+  total.profit = round(total.revenue - total.cost);
+  total.margin = total.revenue ? Math.round((total.profit / total.revenue) * 1000) / 10 : null;
+  return { rows, total };
+}
+
+/** Open items with a party, both ways, with their lines — for the checkbox settlement screen. */
+function openItems(companyId, db = store.db) {
+  const items = db.all(`SELECT i.*, s.ref_no, s.hbl_no, s.mbl_no, s.shipper_name, s.mode,
+      (SELECT k.container_no FROM containers k WHERE k.shipment_id = s.id ORDER BY k.id LIMIT 1) AS first_ctn,
+      (SELECT COUNT(*) FROM containers k WHERE k.shipment_id = s.id) AS ctn_count,
+      ROUND(ABS(i.total) - i.paid_amount, 2) AS balance
+    FROM invoices i LEFT JOIN shipments s ON s.id = i.shipment_id
+    WHERE i.company_id = ? AND i.status = 'OPEN' ORDER BY i.due_date, i.invoice_date, i.id`, companyId);
+  for (const i of items) i.lines = db.all('SELECT * FROM invoice_lines WHERE invoice_id = ? ORDER BY id', i.id);
+  const receivable = items.filter((i) => i.kind === 'AR' || (i.kind === 'DN' && i.total > 0));
+  const payable = items.filter((i) => i.kind === 'AP' || (i.kind === 'DN' && i.total < 0));
+  const sum = (a) => round(a.reduce((x, i) => x + i.balance, 0));
+  return { receivable, payable, dueToUs: sum(receivable), dueToThem: sum(payable) };
+}
+
+/**
+ * Settle the checked items. One side only → one payment allocated to exactly those items (amounts may be partial).
+ * Both sides checked → netting, then the difference as one payment.
+ */
+function settleSelected({ company_id, items, paid_on, method, reference, memo }, { db = store.db, userId = null } = {}) {
+  const picked = items.map((x) => ({ inv: db.get("SELECT * FROM invoices WHERE id = ? AND company_id = ? AND status = 'OPEN'", Number(x.invoice_id), company_id), amount: x.amount }))
+    .filter((x) => x.inv);
+  if (!picked.length) throw Object.assign(new Error('Select at least one open item'), { status: 400, expose: true });
+  const isIn = (i) => i.kind === 'AR' || (i.kind === 'DN' && i.total > 0);
+  const ins = picked.filter((x) => isIn(x.inv));
+  const outs = picked.filter((x) => !isIn(x.inv));
+  if (ins.length && outs.length) {
+    const r = settleNetting({ company_id, invoice_ids: picked.map((x) => x.inv.id), paid_on, reference, memo }, { db, userId });
+    return { direction: r.net >= 0 ? 'IN' : 'OUT', amount: Math.abs(r.net), netted: Math.min(r.receivable, r.payable) };
+  }
+  const direction = ins.length ? 'IN' : 'OUT';
+  const allocations = picked.map((x) => {
+    const bal = round(Math.abs(x.inv.total) - x.inv.paid_amount);
+    const amt = x.amount === '' || x.amount == null ? bal : Math.min(bal, round(String(x.amount).replace(/,/g, '')));
+    return { invoice_id: x.inv.id, amount: amt };
+  }).filter((a) => a.amount > 0);
+  const amount = round(allocations.reduce((a, x) => a + x.amount, 0));
+  recordPayment({ company_id, direction, amount, paid_on, method, reference, memo, allocations }, { db, userId });
+  return { direction, amount, netted: 0 };
 }
 
 module.exports = {
   CHARGE_CODES, saveInvoice, getInvoice, listInvoices, voidInvoice, recordPayment, settleNetting,
   agentStatement, arAging, shipmentProfit, refreshStatus, addDays, payOnAccount, applyUnapplied, unappliedPayments,
+  shipmentLines, profitReport, openItems, settleSelected,
 };

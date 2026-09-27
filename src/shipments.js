@@ -96,6 +96,7 @@ function update(id, input, { db = store.db } = {}) {
   if (changes.length) {
     const sets = changes.map((c) => `${c.field} = ?`).join(', ');
     db.run(`UPDATE shipments SET ${sets}, updated_at = datetime('now') WHERE id = ?`, ...changes.map((c) => c.to), id);
+    if (changes.some((c) => c.field === 'status')) refreshClosed(id, { db });
   }
   return changes;
 }
@@ -105,9 +106,18 @@ function addEvent(shipmentId, type, message, { db = store.db, userId = null, cus
     shipmentId, type, message, customerVisible ? 1 : 0, userId);
 }
 
+// Invoices that bring money in for a file: AR to the customer, D/N (debit balance) to the agent.
+const RECEIVABLE = "i.status <> 'VOID' AND (i.kind = 'AR' OR (i.kind = 'DN' AND i.total > 0))";
+
 const BASE_SELECT = `
   SELECT s.*, c.name AS customer_name, a.name AS agent_name, b.name AS broker_name, t.name AS trucker_name,
-         d.name AS delivery_company_name
+         d.name AS delivery_company_name,
+         (SELECT k.container_no FROM containers k WHERE k.shipment_id = s.id ORDER BY k.id LIMIT 1) AS first_ctn,
+         (SELECT COUNT(*) FROM containers k WHERE k.shipment_id = s.id) AS ctn_count,
+         (SELECT COUNT(*) FROM invoices i WHERE i.shipment_id = s.id AND ${RECEIVABLE}) AS bill_count,
+         (SELECT COUNT(*) FROM invoices i WHERE i.shipment_id = s.id AND ${RECEIVABLE} AND i.status = 'OPEN' AND i.sent_at IS NULL) AS bill_unsent,
+         (SELECT ROUND(SUM(ABS(i.total) - i.paid_amount), 2) FROM invoices i WHERE i.shipment_id = s.id AND ${RECEIVABLE} AND i.status = 'OPEN') AS bill_open,
+         (SELECT MIN(i.due_date) FROM invoices i WHERE i.shipment_id = s.id AND ${RECEIVABLE} AND i.status = 'OPEN') AS bill_due
   FROM shipments s
   LEFT JOIN companies c ON c.id = s.customer_id
   LEFT JOIN companies a ON a.id = s.agent_id
@@ -128,18 +138,23 @@ function scopeFor(user) {
   }
 }
 
-function list(user, { q, status, mode, active, db = store.db } = {}) {
+function list(user, { q, status, mode, active, stage, db = store.db } = {}) {
   const scope = scopeFor(user);
   const where = [scope.where];
   const params = [...scope.params];
   if (q) {
-    where.push(`(s.ref_no LIKE ? OR s.mbl_no LIKE ? OR s.hbl_no LIKE ? OR c.name LIKE ? OR s.shipper_name LIKE ?
+    where.push(`(s.ref_no LIKE ? OR s.mbl_no LIKE ? OR s.hbl_no LIKE ? OR c.name LIKE ? OR s.shipper_name LIKE ? OR s.sub_bl_no LIKE ?
+      OR s.agent_ref LIKE ? OR s.ci_invoice_no LIKE ?
       OR EXISTS (SELECT 1 FROM containers k WHERE k.shipment_id = s.id AND k.container_no LIKE ?))`);
-    params.push(...Array(6).fill(`%${q}%`));
+    params.push(...Array(9).fill(`%${q}%`));
   }
   if (status) { where.push('s.status = ?'); params.push(status); }
   if (mode) { where.push('s.mode = ?'); params.push(mode); }
-  if (active) where.push("s.status <> 'DELIVERED'");
+  if (active) stage = 'active';
+  if (stage === 'active') where.push("s.status <> 'DELIVERED' AND s.closed_at IS NULL");
+  if (stage === 'delivered') where.push("s.status = 'DELIVERED' AND s.closed_at IS NULL");
+  if (stage === 'open') where.push('s.closed_at IS NULL');
+  if (stage === 'closed') where.push('s.closed_at IS NOT NULL');
   const rows = db.all(`${BASE_SELECT} WHERE ${where.join(' AND ')} ORDER BY COALESCE(s.eta, s.created_at) DESC, s.id DESC`, ...params);
   const ids = rows.map((r) => r.id);
   if (ids.length) {
@@ -293,7 +308,83 @@ function tracking(s, now = new Date()) {
   return out;
 }
 
+// ---------- file name, billing state, closing ----------
+const COMPANY_SUFFIX = /[\s,.]*\b(CO\.?,?\s*LTD\.?|CO\.?|LTD\.?|LIMITED|INC\.?|CORP(ORATION)?\.?|LLC|L\.L\.C\.|COMPANY|INTERNATIONAL|INT'?L|TRADING|IMPORT AND EXPORT|주식회사|\(주\)|㈜)\s*$/i;
+
+/** Shipper name without the legal suffix: "Hanil Cosmetics Co., Ltd." → "HANIL COSMETICS". */
+function shortParty(name) {
+  let n = String(name || '').split('\n')[0].trim().toUpperCase();
+  for (let i = 0; i < 3; i += 1) n = n.replace(COMPANY_SUFFIX, '').trim();
+  n = n.replace(/[\s,.]+$/, '');
+  return n.length > 28 ? `${n.slice(0, 27).trim()}…` : n;
+}
+
+/**
+ * How staff name a file: shipper + container ("HANIL COSMETICS · TCLU1234567", "+1" for more boxes).
+ * Air / no container yet: shipper + HAWB / MAWB. Falls back to the file number (OI-11828) when nothing is known.
+ */
+function fileName(s) {
+  const shipper = shortParty(s.shipper_name);
+  const ctn = s.first_ctn || s.containers?.[0]?.container_no;
+  const count = s.ctn_count ?? s.containers?.length ?? 0;
+  const box = ctn ? `${ctn}${count > 1 ? ` +${count - 1}` : ''}` : (s.hbl_no || s.mbl_no || '');
+  const label = [shipper, box].filter(Boolean).join(' · ');
+  return label || s.ref_no;
+}
+
+/**
+ * Billing state of a file (accounting users only): closed, not invoiced yet after delivery, invoice not emailed,
+ * awaiting payment, overdue.
+ */
+function billingState(s, now = new Date()) {
+  if (s.closed_at) return { code: 'closed', label: 'Closed', level: 'paid' };
+  const delivered = s.status === 'DELIVERED';
+  if (!s.bill_count) return delivered ? { code: 'not_invoiced', label: 'Not invoiced', level: 'bad' } : null;
+  if (!s.bill_open) return { code: 'paid', label: 'Paid', level: 'paid' };
+  if (s.bill_unsent) return { code: 'unsent', label: 'Invoice not sent', level: 'warn', amount: s.bill_open };
+  const late = s.bill_due && s.bill_due < isoDay(todayUTC(now));
+  return late
+    ? { code: 'overdue', label: `Overdue since ${s.bill_due}`, level: 'bad', amount: s.bill_open }
+    : { code: 'awaiting', label: `Awaiting payment${s.bill_due ? ` · due ${s.bill_due}` : ''}`, level: 'warn', amount: s.bill_open };
+}
+
+/** active → delivered (billing open) → closed (customer paid; lives in Shipment history). */
+function stage(s) {
+  if (s.closed_at) return 'closed';
+  return s.status === 'DELIVERED' ? 'delivered' : 'active';
+}
+
+/**
+ * Close a delivered file once every invoice to the customer / agent is paid; reopen it if a new open invoice appears.
+ * Manually closed files stay closed. Returns 'closed' | 'reopened' | null.
+ */
+function refreshClosed(id, { db = store.db } = {}) {
+  const s = db.get('SELECT id, ref_no, status, closed_at, closed_by FROM shipments WHERE id = ?', id);
+  if (!s) return null;
+  const b = db.get(`SELECT COUNT(*) AS n, SUM(CASE WHEN i.status = 'OPEN' THEN 1 ELSE 0 END) AS open FROM invoices i
+    WHERE i.shipment_id = ? AND ${RECEIVABLE}`, id);
+  if (!s.closed_at && s.status === 'DELIVERED' && b.n > 0 && !b.open) {
+    db.run("UPDATE shipments SET closed_at = datetime('now'), closed_by = NULL WHERE id = ?", id);
+    addEvent(id, 'CLOSED', 'File closed — all invoices paid (moved to Shipment history)', { db, customerVisible: false });
+    return 'closed';
+  }
+  if (s.closed_at && s.closed_by == null && (b.open > 0 || s.status !== 'DELIVERED')) {
+    db.run('UPDATE shipments SET closed_at = NULL WHERE id = ?', id);
+    addEvent(id, 'REOPENED', 'File reopened — open invoice or not delivered', { db, customerVisible: false });
+    return 'reopened';
+  }
+  return null;
+}
+
+/** Manual close / reopen by accounting staff (e.g. no invoice needed, or written off). */
+function setClosed(id, closed, { db = store.db, userId = null } = {}) {
+  if (closed) db.run("UPDATE shipments SET closed_at = datetime('now'), closed_by = ? WHERE id = ?", userId || 0, id);
+  else db.run('UPDATE shipments SET closed_at = NULL, closed_by = NULL WHERE id = ?', id);
+  addEvent(id, closed ? 'CLOSED' : 'REOPENED', closed ? 'File closed manually' : 'File reopened', { db, userId, customerVisible: false });
+}
+
 module.exports = {
   MODES, STATUSES, STATUS_INDEX, CUSTOMS_STATUSES, HOLD_TYPES, EDITABLE_FIELDS, checklist, lfdInfo,
   statusLabel, normalizeInput, saveLines, nextRefNo, create, update, addEvent, list, find, scopeFor, tracking,
+  shortParty, fileName, billingState, stage, refreshClosed, setClosed, RECEIVABLE,
 };

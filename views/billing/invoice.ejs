@@ -7,7 +7,7 @@
       <span class="badge">Total <%= m(inv.total) %></span><span class="badge">Paid <%= m(inv.paid_amount) %></span>
       <% if (inv.sent_at) { %><span class="badge SENT">sent <%= fmtDate(inv.sent_at) %></span><% } %></div><% } %></div>
   <div class="actions">
-    <% if (s) { %><a class="btn secondary" href="/shipments/<%= s.id %>#billing">← <%= s.ref_no %></a><% } %>
+    <% if (s) { %><a class="btn secondary" href="/shipments/<%= s.id %>#accounting">← <%= S.fileName(s) %></a><% } %>
     <% if (!isNew && k !== 'AP') { %>
       <a class="btn secondary" href="/invoices/<%= inv.id %>/preview" target="_blank">Preview</a>
       <form method="post" action="/invoices/<%= inv.id %>/issue"><input type="hidden" name="_csrf" value="<%= csrf %>"><button class="btn secondary">Issue PDF</button></form>

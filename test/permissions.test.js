@@ -49,15 +49,27 @@ test('accounting pages: admin and accounting staff only', async () => {
     assert.equal((await get('/billing')).status, 200);
     assert.equal((await get(`/invoices/${invId}`)).status, 200);
     const page = await (await get(`/shipments/${s.id}`)).text();
-    assert.match(page, /id="billing"/);
+    assert.match(page, /id="accounting"/);
   }
   assert.equal((await staff('/billing')).status, 403);
   assert.equal((await staff(`/invoices/${invId}`)).status, 403);
   assert.equal((await staff(`/invoices/${invId}/preview`)).status, 403);
   assert.equal((await staff(`/documents/${docId}`)).status, 403);
   const staffPage = await (await staff(`/shipments/${s.id}`)).text();
-  assert.doesNotMatch(staffPage, /id="billing"|AR_INV\.pdf|href="\/billing"|Service price/);
-  assert.doesNotMatch(await (await staff('/dashboard')).text(), /Open AR invoices/);
+  assert.doesNotMatch(staffPage, /id="accounting"|bill-(warn|bad)|Not invoiced|AR_INV\.pdf|href="\/billing"|Service price/);
+  assert.doesNotMatch(await (await staff('/dashboard')).text(), /not invoiced|awaiting payment/i);
+  assert.match(await (await acct('/dashboard')).text(), /Delivered — not invoiced/);
+  for (const p of ['/billing/profit', `/billing/parties/${ids.ctc}`]) {
+    assert.equal((await admin(p)).status, 200, p);
+    assert.equal((await acct(p)).status, 200, p);
+    assert.equal((await staff(p)).status, 403, p);
+    assert.equal((await customer(p)).status, 403, p);
+  }
+  const staffHistory = await staff('/history');
+  assert.equal(staffHistory.status, 200);
+  assert.doesNotMatch(await staffHistory.text(), /Profit|Billing<\/th>/);
+  assert.doesNotMatch(await (await staff('/track?filter=delivered')).text(), /bill-(warn|bad)/);
+  assert.equal((await customer('/history')).status, 403);
 
   assert.equal((await customer(`/invoices/${invId}`)).status, 403);
   assert.equal((await customer(`/documents/${docId}`)).status, 403);

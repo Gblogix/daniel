@@ -1,0 +1,59 @@
+<%- include('../partials/head') %>
+<% const m = (v) => fmtNum(v, 2);
+   const kindLabel = (i) => ({ AR: 'Invoice', DN: i.total < 0 ? 'C/N' : 'D/N', AP: 'Vendor bill' }[i.kind]); %>
+<div class="pagehead">
+  <div><h1 style="margin-bottom:4px"><%= party.name %></h1>
+    <div class="chips"><span class="badge"><%= party.type %></span>
+      <% if (items.dueToUs) { %><span class="badge bill-warn">Owes us <%= m(items.dueToUs) %></span><% } %>
+      <% if (items.dueToThem) { %><span class="badge bill-bad">We owe <%= m(items.dueToThem) %></span><% } %></div></div>
+  <div class="actions"><a class="btn secondary" href="/billing">← Billing</a>
+    <% if (party.type === 'agent') { %><a class="btn secondary" href="/billing/agents/<%= party.id %>">Statement of account</a><% } %></div>
+</div>
+
+<form method="post" action="/billing/parties/<%= party.id %>/settle" data-settle>
+  <input type="hidden" name="_csrf" value="<%= csrf %>">
+  <% [['payable', 'We owe — vendor bills / credit notes', -1], ['receivable', 'Owed to us — invoices / debit notes', 1]].forEach(([key, heading, sign]) => { const list = items[key]; if (!list.length) return; %>
+  <div class="card">
+    <h2><%= heading %> <span class="muted small">(<%= list.length %>)</span></h2>
+    <div class="tablewrap"><table class="t">
+      <thead><tr><th><input type="checkbox" data-check-all="<%= key %>" title="Check all"></th><th>Invoice no.</th><th>Type</th><th>File (Shipper · Container)</th><th>Date</th><th>Due</th>
+        <th class="right">Total</th><th class="right">Paid</th><th class="right">Pay now</th></tr></thead>
+      <% list.forEach((i) => { const late = i.due_date && i.due_date < new Date().toISOString().slice(0, 10); %>
+        <tr class="inv-head">
+          <td><input type="checkbox" name="invoice_ids" value="<%= i.id %>" data-group="<%= key %>" data-balance="<%= i.balance %>" data-sign="<%= sign %>"></td>
+          <td class="nowrap"><a href="/invoices/<%= i.id %>"><%= i.number %></a></td><td><%= kindLabel(i) %></td>
+          <td><% if (i.shipment_id) { %><a href="/shipments/<%= i.shipment_id %>"><%= S.fileName(i) %></a> <span class="muted small mono"><%= i.ref_no %></span><% } else { %><span class="muted">—</span><% } %></td>
+          <td class="nowrap"><%= i.invoice_date %></td><td class="nowrap" style="<%= late ? 'color:var(--red)' : '' %>"><%= i.due_date || '' %></td>
+          <td class="right"><%= m(Math.abs(i.total)) %></td><td class="right"><%= i.paid_amount ? m(i.paid_amount) : '' %></td>
+          <td class="right"><input name="amt_<%= i.id %>" value="<%= i.balance %>" style="width:110px;text-align:right" title="Change for a partial payment"></td>
+        </tr>
+        <% i.lines.forEach((l) => { %><tr class="sub"><td></td><td></td><td colspan="4">↳ <%= l.description %><%= l.rate != null && l.qty != null ? ` (${m(l.rate)} × ${l.qty})` : '' %><%= i.kind === 'DN' && l.side === 'CREDIT' ? ' — credit' : '' %></td>
+          <td class="right"><%= m(l.amount) %></td><td></td><td></td></tr><% }) %>
+      <% }) %>
+    </table></div>
+  </div>
+  <% }) %>
+
+  <% if (items.receivable.length || items.payable.length) { %>
+  <div class="card">
+    <h2>Settle the checked items</h2>
+    <p class="small">Net of checked items: <b>USD <span data-settle-total>0.00</span></b> <span class="muted">(+ = they pay us, − = we pay them; checking both sides nets them off)</span></p>
+    <div class="grid g4">
+      <div class="field"><label>Date</label><input type="date" name="paid_on" value="<%= new Date().toISOString().slice(0, 10) %>"></div>
+      <div class="field"><label>Method</label><select name="method"><option>ACH</option><option>WIRE</option><option>CHECK</option><option>ZELLE</option></select></div>
+      <div class="field"><label>Reference</label><input name="reference" placeholder="ACH / check no."></div>
+      <div class="field"><label>Memo</label><input name="memo"></div>
+    </div>
+    <button class="btn" data-confirm="Record payment for the checked items?">✔ Mark checked items paid</button>
+  </div>
+  <% } else { %><div class="card muted">No open items with <%= party.name %>.</div><% } %>
+</form>
+
+<% if (paid.length) { %>
+<div class="card"><h2>Recently settled</h2>
+  <table class="t small"><thead><tr><th>Invoice no.</th><th>Type</th><th>File</th><th>Paid on</th><th class="right">Amount</th></tr></thead>
+    <% paid.forEach((i) => { %><tr><td><a href="/invoices/<%= i.id %>"><%= i.number %></a></td><td><%= kindLabel(i) %></td>
+      <td><% if (i.shipment_id) { %><a href="/shipments/<%= i.shipment_id %>"><%= S.fileName(i) %></a><% } %></td><td><%= i.paid_at || '' %></td><td class="right"><%= m(Math.abs(i.total)) %></td></tr><% }) %>
+  </table></div>
+<% } %>
+<%- include('../partials/foot') %>
