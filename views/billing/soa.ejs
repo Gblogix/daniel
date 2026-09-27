@@ -2,12 +2,40 @@
 <% const m = (v) => fmtNum(v, 2); %>
 <div class="pagehead"><div><h1 style="margin-bottom:4px">Statement of account — <%= agent.name %></h1>
   <div class="chips"><span class="badge">Due to us <%= m(soa.dueToUs) %></span><span class="badge">Due to agent <%= m(soa.dueToAgent) %></span>
+    <% if (soa.paidOnAccount) { %><span class="badge">Paid on account <%= m(soa.paidOnAccount) %></span><% } %>
+    <% if (soa.receivedOnAccount) { %><span class="badge">Received on account <%= m(soa.receivedOnAccount) %></span><% } %>
     <span class="badge <%= soa.net >= 0 ? 'paid' : 'unpaid' %>">Net <%= m(Math.abs(soa.net)) %> <%= soa.net >= 0 ? 'due to us' : 'we owe' %></span></div></div>
   <div class="actions">
     <a class="btn secondary" href="?all=<%= all ? '' : '1' %>"><%= all ? 'Open items only' : 'Include settled' %></a>
     <a class="btn secondary" href="/billing/agents/<%= agent.id %>/soa.xlsx">⬇ Excel</a>
     <form method="post" action="/billing/agents/<%= agent.id %>/send-soa"><input type="hidden" name="_csrf" value="<%= csrf %>"><button class="btn" data-confirm="Email the SOA to <%= agent.name %>?">✉ Email SOA</button></form>
     <a class="btn secondary" href="/invoices/new?kind=AP">+ Agent invoice (AP)</a>
+  </div>
+</div>
+<div class="grid g2" style="align-items:start;margin-bottom:14px">
+  <div class="card" style="margin:0">
+    <h3>Pay on account (when cash is available)</h3>
+    <form method="post" action="/billing/agents/<%= agent.id %>/pay">
+      <input type="hidden" name="_csrf" value="<%= csrf %>">
+      <div class="grid g2" style="gap:8px">
+        <div class="field"><label>Direction</label><select name="direction"><option value="OUT">We pay <%= agent.name %></option><option value="IN">Agent pays us</option></select></div>
+        <div class="field"><label>Amount (USD)</label><input name="amount" type="number" step="0.01" required></div>
+        <div class="field"><label>Date</label><input name="paid_on" type="date" value="<%= new Date().toISOString().slice(0, 10) %>"></div>
+        <div class="field"><label>Reference</label><input name="reference" placeholder="Wire ref."></div>
+      </div>
+      <label class="check"><input type="checkbox" name="net_first" value="1" checked> Offset open D/Ns first, then apply the cash oldest-first</label>
+      <p class="muted small">Any excess stays on account and is applied automatically to the next agent invoices.</p>
+      <button class="btn" data-confirm="Record this payment?">Record payment</button>
+    </form>
+  </div>
+  <div class="card" style="margin:0">
+    <h3>By month</h3>
+    <% if (!soa.months.length) { %><p class="muted small">Nothing open.</p><% } %>
+    <table class="t small"><tr><th>Month</th><th class="right">Due to us</th><th class="right">Due to agent</th><th class="right">Net</th><th>Guideline</th></tr>
+      <% const today = new Date().toISOString().slice(0, 10); soa.months.forEach((g) => { %><tr><td><%= g.month %> (<%= g.count %>)</td><td class="right"><%= m(g.dueToUs) %></td><td class="right"><%= m(g.dueToAgent) %></td>
+        <td class="right"><b><%= m(g.net) %></b></td><td class="<%= g.guideline < today ? '' : 'muted' %>" style="<%= g.guideline < today ? 'color:var(--amber)' : '' %>">by <%= g.guideline %></td></tr><% }) %>
+    </table>
+    <p class="muted small">Former rule: previous month paid by the 15th — shown for reference only.</p>
   </div>
 </div>
 <form method="post" action="/billing/agents/<%= agent.id %>/settle">

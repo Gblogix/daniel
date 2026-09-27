@@ -183,6 +183,13 @@ router.post('/billing/agents/:id/settle', auth.requireAccounting, (req, res) => 
   res.redirect(`/billing/agents/${req.params.id}`);
 });
 
+router.post('/billing/agents/:id/pay', auth.requireAccounting, (req, res) => {
+  const r = A.payOnAccount({ company_id: Number(req.params.id), direction: req.body.direction || 'OUT', amount: req.body.amount, paid_on: req.body.paid_on,
+    method: req.body.method, reference: req.body.reference, memo: req.body.memo, netFirst: Boolean(req.body.net_first) }, { userId: req.user.id });
+  flash(req, 'ok', `Recorded${r.netting ? ` — offset ${r.netting} of D/N first` : ''}${r.unapplied > 0 ? ` — ${r.unapplied} kept on account (applied to the next items)` : ''}`);
+  res.redirect(`/billing/agents/${req.params.id}`);
+});
+
 async function soaWorkbook(agent, soa) {
   const ExcelJS = require('exceljs');
   const wb = new ExcelJS.Workbook();
@@ -198,7 +205,15 @@ async function soaWorkbook(agent, soa) {
   ws.addRow([]);
   ws.addRow(['', '', '', '', '', '', 'Due to us', soa.dueToUs]).font = { bold: true };
   ws.addRow(['', '', '', '', '', '', 'Due to agent', soa.dueToAgent]).font = { bold: true };
-  ws.addRow(['', '', '', '', '', '', 'Net', soa.net]).font = { bold: true };
+  if (soa.paidOnAccount) ws.addRow(['', '', '', '', '', '', 'Paid on account (unapplied)', soa.paidOnAccount]).font = { bold: true };
+  if (soa.receivedOnAccount) ws.addRow(['', '', '', '', '', '', 'Received on account (unapplied)', soa.receivedOnAccount]).font = { bold: true };
+  ws.addRow(['', '', '', '', '', '', 'Net (+ due to GlobalBridge)', soa.net]).font = { bold: true };
+  if (soa.months.length) {
+    const wm = wb.addWorksheet('By month');
+    wm.addRow(['Month', 'Items', 'Due to us', 'Due to agent', 'Net', 'Guideline pay-by']).font = { bold: true };
+    for (const g of soa.months) wm.addRow([g.month, g.count, g.dueToUs, g.dueToAgent, g.net, g.guideline]);
+    [3, 4, 5].forEach((c) => { wm.getColumn(c).numFmt = '#,##0.00;[Red]-#,##0.00'; wm.getColumn(c).width = 14; });
+  }
   ws.columns.forEach((c, i) => { c.width = [11, 13, 13, 14, 20, 18, 11, 14, 11, 12, 12, 11][i] || 12; });
   [8, 9, 10, 11].forEach((c) => { ws.getColumn(c).numFmt = '#,##0.00;[Red]-#,##0.00'; });
   return wb.xlsx.writeBuffer();

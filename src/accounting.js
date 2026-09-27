@@ -84,6 +84,7 @@ function saveInvoice(data, { db = store.db, userId = null, id = null } = {}) {
         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`, id, l.mh, l.bl_no, l.description, l.unit, l.rate, l.qty, l.amount, l.pc, l.side);
     }
     refreshStatus(id, db);
+    if (row.company_id && (kind === 'AP' || kind === 'DN')) applyUnapplied(row.company_id, { db });
     return id;
   });
 }
@@ -185,6 +186,60 @@ function settleNetting({ company_id, invoice_ids, paid_on, reference, memo }, { 
   });
 }
 
+const allocated = (paymentId, db) => round(db.get('SELECT COALESCE(SUM(amount), 0) AS t FROM payment_allocations WHERE payment_id = ?', paymentId).t);
+
+/** Payments (non-netting) with money not yet applied to any item — e.g. a wire to NSC larger than the current bills. */
+function unappliedPayments(companyId, db = store.db) {
+  return db.all("SELECT * FROM payments WHERE company_id = ? AND method <> 'NETTING' ORDER BY paid_on, id", companyId)
+    .map((p) => ({ ...p, unapplied: round(p.amount - allocated(p.id, db)) })).filter((p) => p.unapplied > 0.004);
+}
+
+/** Apply on-account money to open items (oldest due first). Runs after new agent invoices / D/Ns are booked. */
+function applyUnapplied(companyId, { db = store.db } = {}) {
+  let applied = 0;
+  db.tx(() => {
+    for (const p of unappliedPayments(companyId, db)) {
+      let left = p.unapplied;
+      const open = db.all(`SELECT i.id, ROUND(ABS(i.total) - i.paid_amount, 2) AS bal FROM invoices i
+        WHERE i.company_id = ? AND i.status = 'OPEN' AND ${settles(p.direction)} ORDER BY i.due_date, i.id`, companyId);
+      for (const i of open) {
+        if (left <= 0) break;
+        const amt = round(Math.min(left, i.bal));
+        if (amt <= 0) continue;
+        db.run('INSERT INTO payment_allocations (payment_id, invoice_id, amount) VALUES (?, ?, ?)', p.id, i.id, amt);
+        refreshStatus(i.id, db);
+        left = round(left - amt); applied = round(applied + amt);
+      }
+    }
+  });
+  return applied;
+}
+
+/**
+ * Pay (or receive) on account whenever cash is available — the current practice with NSC.
+ * netFirst: offset all open D/Ns against what we owe before applying the cash. Any excess stays on account.
+ */
+function payOnAccount({ company_id, direction = 'OUT', amount, paid_on, method = 'WIRE', reference, memo, netFirst = true }, { db = store.db, userId = null } = {}) {
+  return db.tx(() => {
+    let netting = null;
+    if (netFirst) {
+      const open = db.all("SELECT id FROM invoices WHERE company_id = ? AND status = 'OPEN' AND kind IN ('DN', 'AP')", company_id).map((r) => r.id);
+      const recv = db.get("SELECT COALESCE(SUM(ABS(total) - paid_amount), 0) AS t FROM invoices WHERE company_id = ? AND status = 'OPEN' AND kind = 'DN' AND total > 0", company_id).t;
+      const pay = db.get("SELECT COALESCE(SUM(ABS(total) - paid_amount), 0) AS t FROM invoices WHERE company_id = ? AND status = 'OPEN' AND (kind = 'AP' OR (kind = 'DN' AND total < 0))", company_id).t;
+      const offset = round(Math.min(recv, pay));
+      if (offset > 0) {
+        const alloc = (dir) => db.all(`SELECT i.id AS invoice_id, ROUND(ABS(i.total) - i.paid_amount, 2) AS amount FROM invoices i
+          WHERE i.id IN (${open.join(',')}) AND ${settles(dir)} ORDER BY i.due_date, i.id`);
+        recordPayment({ company_id, direction: 'IN', amount: offset, paid_on, method: 'NETTING', reference, memo, allocations: alloc('IN') }, { db, userId });
+        recordPayment({ company_id, direction: 'OUT', amount: offset, paid_on, method: 'NETTING', reference, memo, allocations: alloc('OUT') }, { db, userId });
+        netting = offset;
+      }
+    }
+    const r = recordPayment({ company_id, direction, amount, paid_on, method, reference, memo }, { db, userId });
+    return { ...r, netting };
+  });
+}
+
 /** Agent statement of account: every open or recent item with signed amounts (+ due to us, − due to agent). */
 function agentStatement(companyId, { db = store.db, includePaid = false } = {}) {
   const rows = db.all(`SELECT i.*, s.ref_no, s.hbl_no, s.mbl_no, s.eta, s.etd, s.agent_ref AS ship_agent_ref, s.sub_bl_no
@@ -200,7 +255,28 @@ function agentStatement(companyId, { db = store.db, includePaid = false } = {}) 
   });
   const dueToUs = round(items.filter((i) => i.open > 0).reduce((a, i) => a + i.open, 0));
   const dueToAgent = round(-items.filter((i) => i.open < 0).reduce((a, i) => a + i.open, 0));
-  return { items, dueToUs, dueToAgent, net: round(dueToUs - dueToAgent) };
+  // Money on account: our unapplied payments reduce what we owe; the agent's reduce what they owe us.
+  const onAccount = unappliedPayments(companyId, db);
+  const paidOnAccount = round(onAccount.filter((p) => p.direction === 'OUT').reduce((a, p) => a + p.unapplied, 0));
+  const receivedOnAccount = round(onAccount.filter((p) => p.direction === 'IN').reduce((a, p) => a + p.unapplied, 0));
+  // Monthly view (by document month); the former rule was "last month's balance paid by the 15th of the next month".
+  const months = new Map();
+  for (const i of items.filter((x) => x.status === 'OPEN')) {
+    const m = String(i.invoice_date).slice(0, 7);
+    if (!months.has(m)) {
+      const [y, mo] = m.split('-').map(Number);
+      const guide = `${mo === 12 ? y + 1 : y}-${String(mo === 12 ? 1 : mo + 1).padStart(2, '0')}-15`;
+      months.set(m, { month: m, dueToUs: 0, dueToAgent: 0, net: 0, count: 0, guideline: guide });
+    }
+    const g = months.get(m);
+    if (i.open > 0) g.dueToUs = round(g.dueToUs + i.open); else g.dueToAgent = round(g.dueToAgent - i.open);
+    g.net = round(g.dueToUs - g.dueToAgent); g.count++;
+  }
+  return {
+    items, dueToUs, dueToAgent, paidOnAccount, receivedOnAccount, onAccount,
+    months: [...months.values()].sort((a, b) => a.month.localeCompare(b.month)),
+    net: round(dueToUs - dueToAgent + paidOnAccount - receivedOnAccount),
+  };
 }
 
 /** AR aging by customer: current / 1-30 / 31-60 / 61-90 / 90+ days past due. */
@@ -231,5 +307,5 @@ function shipmentProfit(shipmentId, db = store.db) {
 
 module.exports = {
   CHARGE_CODES, saveInvoice, getInvoice, listInvoices, voidInvoice, recordPayment, settleNetting,
-  agentStatement, arAging, shipmentProfit, refreshStatus, addDays,
+  agentStatement, arAging, shipmentProfit, refreshStatus, addDays, payOnAccount, applyUnapplied, unappliedPayments,
 };

@@ -94,3 +94,28 @@ test('blank terms on the form fall back to the customer default (Unlockt 25 days
   const pgp = A.getInvoice(A.saveInvoice({ kind: 'AR', company_id: ids.pgp, invoice_date: '2026-09-11', terms_days: '', lines: [{ description: 'X', amount: 1 }] }));
   assert.equal(pgp.terms_days, 0);
 });
+
+test('pay on account: offset D/Ns first, apply cash oldest-first, keep excess on account for the next bill', () => {
+  const agent = Number(db.run("INSERT INTO companies (name, type) VALUES ('AGENT X', 'agent')").lastInsertRowid);
+  const dn = A.saveInvoice({ kind: 'DN', company_id: agent, invoice_date: '2026-08-05', lines: [{ description: 'Trucking', amount: 300 }] });
+  const ap1 = A.saveInvoice({ kind: 'AP', company_id: agent, number: 'X-1', invoice_date: '2026-08-10', lines: [{ description: 'Ocean freight prepaid', amount: 1000 }] });
+  const ap2 = A.saveInvoice({ kind: 'AP', company_id: agent, number: 'X-2', invoice_date: '2026-09-02', lines: [{ description: 'Ocean freight prepaid', amount: 2000 }] });
+  let soa = A.agentStatement(agent);
+  assert.equal(soa.net, -2700);
+  assert.deepEqual(soa.months.map((g) => [g.month, g.net, g.guideline]), [['2026-08', -700, '2026-09-15'], ['2026-09', -2000, '2026-10-15']]);
+  const r = A.payOnAccount({ company_id: agent, direction: 'OUT', amount: 3000, netFirst: true });
+  assert.equal(r.netting, 300);
+  assert.equal(r.unapplied, 300); // 700 + 2000 owed after netting; 300 left on account
+  assert.equal(A.getInvoice(dn).status, 'PAID');
+  assert.equal(A.getInvoice(ap1).status, 'PAID');
+  assert.equal(A.getInvoice(ap2).status, 'PAID');
+  soa = A.agentStatement(agent);
+  assert.equal(soa.paidOnAccount, 300);
+  assert.equal(soa.net, 300); // prepaid: agent owes us back / credit on account
+  // the next agent bill consumes the on-account money automatically
+  const ap3 = A.saveInvoice({ kind: 'AP', company_id: agent, number: 'X-3', invoice_date: '2026-09-20', lines: [{ description: 'Ocean freight prepaid', amount: 500 }] });
+  assert.equal(A.getInvoice(ap3).paid_amount, 300);
+  soa = A.agentStatement(agent);
+  assert.equal(soa.paidOnAccount, 0);
+  assert.equal(soa.net, -200);
+});
