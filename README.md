@@ -36,6 +36,9 @@ Air · Ocean (FCL) · Ocean (LCL) · Inland trucking (CFS → CFS)
 
 ## Run it
 
+**Windows (easiest):** install Node.js 22 LTS, unzip, then double-click **`start-windows.bat`**.
+In PowerShell, `npm` may be blocked by the execution policy — use `npm.cmd` / `npx.cmd`, or Command Prompt (cmd).
+
 Requires Node.js 22.13+ (uses the built-in SQLite).
 
 ```bash
