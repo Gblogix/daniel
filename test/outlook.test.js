@@ -45,7 +45,8 @@ test('Outlook intake: agent email with PDF becomes an intake; unknown senders ig
   graph._reset();
   const pdf = fs.readFileSync(path.join(__dirname, 'fixtures', 'HBL_KMHB2410077.pdf'));
   const msgs = [
-    { id: 'm1', subject: 'HBL KMHB2410077', receivedDateTime: '2026-09-27T01:00:00Z', from: { emailAddress: { address: 'ops@twings.example' } },
+    { id: 'm1', subject: '[NSC/GLOBALBRIDGE] UB 3PL / BL#KMHB2410077', receivedDateTime: '2026-09-27T01:00:00Z', from: { emailAddress: { address: 'ops@twings.example' } },
+      body: { contentType: 'text', content: 'MBL: HDMUPUSA7788990  HBL: KMHB2410077\nCNTR: CSQU3054383\nETD BUS: 02-OCT-2026  ETA: 16-OCT-2026\nISF NO: TWS26050088' },
       attachments: [{ '@odata.type': '#microsoft.graph.fileAttachment', name: 'HBL_KMHB2410077.pdf', contentType: 'application/pdf', contentBytes: pdf.toString('base64') }] },
     { id: 'm2', subject: 'Newsletter', receivedDateTime: '2026-09-27T02:00:00Z', from: { emailAddress: { address: 'news@random.example' } },
       attachments: [{ '@odata.type': '#microsoft.graph.fileAttachment', name: 'x.pdf', contentType: 'application/pdf', contentBytes: pdf.toString('base64') }] },
@@ -57,8 +58,12 @@ test('Outlook intake: agent email with PDF becomes an intake; unknown senders ig
   assert.match(intake.note, /ops@twings.example/);
   const draft = JSON.parse(intake.extracted_json).draft;
   assert.equal(draft.hbl_no, 'KMHB2410077');
+  assert.equal(draft.isf_no, 'TWS26050088'); // only in the email body
+  assert.ok(store.db.get("SELECT 1 FROM documents WHERE intake_id = ? AND filename = 'email-body.txt'", intake.id));
   assert.equal(store.db.setting('mail_intake_since'), '2026-09-27T02:00:00Z');
   const r2 = await mailin.pollOnce({ fetchImpl: f });
   assert.equal(r2.imported, 0);
-  assert.match(decodeURIComponent(f.calls.find((c) => c.url.includes('messages')).url), /hasAttachments eq true/);
+  const list = f.calls.find((c) => c.url.includes('messages'));
+  assert.match(decodeURIComponent(list.url), /hasAttachments eq true/);
+  assert.equal(list.opts.headers.Prefer, 'outlook.body-content-type="text"');
 });

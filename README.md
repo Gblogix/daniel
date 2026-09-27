@@ -61,6 +61,7 @@ Notices are sent from `info@gblogix.com` through Microsoft Graph (they appear in
 
 `MS_MAIL_INTAKE=on` also imports agent emails with PDF/Excel attachments into **Document intake** (senders are matched
 to agents by email domain on the Parties page), so agents who keep emailing are handled too.
+The email text is read too (pre-alerts carry MBL / HBL / CNTR / ETD / ETA tables in the body).
 SMTP is supported as a fallback. With neither configured, emails are stored in **Outbox** as `LOGGED`.
 
 ## Tracking — carrier & GPS
@@ -84,11 +85,28 @@ Note: Terminal49 lists HMM as "partial" (tracks by MBL, not container).
 * Also read: firms code, freight location, LFD, C/I number & value, ISF no., telex release.
 * **AI (optional):** `ANTHROPIC_API_KEY` adds Claude's native PDF reading for scans and unusual layouts.
 
-## Documents
-Issued as PDF (needs Chromium; otherwise HTML) with the names used today:
-`ARRIVAL_NOTICE___FREIGHT_INVOICE_<ref>.pdf`, `Delivery_Order_<ref>.pdf`, `AUTH_HBL_<ref>.pdf`
-(ref = MAWB digits or MBL without SCAC; re-issues get `_Rev`, `_Rev2`). The A/N doubles as freight invoice (charges table).
-Air D/Os go out with the ATME. Layouts live in `src/docs/templates.js` — swap in the company forms when provided.
+## Documents (laid out after the current company forms)
+| Document | File name | Sent to |
+|---|---|---|
+| Arrival Notice / Freight Invoice | `ARRIVAL_NOTICE___FREIGHT_INVOICE_<HBL>.pdf` | importer / customer, broker (prints the customer's AR invoice) |
+| Delivery Order | `Delivery_Order _<HBL>.pdf` | trucker (CTC / Nextrade / Q-Trans) — POD signature block |
+| Authority to Make Entry | `AUTH_HBL_<HAWB>.pdf` | broker / pickup trucker (issued in the consignee's name) |
+| Invoice (AR) | `AR_INV12214_<Customer>.pdf` | customer billing email — batched "Invoice - <Customer>" |
+| Debit / Credit Note | `DC_DCN11664-<Agent>.pdf` | overseas agent (NSC) |
+
+PDF output needs Chromium (otherwise HTML). Re-issued shipment documents get `_Rev`, `_Rev2`.
+Company name, address, tel/fax, accounting contact and **payment instructions** are edited in **Admin › Company**
+(stored in the database only — keep bank details out of source control). Filing numbers continue the current sequence:
+`OI-#####` ocean import, `AI-#####` air import, `OTH#######` other; `INV-#####`, `DCN-#####` (next numbers editable).
+
+## Billing
+* **AR invoices** per shipment; bill-to can be a sister entity (Unlockt / Heyhae / PGP), Ship To = importer (e.g. Solvenza).
+  Customer default terms (Unlockt 25 days, PGP 0) set on the Parties page. Batch email per customer.
+* **D/N / C/N to agents** (cost recovery; can start from the shipment's AP costs), **AP** vendor bills → shipment profit.
+* **Payments**: one ACH can be applied across many invoices (oldest first); AR aging (current / 30 / 60 / 90 / 90+).
+* **Agent statement of account** (NSC): open debit notes, credit notes and agent invoices with running balance and
+  "sent to agent" date; select items to settle by netting (the rest is carried forward); Excel export / email.
+* Customers see their invoices under **Invoices** in the portal.
 
 ## Daily LFD watch
 Dashboard lists shipments with LFD ≤ 5 days (holds + next step); a 7:00 digest email goes to the office mailbox.
@@ -101,7 +119,8 @@ src/shipments.js         shipment model, statuses, tracking-bar math, access sco
 src/extract/             PDF (text + OCR + tables), rule-based + optional AI extraction, merge
 src/tracking/            Terminal49, ShipsGo, DCSA carrier APIs, AIS vessel position, poller
 src/graph.js, mailin.js  Outlook send + email intake        src/alerts.js  daily LFD digest
-src/docs/pdf.js          HTML → PDF (Chromium)
+src/docs/pdf.js          HTML → PDF (Chromium)          src/accounting.js  invoices, D/N, payments, SOA, aging
+src/company.js           company profile + document numbering
 src/notify.js            outbox, email bodies, automation rules
 src/docs/templates.js    A/N, D/O, ATME
 src/routes/              auth, shipments, intake (portal), customer tracking, admin
@@ -113,6 +132,8 @@ views/                   EJS pages      public/  CSS/JS
 * [ ] Set `SESSION_SECRET`, `BASE_URL` (https)
 * [ ] Outlook app registration (`MS_*`), tracking API keys
 * [ ] Install Chromium for PDF output
+* [ ] Admin › Company: payment instructions, next filing / invoice numbers (continue from OPUS)
+* [ ] Parties: billing emails and payment terms per customer / agent
 * [ ] Back up `data/` and `uploads/`
 
 ## Next steps

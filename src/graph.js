@@ -24,11 +24,11 @@ async function getToken(fetchImpl = fetch) {
   return token.value;
 }
 
-async function graph(path, { method = 'GET', body, fetchImpl = fetch } = {}) {
+async function graph(path, { method = 'GET', body, fetchImpl = fetch, headers = {} } = {}) {
   const t = await getToken(fetchImpl);
   const res = await fetchImpl(`https://graph.microsoft.com/v1.0${path}`, {
     method,
-    headers: { Authorization: `Bearer ${t}`, ...(body ? { 'Content-Type': 'application/json' } : {}) },
+    headers: { Authorization: `Bearer ${t}`, ...(body ? { 'Content-Type': 'application/json' } : {}), ...headers },
     body: body ? JSON.stringify(body) : undefined,
   });
   if (res.status === 202 || res.status === 204) return null;
@@ -60,10 +60,11 @@ async function listInboxWithAttachments(since, { fetchImpl, folder = config.grap
   const filter = `hasAttachments eq true and receivedDateTime ge ${since}`;
   const path = `/users/${encodeURIComponent(config.graph.mailbox)}/mailFolders/${encodeURIComponent(folder)}/messages`
     + `?$filter=${encodeURIComponent(filter)}&$orderby=receivedDateTime asc&$top=25`
-    + '&$select=id,subject,from,receivedDateTime,bodyPreview&$expand=attachments';
-  const data = await graph(path, { fetchImpl });
+    + '&$select=id,subject,from,receivedDateTime,bodyPreview,body&$expand=attachments';
+  // Plain-text body: pre-alerts carry the MBL / HBL / CNTR / ETD / ETA table in the email itself.
+  const data = await graph(path, { fetchImpl, headers: { Prefer: 'outlook.body-content-type="text"' } });
   return (data?.value || []).map((m) => ({
-    id: m.id, subject: m.subject, receivedAt: m.receivedDateTime, preview: m.bodyPreview,
+    id: m.id, subject: m.subject, receivedAt: m.receivedDateTime, preview: m.bodyPreview, body: m.body?.content || '',
     from: m.from?.emailAddress?.address?.toLowerCase() || '',
     attachments: (m.attachments || [])
       .filter((a) => a['@odata.type'] === '#microsoft.graph.fileAttachment' && a.contentBytes)

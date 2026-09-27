@@ -40,6 +40,13 @@ async function pollOnce({ db = store.db, fetchImpl, now = new Date() } = {}) {
       fs.writeFileSync(p, a.content);
       return { path: p, originalname: a.filename, mimetype: a.mime || '', size: a.content.length, slot: 'OTHER' };
     });
+    // The email text itself (subject + body) is read like a document: NSC puts MBL / HBL / CNTR / ETD / ETA tables there.
+    if ((m.body || '').trim()) {
+      const p = path.join(dir, crypto.randomBytes(16).toString('hex'));
+      const text = `${m.subject}\n\n${m.body}`;
+      fs.writeFileSync(p, text);
+      saved.push({ path: p, originalname: 'email-body.txt', mimetype: 'text/plain', size: Buffer.byteLength(text), slot: 'OTHER' });
+    }
     const intakeId = await processUpload(saved, { userId: null, agentId: agent.id, note: `Email from ${m.from}: ${m.subject}`, db });
     db.run('INSERT INTO mail_imports (message_id, intake_id, sender, subject) VALUES (?, ?, ?, ?)', m.id, intakeId, m.from, m.subject);
     imported++;
