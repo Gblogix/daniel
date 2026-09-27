@@ -12,20 +12,39 @@
   <a class="brand" href="/">GB Logix <span>GlobalBridge Logistics</span></a>
   <nav class="nav">
     <% const on = (p) => path === p || path.startsWith(p + '/') ? 'on' : ''; %>
-    <% if (isInternal) { %>
+    <% if (isInternal) {
+      const group = (label, match, cols) => ({ label, on: match.some((m) => path === m || path.startsWith(m + '/')), cols });
+      const menus = [
+        group('Shipments', ['/shipments', '/track', '/history'], [
+          ['Files', [['Shipment list (open)', '/shipments'], ['New shipment', '/shipments/new'], ['Active — before delivery', '/shipments?stage=active'],
+            ['Delivered — billing open', '/shipments?stage=delivered'], ['History (closed)', '/history']]],
+          ['Tracking', [['Tracking board', '/track'], ['Arrivals / LFD watch', '/dashboard#lfd'], ['Delivered cards', '/track?filter=delivered']]],
+        ]),
+        group('Documents', ['/intakes', '/portal', '/outbox'], [
+          ['Intake', [['Document intake (review)', '/intakes'], ['Upload documents', '/portal']]],
+          ['Email', [['Outbox / sent notices', '/outbox']]],
+        ]),
+        ...(canAccounting ? [group('Accounting', ['/billing', '/invoices'], [
+          ['Operation', [['A/R invoice entry', '/invoices/new?kind=AR'], ['A/P vendor bill entry', '/invoices/new?kind=AP'], ['Debit / credit note (agent)', '/invoices/new?kind=DN']]],
+          ['Banking', [['Check & settle / payments', '/billing#payables'], ['Record payment', '/billing#pay'], ['Agent statement (SOA)', '/billing#agents']]],
+          ['Report', [['AR aging', '/billing#aging'], ['P&L by file', '/billing/profit'], ['Delivered — not invoiced', '/shipments?stage=delivered&bill=not_invoiced'],
+            ['Invoiced — not paid', '/shipments?stage=delivered&bill=unpaid'], ['Recent payments', '/billing#payments']]],
+        ])] : []),
+        group('Master', ['/companies', '/admin'], [
+          ['Master code', [['Parties (customers, agents, vendors)', '/companies']]],
+          ...(user.role === 'admin' ? [['Administration', [['Users & access', '/admin/users'], ['Automation / Smartsheet / tracking', '/admin/settings'], ['Company profile & numbering', '/admin/company']]]] : []),
+        ]),
+      ]; %>
       <a class="<%= on('/dashboard') %>" href="/dashboard">Dashboard</a>
-      <a class="<%= on('/shipments') %>" href="/shipments">Shipments</a>
-      <a class="<%= on('/track') %>" href="/track">Tracking board</a>
-      <a class="<%= on('/history') %>" href="/history">History</a>
-      <a class="<%= on('/intakes') %>" href="/intakes">Document intake</a>
-      <% if (canAccounting) { %><a class="<%= on('/billing') %>" href="/billing">Billing</a><% } %>
-      <a class="<%= on('/companies') %>" href="/companies">Parties</a>
-      <a class="<%= on('/outbox') %>" href="/outbox">Outbox</a>
-      <% if (user.role === 'admin') { %>
-        <a class="<%= on('/admin/users') %>" href="/admin/users">Users</a>
-        <a class="<%= on('/admin/settings') %>" href="/admin/settings">Automation</a>
-        <a class="<%= on('/admin/company') %>" href="/admin/company">Company</a>
-      <% } %>
+      <% menus.forEach((m) => { %>
+        <div class="menu">
+          <button type="button" class="menu-btn <%= m.on ? 'on' : '' %>"><%= m.label %> <span class="caret">▾</span></button>
+          <div class="drop">
+            <% m.cols.forEach(([head, links]) => { %><div class="col"><div class="head"><%= head %></div>
+              <% links.forEach(([label, href]) => { %><a href="<%= href %>"><%= label %></a><% }) %></div><% }) %>
+          </div>
+        </div>
+      <% }) %>
     <% } else if (user.role === 'customer') { %>
       <a class="<%= on('/track') %>" href="/track">My shipments</a>
     <% } else if (user.role === 'agent') { %>

@@ -4,7 +4,7 @@
   <div class="actions"><a class="btn secondary" href="/billing/profit">📊 P&amp;L by file</a><a class="btn" href="/invoices/new?kind=AR">+ AR invoice</a><a class="btn secondary" href="/invoices/new?kind=DN">+ D/N to agent</a><a class="btn secondary" href="/invoices/new?kind=AP">+ Vendor bill (AP)</a></div>
 </div>
 
-<div class="card">
+<div class="card" id="aging">
   <h2>Accounts receivable — aging</h2>
   <% if (!aging.length) { %><p class="muted small">No open invoices.</p><% } else { %>
   <div class="tablewrap"><table class="t">
@@ -22,7 +22,7 @@
   </table></div><% } %>
 </div>
 
-<div class="card">
+<div class="card" id="payables">
   <h2>Accounts payable — vendors &amp; agents we owe</h2>
   <% if (!vendors.length) { %><p class="muted small">No open vendor bills.</p><% } else { %>
   <table class="t"><thead><tr><th>Vendor</th><th>Type</th><th class="right">We owe</th><th class="right">They owe us</th><th>Oldest due</th><th></th></tr></thead>
@@ -33,7 +33,7 @@
 </div>
 
 <div class="grid g2" style="align-items:start">
-  <div class="card">
+  <div class="card" id="agents">
     <h2>Agents — statement of account</h2>
     <% if (!agents.length) { %><p class="muted small">No open D/N or agent invoices.</p><% } %>
     <table class="t">
@@ -42,7 +42,7 @@
         <td class="right"><b style="color:<%= a.soa.net >= 0 ? 'var(--green)' : 'var(--red)' %>"><%= m(Math.abs(a.soa.net)) %></b><br><span class="small"><%= a.soa.net >= 0 ? 'net due to us' : 'net we owe' %></span></td></tr><% }) %>
     </table>
   </div>
-  <div class="card">
+  <div class="card" id="pay">
     <h2>Record payment</h2>
     <form method="post" action="/billing/payments">
       <input type="hidden" name="_csrf" value="<%= csrf %>">
@@ -60,7 +60,7 @@
   </div>
 </div>
 
-<div class="card">
+<div class="card" id="payments">
   <h2>Recent payments</h2>
   <table class="t"><thead><tr><th>Date</th><th>Party</th><th>Dir</th><th>Method</th><th>Reference</th><th class="right">Amount</th><th>Items</th></tr></thead>
     <% payments.forEach((p) => { %><tr><td><%= p.paid_on %></td><td><%= p.company_name || '' %></td><td><%= p.direction %></td><td><%= p.method || '' %></td><td class="small"><%= p.reference || '' %></td><td class="right"><%= m(p.amount) %></td><td><%= p.n %></td></tr><% }) %>

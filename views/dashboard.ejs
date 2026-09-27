@@ -2,17 +2,21 @@
 <div class="pagehead"><h1>Dashboard</h1>
   <div class="actions"><a class="btn" href="/shipments/new">+ New shipment</a><a class="btn secondary" href="/portal">Upload documents</a></div>
 </div>
-<div class="grid g7" style="margin-bottom:18px">
-  <a class="kpi" href="/shipments"><div class="n"><%= kpi.active %></div><div class="l">Active shipments</div></a>
-  <a class="kpi" href="/track"><div class="n"><%= kpi.arriving %></div><div class="l">Arriving in 7 days</div></a>
-  <a class="kpi <%= kpi.intakes ? 'warn' : '' %>" href="/intakes"><div class="n"><%= kpi.intakes %></div><div class="l">Docs to review</div></a>
-  <a class="kpi <%= kpi.exam ? 'bad' : '' %>" href="/shipments"><div class="n"><%= kpi.exam %></div><div class="l">Customs exam / hold</div></a>
-  <% if (kpi.notInvoiced != null) { %><a class="kpi <%= kpi.notInvoiced ? 'bad' : '' %>" href="/shipments?stage=delivered&bill=not_invoiced"><div class="n"><%= kpi.notInvoiced %></div><div class="l">Delivered — not invoiced</div></a>
-  <a class="kpi <%= kpi.awaiting ? 'warn' : '' %>" href="/shipments?stage=delivered&bill=unpaid"><div class="n"><%= kpi.awaiting %></div><div class="l">Invoiced — awaiting payment</div></a><% } %>
-  <a class="kpi <%= kpi.failedEmails ? 'bad' : '' %>" href="/outbox"><div class="n"><%= kpi.failedEmails %></div><div class="l">Failed emails</div></a>
+<div class="kpi-strip">
+  <a href="/shipments?stage=active"><b><%= kpi.active %></b><span>Active</span></a>
+  <a href="/track"><b><%= kpi.arriving %></b><span>Arriving 7d</span></a>
+  <a class="<%= kpi.lfd ? 'bad' : '' %>" href="#lfd"><b><%= kpi.lfd %></b><span>LFD ≤ 1d</span></a>
+  <a class="<%= kpi.intakes ? 'warn' : '' %>" href="/intakes"><b><%= kpi.intakes %></b><span>Docs to review</span></a>
+  <a class="<%= kpi.exam ? 'bad' : '' %>" href="/shipments?stage=active"><b><%= kpi.exam %></b><span>Exam / hold</span></a>
+  <% if (kpi.notInvoiced != null) { %>
+  <a class="<%= kpi.notInvoiced ? 'bad' : '' %>" href="/shipments?stage=delivered&bill=not_invoiced"><b><%= kpi.notInvoiced %></b><span>Not invoiced</span></a>
+  <a class="<%= kpi.awaiting ? 'warn' : '' %>" href="/shipments?stage=delivered&bill=unpaid"><b><%= kpi.awaiting %></b><span>Awaiting payment</span></a>
+  <% } %>
+  <a class="<%= kpi.failedEmails ? 'bad' : '' %>" href="/outbox"><b><%= kpi.failedEmails %></b><span>Failed emails</span></a>
+</div></a>
 </div>
 <% if (lfdWatch.length) { %>
-<div class="card">
+<div class="card" id="lfd">
   <h2>⏰ LFD watch — pick up before storage starts</h2>
   <div class="tablewrap"><table class="t">
     <thead><tr><th>LFD</th><th>Ref</th><th>MBL / MAWB</th><th>Container</th><th>Pick-up at</th><th>Holds</th><th>Next step</th></tr></thead>

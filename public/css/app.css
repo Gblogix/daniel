@@ -20,7 +20,7 @@ h3 { font-size: 15px; margin: 0 0 8px; }
 .topbar { background: var(--navy); color: #fff; display: flex; align-items: center; gap: 20px; padding: 0 20px; height: 56px; position: sticky; top: 0; z-index: 10; }
 .brand { font-weight: 700; font-size: 17px; color: #fff; letter-spacing: .3px; white-space: nowrap; }
 .brand span { color: #9ec1ff; font-weight: 500; }
-.nav { display: flex; gap: 4px; flex: 1; overflow-x: auto; }
+.nav { display: flex; gap: 4px; flex: 1; align-items: center; }
 .nav a { color: #dbe7ff; padding: 7px 12px; border-radius: 6px; white-space: nowrap; }
 .nav a:hover, .nav a.on { background: rgba(255,255,255,.14); color: #fff; text-decoration: none; }
 .who { display: flex; align-items: center; gap: 10px; font-size: 13px; color: #dbe7ff; white-space: nowrap; }
@@ -205,3 +205,32 @@ table.t .right, table.t th.right { text-align: right; }
 tr.inv-head td { background: #f8fafc; font-weight: 600; }
 tr.sub td { color: #475569; font-size: 12px; }
 @media (max-width: 700px) { .pl-tiles { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+
+/* Grouped drop-down menus (OPUS style) */
+.menu { position: relative; }
+.menu-btn { background: transparent; border: 0; color: #dbe7ff; padding: 7px 10px; border-radius: 6px; font: inherit; font-size: 13.5px; cursor: pointer; white-space: nowrap; }
+.menu-btn .caret { font-size: 10px; opacity: .8; }
+.menu-btn:hover, .menu-btn.on, .menu:focus-within .menu-btn { background: rgba(255,255,255,.14); color: #fff; }
+.menu .drop { display: none; position: absolute; top: calc(100% + 6px); left: 0; background: #fff; border: 1px solid #c7d4ea; border-radius: 8px;
+  box-shadow: 0 10px 28px rgba(15, 23, 42, .18); padding: 6px 0; z-index: 50; white-space: nowrap; }
+.menu .drop::before { content: ''; position: absolute; top: -8px; left: 0; right: 0; height: 8px; }
+.menu:hover .drop, .menu:focus-within .drop { display: flex; }
+.menu .col { min-width: 190px; padding: 0 6px; border-left: 1px solid var(--line); }
+.menu .col:first-child { border-left: 0; }
+.menu .head { color: var(--navy); font-weight: 700; font-size: 12.5px; padding: 8px 10px 6px; border-bottom: 1px dashed #c7d4ea; margin-bottom: 4px; }
+.menu .drop a { display: block; color: #1e3a8a; padding: 6px 10px; border-radius: 5px; font-size: 13px; }
+.menu .drop a:hover { background: var(--soft); text-decoration: none; }
+@media (max-width: 760px) {
+  .nav { flex-wrap: wrap; }
+  .menu .drop { flex-direction: column; left: auto; right: auto; max-width: calc(100vw - 32px); }
+}
+
+/* Dashboard summary: every number in one strip */
+.kpi-strip { display: flex; background: var(--card); border: 1px solid var(--line); border-radius: var(--radius); margin-bottom: 18px; overflow-x: auto; }
+.kpi-strip a { flex: 1; min-width: 104px; padding: 8px 12px; border-left: 1px solid var(--line); display: flex; align-items: baseline; gap: 8px; color: var(--ink); }
+.kpi-strip a:first-child { border-left: 0; }
+.kpi-strip a:hover { background: var(--soft); text-decoration: none; }
+.kpi-strip b { font-size: 20px; color: var(--navy); }
+.kpi-strip span { font-size: 11.5px; color: var(--muted); line-height: 1.2; }
+.kpi-strip .warn b { color: var(--amber); }
+.kpi-strip .bad b { color: var(--red); }
