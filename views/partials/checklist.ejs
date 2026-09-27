@@ -1,0 +1,14 @@
+<% const steps = S.checklist(s); const lfd = S.lfdInfo(s); %>
+<div class="checklist">
+  <% if (lfd) { %>
+    <div class="lfd <%= lfd.level %>">LFD <b><%= lfd.date %></b> ·
+      <%= lfd.days < 0 ? `${-lfd.days} day(s) past — storage accruing` : lfd.days === 0 ? 'TODAY' : `${lfd.days} day(s) left` %></div>
+  <% } %>
+  <ol>
+    <% steps.forEach((st) => { %>
+      <li class="<%= st.done ? 'done' : st.next ? 'next' : '' %>"><span class="tick"><%= st.done ? '✔' : st.next ? '➜' : '' %></span>
+        <%= st.label %><% if (st.note) { %> <span class="badge EXAM"><%= st.note %></span><% } %>
+        <% if (st.date && st.done) { %><span class="muted small"> · <%= fmtDateTime(st.date) %></span><% } %></li>
+    <% }) %>
+  </ol>
+</div>

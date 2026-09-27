@@ -164,6 +164,39 @@ CREATE TABLE IF NOT EXISTS emails (
   sent_at TEXT
 );
 
+CREATE TABLE IF NOT EXISTS charges (
+  id INTEGER PRIMARY KEY,
+  shipment_id INTEGER NOT NULL REFERENCES shipments(id) ON DELETE CASCADE,
+  description TEXT NOT NULL,
+  amount REAL NOT NULL DEFAULT 0,
+  created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+-- Milestones received from tracking providers (carrier APIs, aggregators).
+CREATE TABLE IF NOT EXISTS tracking_events (
+  id INTEGER PRIMARY KEY,
+  shipment_id INTEGER NOT NULL REFERENCES shipments(id) ON DELETE CASCADE,
+  container_no TEXT,
+  event TEXT NOT NULL,          -- e.g. vessel_departed, vessel_arrived, discharged, full_out, empty_in
+  classifier TEXT,             -- ACT (actual) | EST (estimated) | PLN (planned)
+  event_time TEXT,
+  location TEXT,
+  vessel TEXT,
+  voyage TEXT,
+  source TEXT,
+  created_at TEXT NOT NULL DEFAULT (datetime('now')),
+  UNIQUE (shipment_id, container_no, event, classifier, event_time)
+);
+
+-- Outlook messages already imported into Document intake.
+CREATE TABLE IF NOT EXISTS mail_imports (
+  message_id TEXT PRIMARY KEY,
+  intake_id INTEGER REFERENCES intakes(id),
+  sender TEXT,
+  subject TEXT,
+  created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
 CREATE TABLE IF NOT EXISTS settings (
   key TEXT PRIMARY KEY,
   value TEXT
@@ -176,10 +209,39 @@ CREATE TABLE IF NOT EXISTS sessions (
 );
 `;
 
+// Columns added after the first release; applied to existing databases on startup.
+const MIGRATIONS = {
+  shipments: {
+    scac: 'TEXT', direct_shipment: 'INTEGER NOT NULL DEFAULT 0', isf_no: 'TEXT', telex_release: 'INTEGER NOT NULL DEFAULT 0',
+    firms_code: 'TEXT', entry_no: 'TEXT', css_no: 'TEXT', holds: 'TEXT', cargo_value: 'REAL', ci_invoice_no: 'TEXT',
+    freight_paid: 'INTEGER NOT NULL DEFAULT 0', carrier_released: 'INTEGER NOT NULL DEFAULT 0', storage_start: 'TEXT',
+    available_for_pickup: 'INTEGER', pickup_appt: 'TEXT', picked_up_at: 'TEXT', pallets: 'INTEGER',
+    pod_received: 'INTEGER NOT NULL DEFAULT 0', empty_returned_at: 'TEXT', original_eta: 'TEXT',
+    tracking_provider: 'TEXT', tracking_ref: 'TEXT', tracking_status: 'TEXT', tracking_error: 'TEXT', tracking_checked_at: 'TEXT',
+    tracking_enabled: 'INTEGER NOT NULL DEFAULT 1',
+    vessel_imo: 'TEXT', vessel_mmsi: 'TEXT', vessel_lat: 'REAL', vessel_lon: 'REAL', vessel_speed: 'REAL',
+    vessel_course: 'REAL', vessel_pos_at: 'TEXT', vessel_destination: 'TEXT',
+  },
+  containers: {
+    pickup_lfd: 'TEXT', available: 'INTEGER', holds: 'TEXT', discharged_at: 'TEXT', full_out_at: 'TEXT',
+    empty_returned_at: 'TEXT', current_status: 'TEXT', location: 'TEXT',
+  },
+  cargo_items: { unit_price: 'REAL', amount: 'REAL' },
+};
+
+function migrate(db) {
+  for (const [table, cols] of Object.entries(MIGRATIONS)) {
+    const have = new Set(db.prepare(`PRAGMA table_info(${table})`).all().map((c) => c.name));
+    for (const [col, type] of Object.entries(cols)) if (!have.has(col)) db.exec(`ALTER TABLE ${table} ADD COLUMN ${col} ${type}`);
+  }
+}
+
 const DEFAULT_SETTINGS = {
   auto_send_docs_received: '1', // docs applied -> customer update + broker packet (A/N, HBL, PL, CI)
   auto_send_do: '1',            // customs released -> D/O to trucker
   auto_notify_status: '1',      // status / ETA / delivery changes -> customer
+  auto_tracking: '1',           // poll carrier / GPS tracking and update ETD/ETA automatically
+  lfd_alerts: '1',              // daily LFD / pickup digest to staff
 };
 
 function open(file = config.dbPath) {
@@ -187,6 +249,7 @@ function open(file = config.dbPath) {
   const db = new DatabaseSync(file);
   db.exec('PRAGMA journal_mode = WAL; PRAGMA foreign_keys = ON;');
   db.exec(SCHEMA);
+  migrate(db);
   const insert = db.prepare('INSERT OR IGNORE INTO settings (key, value) VALUES (?, ?)');
   for (const [k, v] of Object.entries(DEFAULT_SETTINGS)) insert.run(k, v);
   return wrap(db);

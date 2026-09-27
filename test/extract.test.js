@@ -94,8 +94,8 @@ test('merged PDF (C/I + P/L) is split and table lines are read from the PDF', as
   const parts = await extractFile({ buffer: fs.readFileSync(fx('CI_PL_HC-2410-07.pdf')), filename: 'CI_PL_HC-2410-07.pdf', mime: 'application/pdf' });
   assert.deepEqual(parts.map((p) => [p.doc_type, p.pages]), [['CI', [1]], ['PL', [2]]]);
   const [ci, pl] = parts;
-  assert.equal(ci.invoice_no, 'HC-2410-07');
-  assert.equal(ci.invoice_amount, 90000);
+  assert.equal(ci.ci_invoice_no, 'HC-2410-07');
+  assert.equal(ci.cargo_value, 90000);
   assert.deepEqual(ci.items.map((i) => [i.description, i.quantity, i.unit, i.amount]), [
     ['Hydrating Toner 200ml', 12000, 'PCS', 25200], ['Vitamin C Serum 30ml', 14400, 'PCS', 50400], ['Sheet Mask (10pk)', 3600, 'BOX', 14400]]);
   assert.deepEqual(pl.items.map((i) => [i.po_no, i.packages, i.weight_kg, i.cbm]), [

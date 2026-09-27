@@ -1,7 +1,7 @@
 /**
  * Email outbox + automation rules (the red arrows on the whiteboard).
- * Every email is stored in the `emails` table; it is actually sent when SMTP is configured,
- * otherwise it is marked LOGGED so staff can review it in the Outbox.
+ * Every email is stored in the `emails` table and sent through Outlook (Microsoft Graph) or SMTP;
+ * with neither configured it is marked LOGGED so staff can review it in the Outbox.
  */
 const fs = require('node:fs');
 const path = require('node:path');
@@ -76,15 +76,23 @@ async function queueEmail({ shipmentId = null, kind, to, cc = [], subject, html,
 
 async function deliver(emailId, { db = store.db } = {}) {
   const e = db.get('SELECT * FROM emails WHERE id = ?', emailId);
-  const t = getTransport();
-  if (!t) {
-    db.run("UPDATE emails SET status = 'LOGGED', error = 'SMTP not configured' WHERE id = ?", emailId);
+  if (config.mailTransport === 'log') {
+    db.run("UPDATE emails SET status = 'LOGGED', error = 'Email sending not configured (Outlook / SMTP)' WHERE id = ?", emailId);
     return;
   }
   try {
-    const attachments = JSON.parse(e.attachments_json || '[]')
+    const files = JSON.parse(e.attachments_json || '[]')
       .filter((a) => a.path && fs.existsSync(a.path)).map((a) => ({ filename: a.filename, path: a.path }));
-    await t.sendMail({ from: config.smtp.from, to: e.to_addr, cc: e.cc_addr || undefined, subject: e.subject, html: e.body_html, attachments });
+    const to = e.to_addr.split(/,\s*/).filter(Boolean);
+    const cc = (e.cc_addr || '').split(/,\s*/).filter(Boolean);
+    if (config.mailTransport === 'outlook') {
+      await require('./graph').sendMail({
+        to, cc, subject: e.subject, html: e.body_html,
+        attachments: files.map((f) => ({ filename: f.filename, content: fs.readFileSync(f.path) })),
+      });
+    } else {
+      await getTransport().sendMail({ from: config.smtp.from, to, cc: cc.length ? cc : undefined, subject: e.subject, html: e.body_html, attachments: files });
+    }
     db.run("UPDATE emails SET status = 'SENT', error = NULL, sent_at = datetime('now') WHERE id = ?", emailId);
   } catch (err) {
     db.run("UPDATE emails SET status = 'FAILED', error = ? WHERE id = ?", String(err.message).slice(0, 500), emailId);

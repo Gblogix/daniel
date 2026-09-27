@@ -109,6 +109,10 @@ router.get('/intakes/:id', auth.requireInternal, (req, res) => {
   // Pre-fill: existing shipment values, overridden by what the documents say.
   const s = { mode: draft.mode || 'FCL', status: 'BOOKED', customs_status: 'PENDING', ...(target || {}), agent_id: target?.agent_id || intake.agent_id };
   for (const [k, v] of Object.entries(draft)) if (S.EDITABLE_FIELDS.includes(k) && v != null && v !== '') s[k] = v;
+  if (draft.freight_location && !s.cfs_location) s.cfs_location = draft.freight_location;
+  if (draft.telex_release) s.telex_release = 1;
+  if (draft.mode === 'AIR' && draft.mbl_no && !draft.hbl_no) s.direct_shipment = 1;
+  const sources = { ...(draft.sources || {}), ...(draft.sources?.freight_location ? { cfs_location: draft.sources.freight_location } : {}) };
   s.containers = draft.containers?.length ? draft.containers : target?.containers || [];
   s.items = draft.items?.length ? draft.items : target?.items || [];
   if (!target && draft.consignee_name) {
@@ -123,7 +127,7 @@ router.get('/intakes/:id', auth.requireInternal, (req, res) => {
     deliveries: db.all("SELECT id, name FROM companies WHERE type = 'delivery' ORDER BY name"),
   };
   const openShipments = db.all("SELECT id, ref_no, mbl_no, hbl_no FROM shipments WHERE status <> 'DELIVERED' ORDER BY id DESC LIMIT 200");
-  res.render('intakes/review', { title: `Intake #${intake.id}`, intake, draft, perDoc, docs, target, s, openShipments, ...lists });
+  res.render('intakes/review', { title: `Intake #${intake.id}`, intake, draft, perDoc, docs, target, s, sources, openShipments, ...lists });
 });
 
 router.post('/intakes/:id/apply', auth.requireInternal, async (req, res) => {

@@ -1,0 +1,20 @@
+<% if (s.vessel_lat != null && s.vessel_lon != null) { %>
+  <div class="vesselmap" id="vmap-<%= s.id %>" data-lat="<%= s.vessel_lat %>" data-lon="<%= s.vessel_lon %>" data-course="<%= s.vessel_course ?? '' %>"
+    data-label="<%= s.vessel || 'Vessel' %>"></div>
+  <div class="muted small" style="margin-top:6px">📡 <b><%= s.vessel || 'Vessel' %></b> · <%= Number(s.vessel_lat).toFixed(3) %>, <%= Number(s.vessel_lon).toFixed(3) %>
+    <% if (s.vessel_speed != null) { %> · <%= s.vessel_speed %> kn<% } %><% if (s.vessel_destination) { %> · to <%= s.vessel_destination %><% } %>
+    · position <%= fmtDateTime(s.vessel_pos_at) %> UTC</div>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.css">
+  <script src="https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.js"></script>
+  <script>
+    (function () {
+      var el = document.getElementById('vmap-<%= s.id %>');
+      if (!window.L || !el) return;
+      var lat = +el.dataset.lat, lon = +el.dataset.lon;
+      var map = L.map(el, { scrollWheelZoom: false, worldCopyJump: true }).setView([lat, lon], 4);
+      L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 12, attribution: '&copy; OpenStreetMap' }).addTo(map);
+      var icon = L.divIcon({ className: 'ship-pin', html: '<span style="display:inline-block;transform:rotate(' + ((+el.dataset.course || 90) - 90) + 'deg)">➤</span>', iconSize: [28, 28] });
+      L.marker([lat, lon], { icon: icon }).addTo(map).bindPopup(el.dataset.label);
+    })();
+  </script>
+<% } %>

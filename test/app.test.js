@@ -33,7 +33,8 @@ test('customers only see their own shipments', () => {
   const pgp = { role: 'customer', company_id: ids.pgp };
   const staff = { role: 'staff' };
   const all = S.list(staff);
-  assert.equal(all.length, 3);
+  assert.equal(all.length, 5);
+  assert.ok(S.list({ role: 'customer', company_id: ids.leepop }).every((s) => s.customer_id === ids.leepop));
   assert.ok(S.list(unlockt).every((s) => s.customer_id === ids.unlockt));
   assert.equal(S.list(pgp).length, 1);
   const pgpShipment = S.list(pgp)[0];
@@ -69,6 +70,7 @@ test('customs released -> D/O to trucker automatically', async () => {
 test('automation can be switched off', async () => {
   store.db.setSetting('auto_send_do', '0');
   const s = S.list({ role: 'staff' }).find((x) => x.mode === 'LCL');
+  assert.ok(s);
   const changes = S.update(s.id, { customs_status: 'RELEASED' });
   await notify.onShipmentChanged(s.id, changes);
   assert.equal(store.db.all("SELECT 1 FROM emails WHERE shipment_id = ? AND kind = 'DELIVERY_ORDER'", s.id).length, 0);
@@ -82,5 +84,5 @@ test('unchanged save reports no changes', () => {
 
 test('ref numbers are sequential per month', () => {
   const ref = S.nextRefNo(store.db);
-  assert.match(ref, /^GBL-\d{4}-0004$/);
+  assert.match(ref, /^GBL-\d{4}-0006$/);
 });

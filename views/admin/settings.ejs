@@ -5,8 +5,20 @@
   <% settings.forEach((st) => { %>
     <label class="check" style="padding:8px 0;border-bottom:1px solid var(--line)"><input type="checkbox" name="<%= st.k %>" value="1" <%= st.on ? 'checked' : '' %>> <%= st.label %></label>
   <% }) %>
-  <p class="muted small">Email delivery: <b><%= config.smtp.host ? `SMTP ${config.smtp.host}` : 'not configured — emails are stored in the Outbox only' %></b> ·
+  <p class="muted small">Email delivery: <b><%= config.mailTransport === 'outlook' ? `Outlook / Microsoft 365 (${config.graph.mailbox})` : config.mailTransport === 'smtp' ? `SMTP ${config.smtp.host}` : 'not configured — emails are stored in the Outbox only' %></b> ·
     AI extraction: <b><%= config.ai.enabled ? `on (${config.ai.model})` : 'off — rule-based extraction' %></b></p>
   <button class="btn">Save</button>
 </form>
+<div class="card" style="max-width:760px">
+  <h2>Tracking sources</h2>
+  <table class="t">
+    <tr><th>Ocean — carrier APIs (DCSA)</th><td><%= tracking.dcsa.length ? tracking.dcsa.join(', ') : 'not configured (DCSA_CARRIERS)' %></td></tr>
+    <tr><th>Ocean — Terminal49</th><td><%= tracking.terminal49 ? '✔ connected' : 'not configured (TERMINAL49_API_KEY)' %></td></tr>
+    <tr><th>Ocean + Air — ShipsGo</th><td><%= tracking.shipsgo ? '✔ connected' : 'not configured (SHIPSGO_API_KEY)' %></td></tr>
+    <tr><th>Vessel GPS — Datalastic</th><td><%= tracking.datalastic ? '✔ connected' : 'not configured (DATALASTIC_API_KEY)' %></td></tr>
+    <tr><th>Vessel GPS — aisstream.io</th><td><%= tracking.aisstream ? '✔ connected (coastal, by MMSI)' : 'not configured (AISSTREAM_API_KEY)' %></td></tr>
+  </table>
+  <form method="post" action="/admin/tracking/run" style="margin-top:10px"><input type="hidden" name="_csrf" value="<%= csrf %>">
+    <button class="btn secondary small" <%= tracking.any ? '' : 'disabled' %>>↻ Refresh all active shipments now</button></form>
+</div>
 <%- include('../partials/foot') %>

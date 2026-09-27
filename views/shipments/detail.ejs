@@ -8,6 +8,8 @@
       <% if (s.an_sent_at) { %><span class="badge SENT">A/N sent <%= fmtDate(s.an_sent_at) %></span><% } %>
       <% if (s.do_sent_at) { %><span class="badge SENT">D/O sent <%= fmtDate(s.do_sent_at) %></span><% } %>
       <% if (s.invoice_amount) { %><span class="badge <%= s.paid ? 'paid' : 'unpaid' %>"><%= s.paid ? 'Paid' : 'Unpaid' %></span><% } %>
+      <% if (s.holds) { %><span class="badge EXAM">Hold: <%= s.holds %></span><% } %>
+      <% const lfd = S.lfdInfo(s); if (lfd) { %><span class="badge lfd-<%= lfd.level %>">LFD <%= lfd.date %></span><% } %>
     </div>
   </div>
   <div class="actions">
@@ -18,6 +20,29 @@
 <div class="card">
   <%- include('../partials/trackbar', { s, tr, big: true }) %>
   <%- include('../partials/steps', { tr }) %>
+</div>
+
+<div class="card" id="tracking">
+  <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap">
+    <h2 style="margin:0">Carrier / GPS tracking</h2>
+    <form method="post" action="/shipments/<%= s.id %>/track"><input type="hidden" name="_csrf" value="<%= csrf %>">
+      <button class="btn secondary small" <%= trackingStatus.any ? '' : 'disabled title="No tracking provider configured — see Automation"' %>>↻ Refresh tracking now</button></form>
+  </div>
+  <dl class="trackinfo" style="margin:10px 0 0">
+    <dt>Source</dt><dd><%= s.tracking_provider ? { terminal49: 'Terminal49', shipsgo: 'ShipsGo', dcsa: `Carrier API (${s.scac || ''})` }[s.tracking_provider] : (trackingStatus.any ? 'Not registered yet' : 'No provider configured') %>
+      <% if (s.tracking_status) { %><span class="badge <%= ['error','failed'].includes(s.tracking_status) ? 'FAILED' : s.tracking_status === 'tracking' ? 'SENT' : '' %>"><%= s.tracking_status %></span><% } %>
+      <% if (s.tracking_enabled === 0) { %><span class="badge">auto-tracking off</span><% } %></dd>
+    <% if (s.tracking_error) { %><dt>Message</dt><dd class="small"><%= s.tracking_error %></dd><% } %>
+    <dt>Last checked</dt><dd><%= s.tracking_checked_at ? `${fmtDateTime(s.tracking_checked_at)} UTC` : '—' %></dd>
+    <% if (s.original_eta && s.original_eta !== s.eta) { %><dt>Original ETA</dt><dd><%= s.original_eta %> → now <b><%= s.eta %></b></dd><% } %>
+    <% if (s.vessel_imo) { %><dt>Vessel IMO</dt><dd class="mono"><%= s.vessel_imo %><%= s.vessel_mmsi ? ` · MMSI ${s.vessel_mmsi}` : '' %></dd><% } %>
+  </dl>
+  <%- include('../partials/vesselmap', { s }) %>
+  <% if (trackEvents.length) { %>
+    <details style="margin-top:10px"><summary class="small"><b><%= trackEvents.length %> carrier events</b></summary>
+      <table class="t small" style="margin-top:6px"><% trackEvents.forEach((e) => { %><tr><td class="nowrap"><%= fmtDateTime(e.event_time) %></td><td><%= e.event %></td><td class="mono"><%= e.container_no || '' %></td><td><%= e.location || '' %></td><td><%= e.vessel || '' %> <%= e.voyage || '' %></td></tr><% }) %></table>
+    </details>
+  <% } %>
 </div>
 
 <div class="card">
@@ -45,6 +70,7 @@
   </form>
 
   <div>
+    <div class="card"><h2>Clearance & release</h2><%- include('../partials/checklist', { s }) %></div>
     <div class="card" id="docs">
       <h2>Documents</h2>
       <% if (!docs.length) { %><p class="muted small">No documents yet.</p><% } %>

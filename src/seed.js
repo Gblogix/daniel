@@ -15,20 +15,25 @@ function bootstrap(db = store.db) {
   console.log(`Created admin user ${email}${process.env.ADMIN_PASSWORD ? '' : ' with default password "changeme123" — change it after first login'}`);
 }
 
+// Parties as they appear in the real email flow (demo notice emails use .example addresses).
 const DEMO_PARTIES = [
-  // Korea origin
   { key: 'kukmin', name: '국민해운 (Kukmin Shipping)', type: 'agent', country: 'KR', emails: 'docs@kukmin.example' },
-  // China origin
-  { key: 'zhejiang', name: 'Zhejiang Forwarding', type: 'agent', country: 'CN', emails: 'ops@zhejiang.example' },
+  { key: 'zhejiang', name: 'Zhejiang Twings Supply Chain', type: 'agent', country: 'CN', emails: 'ops@twings.example' },
+  { key: 'reko', name: 'Reko Logistics (US partner)', type: 'agent', country: 'US', emails: 'lax_op1@reko.example' },
+  { key: 'ian', name: 'IAN Customs Service (8TV)', type: 'broker', country: 'US', emails: 'import@ianchb.example' },
   { key: 'omc', name: 'Oh! My Customs', type: 'broker', country: 'US', emails: 'entry@ohmycustoms.example' },
   { key: 'solvenza', name: 'Solvenza Trading', type: 'broker', country: 'US', emails: 'customs@solvenza.example' },
   { key: 'opulen', name: 'Opulen Global', type: 'broker', country: 'US', emails: 'customs@opulen.example' },
-  { key: 'ctc', name: 'CTC Trucking', type: 'trucker', country: 'US', emails: 'dispatch@ctc.example' },
+  { key: 'ctc', name: 'CTC Logistics', type: 'trucker', country: 'US', emails: 'dispatch@ctc.example' },
+  { key: 'qtrans', name: 'Q-Trans Logistics (Gardena)', type: 'trucker', country: 'US', emails: 'ops@qtrans.example', address: '540 E. Alondra Blvd, Gardena, CA' },
+  { key: 'shm', name: 'SHM Transport', type: 'trucker', country: 'US', emails: 'dispatch@shm.example' },
   { key: 'unlockt', name: 'Unlockt Brands', type: 'customer', country: 'US', emails: 'logistics@unlockt.example' },
+  { key: 'leepop', name: 'LEEPOP Company LLC', type: 'customer', country: 'US', emails: 'ops@leepop.example', address: '417 S Associated Rd #1026, Brea, CA' },
   { key: 'pgp', name: 'Pacific Global Partners', type: 'customer', country: 'US', emails: 'import@pgp.example' },
   { key: 'heyhae', name: 'Heyhae', type: 'customer', country: 'US', emails: 'ops@heyhae.example' },
-  { key: 'nextrade', name: 'Nextrade', type: 'delivery', country: 'US', emails: 'receiving@nextrade.example', address: 'Nextrade Warehouse, Los Angeles, CA' },
+  { key: 'nextrade', name: 'Nextrade', type: 'delivery', country: 'US', emails: 'receiving@nextrade.example', address: 'Nextrade Warehouse, South Gate, CA' },
   { key: 'ubwh', name: 'Unlockt Brands Warehouse', type: 'delivery', country: 'US', emails: 'receiving@unlockt.example', address: 'Unlockt Brands DC, Ontario, CA' },
+  { key: 'msi', name: 'MSI West Sacramento', type: 'delivery', country: 'US', emails: 'receiving@msi.example', address: 'West Sacramento, CA' },
 ];
 
 const DEMO_USERS = [
@@ -38,6 +43,7 @@ const DEMO_USERS = [
   { email: 'agent@zhejiang.example', name: 'Zhejiang (demo)', role: 'agent', company: 'zhejiang' },
   { email: 'broker@ohmycustoms.example', name: 'OMC (demo)', role: 'broker', company: 'omc' },
   { email: 'dispatch@ctc.example', name: 'CTC (demo)', role: 'trucker', company: 'ctc' },
+  { email: 'customer@leepop.example', name: 'LEEPOP (demo)', role: 'customer', company: 'leepop' },
 ];
 
 function day(offset) {
@@ -97,6 +103,28 @@ function seedDemo(db = store.db) {
       delivery_address: 'Pacific Global Partners, 2100 E Grand Ave, El Segundo, CA', customs_status: 'PENDING', service_price: 275,
       items: [{ po_no: 'PGP-331', description: 'Bluetooth Speaker Model S2', quantity: 840, unit: 'PCS', packages: 42 }],
     },
+    {
+      mode: 'FCL', origin_country: 'CN', status: 'ARRIVED', customer_id: ids.leepop, agent_id: ids.zhejiang, broker_id: ids.ian,
+      trucker_id: ids.ctc, delivery_company_id: ids.nextrade, shipper_name: 'MTWO IMPORT AND EXPORT CO', consignee_name: 'LEEPOP COMPANY LLC',
+      notify_party: 'REKO FREIGHT LLC', mbl_no: 'CMDUSHZ8105615', hbl_no: 'TWS26050088', scac: 'CMDU', carrier: 'CMA CGM',
+      vessel: 'CMA CGM SYRACUSE', voyage: '0P511W1MA', pol: 'YANTIAN, CN', pod: 'LOS ANGELES, CA', cfs_location: 'Fenix Marine Terminal',
+      etd: day(-17), eta: day(-1), ata: day(-1), last_free_day: day(2), packages: 714, package_unit: 'CTNS', weight_kg: 9800, cbm: 66,
+      commodity: 'FABRIC COASTERS, PORTABLE FANS', delivery_address: 'Nextrade, South Gate, CA', customs_status: 'FILED', isf_filed: 1,
+      telex_release: 1, entry_no: '8TV-2703851-3', holds: 'Freight/BL hold', service_price: 650,
+      containers: [{ container_no: 'EWLU7068201', size_type: '40HC' }],
+      items: [{ po_no: '', description: 'Fabric Coaster', quantity: 49500, unit: 'PCS', packages: 219 },
+        { po_no: '', description: 'Portable Mini Fan', quantity: 9900, unit: 'PCS', packages: 495 }],
+    },
+    {
+      mode: 'AIR', origin_country: 'CN', status: 'ARRIVED', customer_id: ids.leepop, agent_id: ids.zhejiang, broker_id: ids.ian,
+      trucker_id: ids.qtrans, delivery_company_id: ids.msi, shipper_name: 'SHENZHEN YOUYUE TECHNOLOGY', consignee_name: 'LEEPOP COMPANY LLC',
+      notify_party: 'REKO FREIGHT LLC', mbl_no: '921-63150570', direct_shipment: 1, carrier: 'SF Airlines', flight_no: 'O3 221',
+      pol: 'SZX', pod: 'LAX', cfs_location: 'CES — Custom Goods, 5220 W. 102nd St, Los Angeles', firms_code: 'Z955', css_no: '77286',
+      etd: day(-3), eta: day(-2), ata: day(-2), last_free_day: day(0), packages: 46, package_unit: 'CTNS', weight_kg: 612, chargeable_weight: 780,
+      commodity: 'BEANIES', customs_status: 'EXAM', holds: '1H (exam), Lien', entry_no: '8TV-2704866-0', freight_paid: 1, pallets: 4,
+      delivery_address: 'MSI, West Sacramento, CA', service_price: 300,
+      items: [{ po_no: '', description: 'Knit Beanie', quantity: 4600, unit: 'PCS', packages: 46 }],
+    },
   ];
   for (const { containers, items, ...s } of shipments) {
     const id = S.create(s, { db });
@@ -104,7 +132,7 @@ function seedDemo(db = store.db) {
       ctn_no: containers?.map((c) => c.container_no) || [], ctn_seal: containers?.map((c) => c.seal_no) || [],
       ctn_size: containers?.map((c) => c.size_type) || [], ctn_pkgs: containers?.map((c) => c.packages) || [],
       ctn_kg: containers?.map((c) => c.weight_kg) || [], ctn_cbm: containers?.map((c) => c.cbm) || [],
-      item_po: items.map((i) => i.po_no), item_desc: items.map((i) => i.description), item_hs: items.map(() => ''),
+      item_po: items.map((i) => i.po_no || ''), item_desc: items.map((i) => i.description), item_hs: items.map(() => ''),
       item_qty: items.map((i) => i.quantity), item_unit: items.map((i) => i.unit), item_pkgs: items.map((i) => i.packages),
       item_kg: items.map(() => ''), item_cbm: items.map(() => ''),
     };

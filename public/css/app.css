@@ -167,3 +167,23 @@ table.t .right, table.t th.right { text-align: right; }
   main { padding: 16px 16px 48px; }
   .grid[style*="grid-template-columns"] { grid-template-columns: 1fr !important; }
 }
+
+/* release checklist + LFD */
+.checklist ol { list-style: none; margin: 0; padding: 0; }
+.checklist li { padding: 5px 0 5px 28px; position: relative; font-size: 13px; color: var(--muted); border-bottom: 1px dashed var(--line); }
+.checklist li .tick { position: absolute; left: 4px; top: 5px; width: 18px; text-align: center; font-weight: 700; }
+.checklist li.done { color: var(--ink); } .checklist li.done .tick { color: var(--green); }
+.checklist li.next { color: var(--navy); font-weight: 700; background: #fff7e6; border-radius: 6px; } .checklist li.next .tick { color: var(--amber); }
+.lfd { border-radius: 8px; padding: 8px 12px; margin-bottom: 10px; font-size: 13px; }
+.lfd.ok { background: var(--soft); color: var(--navy); }
+.lfd.soon { background: #fef3c7; color: #92400e; }
+.lfd.urgent { background: #fee2e2; color: #991b1b; font-weight: 700; animation: blink 1.6s infinite; }
+.lfd.over { background: #7f1d1d; color: #fff; font-weight: 700; }
+.badge.lfd-ok { background: var(--soft); color: var(--navy); }
+.badge.lfd-soon { background: #fef3c7; color: #92400e; }
+.badge.lfd-urgent, .badge.lfd-over { background: #dc2626; color: #fff; }
+
+.vesselmap { height: 280px; border-radius: 10px; border: 1px solid var(--line); margin-top: 12px; }
+.ship-pin { color: var(--navy); font-size: 24px; text-shadow: 0 0 3px #fff; line-height: 28px; text-align: center; }
+.trackinfo { display: grid; grid-template-columns: auto 1fr; gap: 3px 12px; font-size: 13px; }
+.trackinfo dt { color: var(--muted); } .trackinfo dd { margin: 0; }

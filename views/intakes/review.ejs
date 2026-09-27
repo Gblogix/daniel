@@ -28,7 +28,7 @@
             <label class="check"><input type="checkbox" name="send_notices" value="1" checked> Send notices now (A/N + docs → broker, shipment details → customer)</label></div>
         </div>
       </div>
-      <%- include('../partials/fields', { s, sources: draft.sources || {} }) %>
+      <%- include('../partials/fields', { s, sources }) %>
       <div class="actions"><button class="btn">✔ Confirm & apply</button></div>
     </form>
     <form method="post" action="/intakes/<%= intake.id %>/reject" class="card" style="margin-top:18px">

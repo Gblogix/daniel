@@ -199,7 +199,7 @@ function extractRules(text, { filename = '', rows = null } = {}) {
   out.firms_code = firstMatch(U, [/FIRMS?\s*(?:CODE)?\s*(?:NO\.?|#)?\s*[:.]?\s*([A-Z][A-Z0-9]\d{2}|[A-Z]\d[A-Z0-9]\d|[A-Z]{2}[A-Z0-9]\d)\b/]);
   out.freight_location = labelValue(lines, /(?:FREIGHT|CARGO)\s+LOCATION|DISCHARGE\s+TERMINAL|\bTERMINAL\s*(?:NAME)?\s*:|CFS\s+LOCATION|AVAILABLE\s+AT/i);
   out.last_free_day = toISODate(firstMatch(T, [new RegExp(String.raw`(?:LAST\s+FREE\s+DAY|\bLFD)\s*[:.-]?\s*${DATE_RE}`, 'i')]));
-  out.invoice_no = firstMatch(U, [/INVOICE\s*(?:NO\.?|#|NUMBER)\s*[:.]?\s*([A-Z0-9][A-Z0-9-]{3,20})/]);
+  out.ci_invoice_no = firstMatch(U, [/INVOICE\s*(?:NO\.?|#|NUMBER)\s*[:.]?\s*([A-Z0-9][A-Z0-9-]{3,20})/]);
   out.isf_no = firstMatch(U, [/ISF\s*(?:NO\.?|#|TRANSACTION\s*(?:NO\.?)?)\s*[:.]?\s*([A-Z0-9-]{6,25})/]);
   out.telex_release = /TELEX\s+RELEASE|SURRENDERED|SEA\s*WAYBILL|EXPRESS\s+RELEASE|电放/.test(U) || null;
 
@@ -218,7 +218,7 @@ function extractRules(text, { filename = '', rows = null } = {}) {
           }
         }
       }
-      out.invoice_amount = totals?.amount ?? sum('amount');
+      out.cargo_value = totals?.amount ?? sum('amount');
     }
   }
   if (out.containers.length === 1) {

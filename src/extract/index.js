@@ -71,14 +71,14 @@ const PRIORITY = {
   firms_code: ['NOA', 'AWB', 'MBL', 'HBL', 'ISF'],
   freight_location: ['NOA', 'DO', 'MBL', 'HBL'],
   last_free_day: ['NOA', 'DO'],
-  invoice_no: ['CI', 'PL'],
-  invoice_amount: ['CI'],
+  ci_invoice_no: ['CI', 'PL'],
+  cargo_value: ['CI'],
   items: ['PL', 'CI'],
 };
 const SCALARS = ['mbl_no', 'hbl_no', 'mawb_no', 'hawb_no', 'carrier', 'vessel', 'voyage', 'flight_no', 'pol', 'pod',
   'place_of_delivery', 'etd', 'eta', 'shipper_name', 'consignee_name', 'notify_party', 'packages', 'package_unit',
   'weight_kg', 'cbm', 'chargeable_weight', 'commodity', 'firms_code', 'freight_location', 'last_free_day',
-  'invoice_no', 'invoice_amount', 'isf_no', 'telex_release'];
+  'ci_invoice_no', 'cargo_value', 'isf_no', 'telex_release'];
 
 /** Combine per-document extractions into one shipment draft. */
 function mergeExtractions(docs) {

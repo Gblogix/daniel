@@ -21,7 +21,10 @@ const STATUSES = [
 const STATUS_INDEX = Object.fromEntries(STATUSES.map((s, i) => [s.code, i]));
 const statusLabel = (code) => STATUSES.find((s) => s.code === code)?.label || code;
 
-const CUSTOMS_STATUSES = ['PENDING', 'FILED', 'EXAM', 'RELEASED', 'HOLD'];
+// Customs: FILED = entry filed, EXAM = 1H/CES exam, HOLD = other CBP/agency hold, RELEASED = 1C posted.
+const CUSTOMS_STATUSES = ['PENDING', 'FILED', 'EXAM', 'HOLD', 'RELEASED'];
+// Common holds seen on terminals / airlines / CES.
+const HOLD_TYPES = ['1H (exam)', 'CBP hold', 'Freight/BL hold', 'Lien', 'USDA', 'FDA', 'Line hold'];
 
 // Fields a staff member can edit on the shipment form / an intake can populate.
 const EDITABLE_FIELDS = [
@@ -31,10 +34,14 @@ const EDITABLE_FIELDS = [
   'packages', 'package_unit', 'weight_kg', 'cbm', 'chargeable_weight', 'commodity', 'delivery_address',
   'delivery_date', 'delivery_time', 'last_free_day', 'customs_status', 'isf_filed', 'service_price',
   'invoice_no', 'invoice_amount', 'paid', 'notes',
+  'scac', 'direct_shipment', 'isf_no', 'telex_release', 'firms_code', 'entry_no', 'css_no', 'holds', 'cargo_value',
+  'ci_invoice_no', 'freight_paid', 'carrier_released', 'storage_start', 'available_for_pickup', 'pickup_appt',
+  'picked_up_at', 'pallets', 'pod_received', 'empty_returned_at', 'tracking_enabled', 'vessel_imo', 'vessel_mmsi',
 ];
 const NUMERIC_FIELDS = new Set(['customer_id', 'agent_id', 'broker_id', 'trucker_id', 'delivery_company_id',
-  'packages', 'weight_kg', 'cbm', 'chargeable_weight', 'service_price', 'invoice_amount']);
-const BOOL_FIELDS = new Set(['isf_filed', 'paid']);
+  'packages', 'weight_kg', 'cbm', 'chargeable_weight', 'service_price', 'invoice_amount', 'cargo_value', 'pallets']);
+const BOOL_FIELDS = new Set(['isf_filed', 'paid', 'direct_shipment', 'telex_release', 'freight_paid', 'carrier_released',
+  'pod_received', 'tracking_enabled']);
 
 function normalizeInput(input) {
   const out = {};
@@ -42,7 +49,9 @@ function normalizeInput(input) {
     if (!(f in input)) continue;
     let v = input[f];
     if (typeof v === 'string') v = v.trim();
+    if (Array.isArray(v)) v = v.filter(Boolean).join(', ');
     if (BOOL_FIELDS.has(f)) v = v === true || v === '1' || v === 'on' || v === 1 ? 1 : 0;
+    else if (f === 'available_for_pickup') v = v === '' || v == null ? null : v === '1' || v === 1 || v === true ? 1 : 0;
     else if (v === '' || v === undefined) v = null;
     else if (NUMERIC_FIELDS.has(f)) { v = Number(String(v).replace(/,/g, '')); if (!Number.isFinite(v)) v = null; }
     out[f] = v;
@@ -146,6 +155,7 @@ function find(id, user, { db = store.db } = {}) {
   if (!s) return null;
   s.containers = db.all('SELECT * FROM containers WHERE shipment_id = ? ORDER BY id', id);
   s.items = db.all('SELECT * FROM cargo_items WHERE shipment_id = ? ORDER BY id', id);
+  s.charges = db.all('SELECT * FROM charges WHERE shipment_id = ? ORDER BY id', id);
   return s;
 }
 
@@ -154,14 +164,21 @@ function saveLines(id, body, { db = store.db } = {}) {
   const arr = (v) => (Array.isArray(v) ? v : v == null ? [] : [v]);
   const n = (v) => { if (v == null || String(v).trim() === '') return null; const x = Number(String(v).replace(/,/g, '')); return Number.isFinite(x) ? x : null; };
   if ('ctn_no' in body) {
+    const kept = new Map(db.all('SELECT * FROM containers WHERE shipment_id = ?', id).map((c) => [c.container_no, c]));
     db.tx(() => {
       db.run('DELETE FROM containers WHERE shipment_id = ?', id);
       const no = arr(body.ctn_no);
       no.forEach((c, i) => {
         if (!String(c).trim()) return;
-        db.run('INSERT INTO containers (shipment_id, container_no, seal_no, size_type, packages, weight_kg, cbm) VALUES (?, ?, ?, ?, ?, ?, ?)',
-          id, String(c).trim().toUpperCase().replace(/[\s-]/g, ''), arr(body.ctn_seal)[i] || null, arr(body.ctn_size)[i] || null,
-          n(arr(body.ctn_pkgs)[i]), n(arr(body.ctn_kg)[i]), n(arr(body.ctn_cbm)[i]));
+        const no = String(c).trim().toUpperCase().replace(/[\s-]/g, '');
+        // Keep tracking data (discharge / LFD / holds) that came from the provider for containers that stay.
+        const prev = kept.get(no) || {};
+        db.run(`INSERT INTO containers (shipment_id, container_no, seal_no, size_type, packages, weight_kg, cbm, pickup_lfd,
+            available, holds, discharged_at, full_out_at, empty_returned_at, current_status, location) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+          id, no, arr(body.ctn_seal)[i] || null, arr(body.ctn_size)[i] || null,
+          n(arr(body.ctn_pkgs)[i]), n(arr(body.ctn_kg)[i]), n(arr(body.ctn_cbm)[i]), arr(body.ctn_lfd)[i] || prev.pickup_lfd || null,
+          prev.available ?? null, prev.holds ?? null, prev.discharged_at ?? null, prev.full_out_at ?? null,
+          prev.empty_returned_at ?? null, prev.current_status ?? null, prev.location ?? null);
       });
     });
   }
@@ -170,12 +187,58 @@ function saveLines(id, body, { db = store.db } = {}) {
       db.run('DELETE FROM cargo_items WHERE shipment_id = ?', id);
       arr(body.item_desc).forEach((d, i) => {
         if (!String(d).trim()) return;
-        db.run('INSERT INTO cargo_items (shipment_id, po_no, description, hs_code, quantity, unit, packages, weight_kg, cbm) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)',
+        db.run('INSERT INTO cargo_items (shipment_id, po_no, description, hs_code, quantity, unit, packages, weight_kg, cbm, unit_price, amount) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
           id, arr(body.item_po)[i] || null, String(d).trim(), arr(body.item_hs)[i] || null, n(arr(body.item_qty)[i]),
-          arr(body.item_unit)[i] || null, n(arr(body.item_pkgs)[i]), n(arr(body.item_kg)[i]), n(arr(body.item_cbm)[i]));
+          arr(body.item_unit)[i] || null, n(arr(body.item_pkgs)[i]), n(arr(body.item_kg)[i]), n(arr(body.item_cbm)[i]),
+          n(arr(body.item_price)[i]), n(arr(body.item_amount)[i]));
       });
     });
   }
+  if ('charge_desc' in body) {
+    db.tx(() => {
+      db.run('DELETE FROM charges WHERE shipment_id = ?', id);
+      arr(body.charge_desc).forEach((d, i) => {
+        if (!String(d).trim()) return;
+        db.run('INSERT INTO charges (shipment_id, description, amount) VALUES (?, ?, ?)', id, String(d).trim(), n(arr(body.charge_amt)[i]) ?? 0);
+      });
+      const total = db.get('SELECT SUM(amount) AS t FROM charges WHERE shipment_id = ?', id).t;
+      if (total != null) db.run('UPDATE shipments SET invoice_amount = ? WHERE id = ?', Math.round(total * 100) / 100, id);
+    });
+  }
+}
+
+/**
+ * Clearance & release checklist — the steps staff chase on every import (from the real email flow).
+ * Returns [{key, label, done, date?}] in order; the first not-done step is the "next action".
+ */
+function checklist(s) {
+  const air = s.mode === 'AIR';
+  const fcl = s.mode === 'FCL';
+  const steps = [];
+  const add = (key, label, done, extra = {}) => steps.push({ key, label, done: Boolean(done), ...extra });
+  if (!air) add('isf', 'ISF filed', s.isf_filed);
+  if (!air) add('telex', 'Telex release / OBL received', s.telex_release);
+  add('an', 'A/N sent to broker & customer', s.an_sent_at, { date: s.an_sent_at });
+  add('freight', air ? 'ISC / airline charges paid' : 'Carrier freight & fees paid', s.freight_paid);
+  add('customs', 'Customs cleared (1C)', s.customs_status === 'RELEASED');
+  add('holds', 'No holds (exam / lien / BL hold)', !s.holds && s.customs_status !== 'EXAM' && s.customs_status !== 'HOLD', { note: s.holds || null });
+  add('release', air ? 'Airline / terminal released' : 'Carrier & terminal released', s.carrier_released || s.available_for_pickup === 1);
+  add('do', air ? 'D/O + ATME sent to trucker' : 'D/O sent to trucker', s.do_sent_at, { date: s.do_sent_at });
+  add('appt', 'Pickup appointment', s.pickup_appt, { date: s.pickup_appt });
+  add('pickup', 'Picked up', s.picked_up_at, { date: s.picked_up_at });
+  add('pod', 'Delivered — POD received', s.pod_received || s.status === 'DELIVERED');
+  if (fcl) add('empty', 'Empty returned (EIR)', s.empty_returned_at, { date: s.empty_returned_at });
+  const next = steps.find((x) => !x.done);
+  if (next) next.next = true;
+  return steps;
+}
+
+/** Earliest last-free-day across shipment and containers, with days remaining. */
+function lfdInfo(s, now = new Date()) {
+  const dates = [s.last_free_day, ...(s.containers || []).map((c) => c.pickup_lfd)].filter(Boolean).sort();
+  if (!dates.length || s.picked_up_at || s.status === 'DELIVERED') return null;
+  const days = Math.round((parseDate(dates[0]) - todayUTC(now)) / DAY);
+  return { date: dates[0], days, level: days < 0 ? 'over' : days <= 1 ? 'urgent' : days <= 3 ? 'soon' : 'ok' };
 }
 
 function parseDate(d) {
@@ -226,6 +289,6 @@ function tracking(s, now = new Date()) {
 }
 
 module.exports = {
-  MODES, STATUSES, STATUS_INDEX, CUSTOMS_STATUSES, EDITABLE_FIELDS,
+  MODES, STATUSES, STATUS_INDEX, CUSTOMS_STATUSES, HOLD_TYPES, EDITABLE_FIELDS, checklist, lfdInfo,
   statusLabel, normalizeInput, saveLines, nextRefNo, create, update, addEvent, list, find, scopeFor, tracking,
 };

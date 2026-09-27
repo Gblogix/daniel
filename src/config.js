@@ -2,7 +2,7 @@ const path = require('node:path');
 
 const root = path.resolve(__dirname, '..');
 
-module.exports = {
+const cfg = module.exports = {
   root,
   port: Number(process.env.PORT || 3000),
   baseUrl: (process.env.BASE_URL || `http://localhost:${process.env.PORT || 3000}`).replace(/\/$/, ''),
@@ -25,9 +25,23 @@ module.exports = {
     pass: process.env.SMTP_PASS || '',
     from: process.env.MAIL_FROM || 'GlobalBridge Logistics <info@gblogix.com>',
   },
+  // Microsoft 365 / Outlook (Graph API). When set, notices are sent from this mailbox instead of SMTP.
+  graph: {
+    tenantId: process.env.MS_TENANT_ID || '',
+    clientId: process.env.MS_CLIENT_ID || '',
+    clientSecret: process.env.MS_CLIENT_SECRET || '',
+    mailbox: process.env.MS_MAILBOX || process.env.COMPANY_EMAIL || 'info@gblogix.com',
+    // Optional: pull agent emails with PDF attachments from this folder into Document intake.
+    intake: process.env.MS_MAIL_INTAKE === 'on',
+    intakeFolder: process.env.MS_INTAKE_FOLDER || 'inbox',
+    intakeMinutes: Number(process.env.MS_INTAKE_MINUTES || 10),
+  },
   // Optional AI document extraction. Without a key, rule-based extraction is used.
   ai: {
     enabled: Boolean(process.env.ANTHROPIC_API_KEY) && process.env.AI_EXTRACTION !== 'off',
     model: process.env.AI_MODEL || 'claude-opus-5',
   },
 };
+
+cfg.graph.enabled = Boolean(cfg.graph.tenantId && cfg.graph.clientId && cfg.graph.clientSecret);
+cfg.mailTransport = cfg.graph.enabled ? 'outlook' : cfg.smtp.host ? 'smtp' : 'log';

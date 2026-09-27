@@ -62,9 +62,19 @@ const SETTINGS = [
   ['auto_send_docs_received', 'When agent documents are applied: auto-send A/N + HBL/PL/CI to customs broker and shipment details to customer'],
   ['auto_send_do', 'When customs status becomes RELEASED: auto-send D/O to trucker'],
   ['auto_notify_status', 'When status / ETA / delivery schedule / customs changes: auto-email the customer'],
+  ['auto_tracking', 'Carrier / GPS tracking: update ETD, ETA, vessel, LFD and terminal status automatically'],
+  ['lfd_alerts', 'Daily 7am LFD / pickup digest email to staff'],
 ];
 router.get('/admin/settings', auth.requireRole('admin'), (req, res) => {
-  res.render('admin/settings', { title: 'Automation settings', settings: SETTINGS.map(([k, label]) => ({ k, label, on: store.db.setting(k) === '1' })) });
+  res.render('admin/settings', {
+    title: 'Automation settings', settings: SETTINGS.map(([k, label]) => ({ k, label, on: store.db.setting(k) === '1' })),
+    tracking: require('../tracking').status(),
+  });
+});
+router.post('/admin/tracking/run', auth.requireRole('admin'), async (req, res) => {
+  const r = await require('../tracking').refreshAll();
+  flash(req, 'ok', `Tracking: checked ${r.checked}, updated ${r.updated}, errors ${r.errors}`);
+  res.redirect('/admin/settings');
 });
 router.post('/admin/settings', auth.requireRole('admin'), (req, res) => {
   for (const [k] of SETTINGS) store.db.setSetting(k, req.body[k] ? '1' : '0');

@@ -33,7 +33,11 @@ router.get('/dashboard', auth.requireInternal, (req, res) => {
     failedEmails: db.get("SELECT COUNT(*) AS n FROM emails WHERE status = 'FAILED'").n,
   };
   const events = db.all(`SELECT e.*, s.ref_no FROM events e JOIN shipments s ON s.id = e.shipment_id ORDER BY e.id DESC LIMIT 15`);
-  res.render('dashboard', { title: 'Dashboard', kpi, active, events });
+  // LFD watch: not yet picked up, sorted by days left.
+  const lfdWatch = active.map((s) => ({ s, lfd: S.lfdInfo(s), next: S.checklist(s).find((x) => x.next) }))
+    .filter((x) => x.lfd && x.lfd.days <= 5).sort((a, b) => a.lfd.days - b.lfd.days);
+  kpi.lfd = lfdWatch.filter((x) => x.lfd.days <= 1).length;
+  res.render('dashboard', { title: 'Dashboard', kpi, active, events, lfdWatch });
 });
 
 // ---------- list ----------
@@ -66,8 +70,9 @@ router.get('/shipments/:id', auth.requireLogin, (req, res) => {
   const docs = db.all(`SELECT * FROM documents WHERE shipment_id = ? ${internal ? '' : docFilter(viewer)} ORDER BY id DESC`, s.id);
   const events = db.all(`SELECT * FROM events WHERE shipment_id = ? ${internal ? '' : 'AND customer_visible = 1'} ORDER BY id DESC`, s.id);
   const emails = internal ? db.all('SELECT id, kind, to_addr, subject, status, created_at FROM emails WHERE shipment_id = ? ORDER BY id DESC', s.id) : [];
+  const trackEvents = db.all("SELECT * FROM tracking_events WHERE shipment_id = ? AND classifier IN ('ACT', '') ORDER BY event_time DESC LIMIT 30", s.id);
   const view = internal ? 'shipments/detail' : 'customer/detail';
-  res.render(view, { title: s.ref_no, s, tr: S.tracking(s), docs, events, emails, ...(internal ? partyLists() : {}) });
+  res.render(view, { title: s.ref_no, s, tr: S.tracking(s), docs, events, emails, trackEvents, trackingStatus: require('../tracking').status(), ...(internal ? partyLists() : {}) });
 });
 
 /** Which documents each external role may download. */
@@ -106,6 +111,12 @@ router.post('/shipments/:id/actions/:action', auth.requireInternal, async (req, 
   if (!fn) return res.status(400).render('error', { title: 'Unknown action', message: 'Unknown action.' });
   flash(req, 'ok', await fn(id, req.user));
   res.redirect(`/shipments/${id}#emails`);
+});
+
+router.post('/shipments/:id/track', auth.requireInternal, async (req, res) => {
+  const r = await require('../tracking').refreshShipment(Number(req.params.id), { userId: req.user.id });
+  flash(req, r.ok ? 'ok' : 'err', r.ok ? `Tracking updated${r.changes.length ? ` — ${r.changes.map((c) => c.field).join(', ')} changed` : ' — no changes'}` : `Tracking: ${r.error}`);
+  res.redirect(`/shipments/${req.params.id}#tracking`);
 });
 
 router.post('/shipments/:id/generate/:type', auth.requireInternal, (req, res) => {

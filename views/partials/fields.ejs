@@ -34,13 +34,48 @@
     <%- inp('pol', 'Port of loading') %>
     <%- inp('pod', 'Port of discharge') %>
     <%- inp('place_of_delivery', 'Place of delivery') %>
-    <%- inp('cfs_location', 'CFS / terminal (pick-up)') %>
+    <%- inp('cfs_location', 'Pick-up location (terminal / CFS / CES)') %>
     <%- inp('etd', 'ETD', 'date') %>
     <%- inp('eta', 'ETA', 'date') %>
     <%- inp('atd', 'ATD (actual)', 'date') %>
     <%- inp('ata', 'ATA (actual)', 'date') %>
     <%- inp('last_free_day', 'Last free day', 'date') %>
-    <div class="field"><label>&nbsp;</label><label class="check"><input type="checkbox" name="isf_filed" value="1" <%= s.isf_filed ? 'checked' : '' %>> ISF filed</label></div>
+    <%- inp('firms_code', 'Firms code') %>
+    <%- inp('scac', 'Carrier SCAC / airline prefix', 'text', 'placeholder="auto from MBL"') %>
+    <%- inp('isf_no', 'ISF / AMS ref') %>
+    <div class="field"><label>&nbsp;</label>
+      <label class="check"><input type="checkbox" name="isf_filed" value="1" <%= s.isf_filed ? 'checked' : '' %>> ISF filed</label>
+      <label class="check"><input type="checkbox" name="telex_release" value="1" <%= s.telex_release ? 'checked' : '' %>> Telex / OBL received</label>
+      <label class="check"><input type="checkbox" name="direct_shipment" value="1" <%= s.direct_shipment ? 'checked' : '' %>> Direct (no HBL)</label>
+    </div>
+  </div>
+</fieldset>
+
+<fieldset class="fieldset"><legend>Clearance & release</legend>
+  <div class="grid g4">
+    <%- inp('entry_no', 'Customs entry no.', 'text', 'placeholder="8TV-2703851-3"') %>
+    <%- inp('css_no', 'CES / CSS no.') %>
+    <%- inp('storage_start', 'Storage begins', 'date') %>
+    <%- inp('pallets', 'Pallets', 'number', 'step="1"') %>
+  </div>
+  <div class="field"><label>Holds</label>
+    <div class="chips">
+      <% const held = String(s.holds || '').split(/,\s*/).filter(Boolean); S.HOLD_TYPES.forEach((h) => { %>
+        <label class="check" style="margin-right:12px"><input type="checkbox" name="holds" value="<%= h %>" <%= held.includes(h) ? 'checked' : '' %>> <%= h %></label>
+      <% }) %>
+      <input type="hidden" name="holds" value="">
+    </div>
+  </div>
+  <div class="grid g4">
+    <div class="field"><label class="check"><input type="checkbox" name="freight_paid" value="1" <%= s.freight_paid ? 'checked' : '' %>> <%= s.mode === 'AIR' ? 'ISC / airline charges paid' : 'Carrier freight & fees paid' %></label></div>
+    <div class="field"><label class="check"><input type="checkbox" name="carrier_released" value="1" <%= s.carrier_released ? 'checked' : '' %>> Carrier / terminal released</label></div>
+    <div class="field"><label class="check"><input type="checkbox" name="pod_received" value="1" <%= s.pod_received ? 'checked' : '' %>> POD received</label></div>
+    <div class="field"><label class="check"><input type="checkbox" name="tracking_enabled" value="1" <%= s.tracking_enabled === 0 ? '' : 'checked' %>> Auto-tracking on</label></div>
+    <%- inp('pickup_appt', 'Pickup appointment', 'datetime-local') %>
+    <%- inp('picked_up_at', 'Picked up', 'date') %>
+    <%- inp('empty_returned_at', 'Empty returned (EIR)', 'date') %>
+    <div class="field"><label for="f_available_for_pickup">Available for pickup</label><select id="f_available_for_pickup" name="available_for_pickup">
+      <option value="" <%= s.available_for_pickup == null ? 'selected' : '' %>>Unknown</option><option value="1" <%= s.available_for_pickup === 1 ? 'selected' : '' %>>Yes</option><option value="0" <%= s.available_for_pickup === 0 ? 'selected' : '' %>>No</option></select></div>
   </div>
 </fieldset>
 
@@ -52,6 +87,8 @@
     <%- inp('cbm', 'CBM', 'number', 'step="0.001"') %>
     <%- inp('chargeable_weight', 'Chargeable wt (air)', 'number', 'step="0.01"') %>
     <%- inp('commodity', 'Commodity') %>
+    <%- inp('ci_invoice_no', 'C/I no.') %>
+    <%- inp('cargo_value', 'Cargo value (C/I, USD)', 'number', 'step="0.01"') %>
   </div>
 </fieldset>
 
@@ -71,12 +108,25 @@
     <%- inp('invoice_amount', 'Invoice amount (USD)', 'number', 'step="0.01"') %>
     <div class="field"><label>&nbsp;</label><label class="check"><input type="checkbox" name="paid" value="1" <%= s.paid ? 'checked' : '' %>> Paid</label></div>
   </div>
+  <label>Charges (printed on the A/N / freight invoice — total becomes the invoice amount)</label>
+  <div class="tablewrap"><table class="t lines" data-lines="charge">
+    <thead><tr><th style="min-width:260px">Description</th><th>Amount (USD)</th><th></th></tr></thead>
+    <tbody>
+    <% const chs = s.charges && s.charges.length ? s.charges : [{}]; chs.forEach((c) => { %>
+      <tr><td><input name="charge_desc" value="<%= c.description || '' %>" placeholder="Ocean freight / ISC / Handling / Customs clearance…" list="charge-list"></td>
+        <td><input name="charge_amt" value="<%= c.amount ?? '' %>" type="number" step="0.01"></td>
+        <td><button type="button" class="btn secondary small" data-remove-row>✕</button></td></tr>
+    <% }) %>
+    </tbody>
+  </table></div>
+  <datalist id="charge-list"><% ['Ocean freight', 'Air freight', 'Handling fee', 'Documentation fee', 'Customs clearance', 'ISF filing', 'ISC (terminal)', 'CES exam fee', 'Storage', 'Drayage / trucking', 'Chassis', 'Pier pass / CTF', 'Warehouse / transload', 'Delivery'].forEach((c) => { %><option value="<%= c %>"><% }) %></datalist>
+  <button type="button" class="btn secondary small" data-add-row="charge" style="margin:8px 0 12px">+ Charge</button>
   <div class="field"><label for="f_notes">Internal notes</label><textarea id="f_notes" name="notes" rows="2"><%= s.notes || '' %></textarea></div>
 </fieldset>
 
 <fieldset class="fieldset"><legend>Containers</legend>
   <div class="tablewrap"><table class="t lines" data-lines="ctn">
-    <thead><tr><th>Container No.</th><th>Seal No.</th><th>Size/Type</th><th>Pkgs</th><th>KG</th><th>CBM</th><th></th></tr></thead>
+    <thead><tr><th>Container No.</th><th>Seal No.</th><th>Size/Type</th><th>Pkgs</th><th>KG</th><th>CBM</th><th>LFD</th><th>Terminal status</th><th></th></tr></thead>
     <tbody>
     <% const ctns = s.containers && s.containers.length ? s.containers : [{}]; ctns.forEach((c) => { %>
       <tr>
@@ -86,6 +136,8 @@
         <td><input name="ctn_pkgs" value="<%= c.packages ?? '' %>"></td>
         <td><input name="ctn_kg" value="<%= c.weight_kg ?? '' %>"></td>
         <td><input name="ctn_cbm" value="<%= c.cbm ?? '' %>"></td>
+        <td><input name="ctn_lfd" value="<%= c.pickup_lfd || '' %>" type="date"></td>
+        <td class="small nowrap"><%= [c.current_status, c.available === 1 ? 'available' : c.available === 0 ? 'not available' : '', c.holds].filter(Boolean).join(' · ') %></td>
         <td><button type="button" class="btn secondary small" data-remove-row>✕</button></td>
       </tr>
     <% }) %>
@@ -96,7 +148,7 @@
 
 <fieldset class="fieldset"><legend>Packing list (P/L detail)</legend>
   <div class="tablewrap"><table class="t lines" data-lines="item">
-    <thead><tr><th>PO</th><th style="min-width:220px">Description</th><th>HS code</th><th>Qty</th><th>Unit</th><th>Pkgs</th><th>KG</th><th>CBM</th><th></th></tr></thead>
+    <thead><tr><th>PO</th><th style="min-width:220px">Description</th><th>HS code</th><th>Qty</th><th>Unit</th><th>Pkgs</th><th>KG</th><th>CBM</th><th>Unit price</th><th>Amount</th><th></th></tr></thead>
     <tbody>
     <% const items = s.items && s.items.length ? s.items : [{}]; items.forEach((i) => { %>
       <tr>
@@ -108,6 +160,8 @@
         <td><input name="item_pkgs" value="<%= i.packages ?? '' %>"></td>
         <td><input name="item_kg" value="<%= i.weight_kg ?? '' %>"></td>
         <td><input name="item_cbm" value="<%= i.cbm ?? '' %>"></td>
+        <td><input name="item_price" value="<%= i.unit_price ?? '' %>"></td>
+        <td><input name="item_amount" value="<%= i.amount ?? '' %>"></td>
         <td><button type="button" class="btn secondary small" data-remove-row>✕</button></td>
       </tr>
     <% }) %>

@@ -19,7 +19,7 @@ const Extraction = z.object({
   firms_code: str.describe('4-character CBP FIRMS code of the freight location, e.g. Z955'),
   freight_location: str.describe('terminal / CFS / warehouse where cargo is available'),
   last_free_day: str.describe('YYYY-MM-DD'),
-  invoice_no: str, invoice_amount: numN.describe('commercial invoice total value'),
+  ci_invoice_no: str.describe('commercial invoice number'), cargo_value: numN.describe('commercial invoice total value'),
   isf_no: str, telex_release: z.boolean().nullable(),
   containers: z.array(z.object({
     container_no: z.string(), seal_no: str, size_type: str.describe('e.g. 20GP, 40GP, 40HC'),

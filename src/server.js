@@ -14,6 +14,11 @@ function createApp() {
   app.disable('x-powered-by');
 
   app.use(express.static(path.join(config.root, 'public'), { maxAge: '1h' }));
+  // Provider webhooks need the raw body for signature checks and sit outside session / CSRF.
+  app.post('/webhooks/terminal49', express.raw({ type: '*/*', limit: '5mb' }), async (req, res) => {
+    const r = await require('./tracking').handleTerminal49Webhook(req.body, req.get('X-T49-Webhook-Signature'));
+    res.status(r.status).end();
+  });
   app.use(express.urlencoded({ extended: true, limit: '2mb' }));
   app.use(express.json({ limit: '2mb' }));
   app.use(session({
@@ -61,6 +66,10 @@ if (require.main === module) {
   if (config.sessionSecret === 'dev-only-change-me') console.warn('WARNING: set SESSION_SECRET before using this in production');
   bootstrap();
   createApp().listen(config.port, () => console.log(`GlobalBridge Logistics running at ${config.baseUrl}`));
+  console.log(`Email: ${config.mailTransport}${config.graph.enabled && config.graph.intake ? ' · Outlook intake on' : ''}`);
+  require('./mailin').start();
+  const t = require('./tracking').start();
+  console.log(`Tracking: ${t.any ? [t.terminal49 && 'Terminal49', t.shipsgo && 'ShipsGo', t.dcsa.length && `carrier APIs (${t.dcsa.join(', ')})`].filter(Boolean).join(', ') : 'no provider configured'}${t.datalastic || t.aisstream ? ' · vessel GPS on' : ''}`);
 }
 
 module.exports = { createApp };

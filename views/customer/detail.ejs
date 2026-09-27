@@ -14,6 +14,8 @@
 <div class="card">
   <%- include('../partials/trackbar', { s, tr, big: true }) %>
   <%- include('../partials/steps', { tr }) %>
+  <% if (s.original_eta && s.eta && s.original_eta !== s.eta) { %><p class="small" style="margin:10px 0 0">ETA updated by the carrier: <s><%= s.original_eta %></s> → <b><%= s.eta %></b></p><% } %>
+  <%- include('../partials/vesselmap', { s }) %>
 </div>
 
 <div class="grid g2" style="align-items:start">

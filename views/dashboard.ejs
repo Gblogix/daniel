@@ -10,6 +10,20 @@
   <div class="kpi <%= kpi.unpaid ? 'warn' : '' %>"><div class="n"><%= kpi.unpaid %></div><div class="l">Unpaid invoices</div></div>
   <a class="kpi <%= kpi.failedEmails ? 'bad' : '' %>" href="/outbox"><div class="n"><%= kpi.failedEmails %></div><div class="l">Failed emails</div></a>
 </div>
+<% if (lfdWatch.length) { %>
+<div class="card">
+  <h2>⏰ LFD watch — pick up before storage starts</h2>
+  <div class="tablewrap"><table class="t">
+    <thead><tr><th>LFD</th><th>Ref</th><th>MBL / MAWB</th><th>Container</th><th>Pick-up at</th><th>Holds</th><th>Next step</th></tr></thead>
+    <% lfdWatch.forEach(({ s, lfd, next }) => { %>
+      <tr><td class="nowrap"><span class="badge lfd-<%= lfd.level %>"><%= lfd.date %> · <%= lfd.days < 0 ? `${-lfd.days}d over` : lfd.days === 0 ? 'TODAY' : `${lfd.days}d` %></span></td>
+        <td><a href="/shipments/<%= s.id %>"><b><%= s.ref_no %></b></a></td><td class="mono small"><%= s.mbl_no || '' %></td>
+        <td class="mono small"><%= s.containers.map((c) => c.container_no).join(', ') %></td><td class="small"><%= s.cfs_location || '' %><%= s.firms_code ? ` (${s.firms_code})` : '' %></td>
+        <td><% if (s.holds) { %><span class="badge EXAM"><%= s.holds %></span><% } %></td><td class="small"><b><%= next ? next.label : '' %></b></td></tr>
+    <% }) %>
+  </table></div>
+</div>
+<% } %>
 <div class="grid" style="grid-template-columns: 2fr 1fr">
   <div class="card">
     <h2>In progress</h2>
