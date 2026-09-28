@@ -6,7 +6,7 @@ const notify = require('../notify');
 const router = express.Router();
 const COMPANY_TYPES = {
   customer: 'Customer (CNEE / bill-to)', agent: 'Overseas agent', broker: 'Customs broker', trucker: 'Trucker', importer: 'Importer of record (consignee)',
-  delivery: 'Delivery location / warehouse', shipper: 'Shipper / factory',
+  delivery: 'Delivery location / warehouse', shipper: 'Shipper / factory', vendor: 'Vendor (CFS / carrier / terminal / other)',
 };
 const flash = (req, type, msg) => { req.session.flash = { type, msg }; };
 

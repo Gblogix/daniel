@@ -98,6 +98,18 @@
   </table></div>
   <% } else { %><p class="muted small">No invoices or vendor bills on this file yet — add them below.</p><% } %>
 
+  <div class="vendor-drop">
+    <form method="post" action="/vendor-bills/upload?_csrf=<%= csrf %>" enctype="multipart/form-data" class="actions" style="align-items:center">
+      <input type="hidden" name="shipment_id" value="<%= s.id %>"><input type="hidden" name="back" value="/shipments/<%= s.id %>#accounting">
+      <b>📎 Vendor / CFS invoice</b><input type="file" name="files" multiple accept=".pdf,.jpg,.jpeg,.png" required style="width:auto;flex:1;min-width:220px">
+      <button class="btn secondary small">Upload &amp; auto-read</button>
+      <span class="muted small">Invoice no., date, terms and charge lines are filled in for you.</span>
+    </form>
+    <% if (vendorPending.length) { %><div class="pending-list"><% vendorPending.forEach((d) => { const ex = d.ex || {}; %>
+      <a class="pending" href="/vendor-bills/<%= d.id %>">⏳ <b><%= d.vendor_name || 'Vendor ?' %></b> <%= ex.number ? `#${ex.number}` : '' %> <%= ex.total != null ? `USD ${fmtNum(ex.total, 2)}` : '' %> — review &amp; book →</a>
+    <% }) %></div><% } %>
+  </div>
+
   <% if (outgoing.length) { const ready = outgoing.filter((i) => i.reviewed_at && !i.sent_at && i.status === 'OPEN').length; %>
   <form method="post" action="/shipments/<%= s.id %>/invoices/review" class="review-box">
     <input type="hidden" name="_csrf" value="<%= csrf %>">
@@ -181,7 +193,7 @@
       </table>
 <% if (can('shipments_edit')) { %>      <form method="post" action="/shipments/<%= s.id %>/documents?_csrf=<%= csrf %>" enctype="multipart/form-data" style="margin-top:12px">
         <div class="grid g2" style="gap:8px">
-          <select name="doc_type"><% ['MBL','HBL','PL','CI','ISF','AWB','AN','DO','ATME','INVOICE','OTHER'].forEach((t) => { %><option><%= t %></option><% }) %></select>
+          <select name="doc_type"><% ['MBL','HBL','PL','CI','ISF','AWB','AN','DO','ATME','OTHER'].forEach((t) => { %><option><%= t %></option><% }) %><option value="VINV">Vendor / CFS invoice → accounting (auto-read)</option></select>
           <label class="check"><input type="checkbox" name="customer_visible" value="1"> Visible to customer</label>
         </div>
         <input type="file" name="files" multiple style="margin:8px 0">

@@ -1,0 +1,29 @@
+<%- include('../partials/head') %>
+<% const m = (v) => (v == null ? '' : fmtNum(v, 2)); %>
+<div class="pagehead"><div><h1 style="margin-bottom:4px">Vendor invoices</h1>
+  <p class="muted small" style="margin:0">Upload CFS / warehouse / trucker / broker / carrier invoices — number, date, terms, charge lines and total are read automatically and the file is matched from the container / B/L. Check and book.</p></div></div>
+<form class="card dropzone" method="post" action="/vendor-bills/upload?_csrf=<%= csrf %>" enctype="multipart/form-data">
+  <div class="grid g3" style="align-items:end">
+    <div class="field" style="margin:0"><label>Invoice file(s) — PDF, JPG, PNG</label><input type="file" name="files" multiple accept=".pdf,.jpg,.jpeg,.png" required></div>
+    <div class="field" style="margin:0"><label>File (optional — matched automatically)</label>
+      <select name="shipment_id"><option value="">Auto-match from container / B/L</option><% openFiles.forEach((s) => { %><option value="<%= s.id %>"><%= S.fileName(s) %> (<%= s.ref_no %>)</option><% }) %></select></div>
+    <div><button class="btn">⬆ Upload &amp; read</button></div>
+  </div>
+</form>
+<div class="card flush">
+  <div class="tablewrap"><table class="t num">
+    <thead><tr><th>Received</th><th>Vendor</th><th>Invoice no.</th><th>Date</th><th class="right">Total</th><th>File</th><th>Check</th><th></th></tr></thead>
+    <tbody>
+    <% if (!rows.length) { %><tr><td colspan="8" class="muted">Nothing waiting — all vendor invoices are booked.</td></tr><% } %>
+    <% rows.forEach((d) => { const ex = d.ex || {}; %><tr>
+      <td class="nowrap small"><%= fmtDateTime(d.created_at) %><br><span class="muted"><%= d.source === 'email' ? '✉ email' : '⬆ upload' %></span></td>
+      <td><%= d.vendor_name || (ex.vendor_name_read ? `? ${ex.vendor_name_read}` : '—') %></td>
+      <td class="mono"><%= ex.number || '—' %></td><td class="nowrap"><%= ex.invoice_date || '—' %></td>
+      <td class="right"><b><%= m(ex.total) %></b></td>
+      <td><% if (d.shipment_id) { %><a href="/shipments/<%= d.shipment_id %>"><%= S.fileName(d) %></a><% } else { %><span class="late">not matched</span><% } %></td>
+      <td class="small"><% if (ex.duplicate) { %><span class="late">possible duplicate</span><% } else if ((ex.warnings || []).length) { %><span class="state draft"><%= ex.warnings.length %> to check</span><% } else { %><span class="state ready">✔ read OK</span><% } %></td>
+      <td><a class="btn small" href="/vendor-bills/<%= d.id %>">Review &amp; book</a></td></tr><% }) %>
+    </tbody>
+  </table></div>
+</div>
+<%- include('../partials/foot') %>

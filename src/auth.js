@@ -115,7 +115,7 @@ function requireAccounting(req, res, next) {
   next();
 }
 // Document types and email kinds that carry accounting information.
-const ACCOUNTING_DOCS = ['AR', 'DN', 'SOA', 'INVOICE'];
+const ACCOUNTING_DOCS = ['AR', 'DN', 'SOA', 'INVOICE', 'VINV'];
 const ACCOUNTING_EMAILS = ['AR_INVOICE', 'DEBIT_NOTE', 'SOA'];
 // Shipment fields only accounting users may see or change.
 const ACCOUNTING_FIELDS = ['service_price', 'invoice_no', 'invoice_amount', 'paid'];

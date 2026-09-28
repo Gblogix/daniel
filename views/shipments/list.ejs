@@ -17,7 +17,9 @@
   <% if (canAccounting && !history) { %><select name="bill"><option value="">Any billing</option>
     <option value="not_invoiced" <%= bill === 'not_invoiced' ? 'selected' : '' %>>Delivered — not invoiced</option>
     <option value="unpaid" <%= bill === 'unpaid' ? 'selected' : '' %>>Invoiced — not paid</option>
-    <option value="overdue" <%= bill === 'overdue' ? 'selected' : '' %>>Overdue</option></select><% } %>
+    <option value="overdue" <%= bill === 'overdue' ? 'selected' : '' %>>Overdue</option>
+    <option value="to_book" <%= bill === 'to_book' ? 'selected' : '' %>>Vendor invoice to book</option>
+    <option value="no_cost" <%= bill === 'no_cost' ? 'selected' : '' %>>Delivered — no cost booked</option></select><% } %>
   <button class="btn secondary">Filter</button>
 </form>
 <div class="tablewrap">
@@ -40,7 +42,7 @@
       <td><span class="badge <%= s.customs_status %>"><%= s.customs_status %></span></td>
       <td><%= s.an_sent_at ? '✔' : '' %></td>
       <td><%= s.do_sent_at ? '✔' : '' %></td>
-      <% if (canAccounting) { %><td class="nowrap small"><% if (b) { %><span class="badge bill-<%= b.level %>"><%= b.label %></span><% if (b.amount) { %><br>$<%= fmtNum(b.amount, 2) %> open<% } %><% } %></td>
+      <% if (canAccounting) { const c = S.costState(s); %><td class="nowrap small"><% if (b) { %><span class="badge bill-<%= b.level %>"><%= b.label %></span><% if (b.amount) { %><br>$<%= fmtNum(b.amount, 2) %> open<% } %><% } %><% if (c) { %><br><span class="badge bill-<%= c.level %>"><%= c.label %></span><% } %></td>
         <% if (history) { %><td class="right nowrap"><% if (s.pl) { %><b style="color:<%= s.pl.profit >= 0 ? 'var(--green)' : 'var(--red)' %>"><%= fmtNum(s.pl.profit, 2) %></b><% } %></td><% } %><% } %>
       <td class="small"><%= history ? fmtDate(s.closed_at) : `${s.delivery_date || ''} ${s.delivery_time || ''}` %></td>
     </tr>

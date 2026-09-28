@@ -62,7 +62,7 @@ test('accounting pages: admin and accounting staff only', async () => {
   assert.doesNotMatch(staffPage, /id="accounting"|bill-(warn|bad)|Not invoiced|AR_INV\.pdf|href="\/billing"|Service price/);
   assert.doesNotMatch(await (await staff('/dashboard')).text(), /not invoiced|awaiting payment/i);
   assert.match(await (await acct('/dashboard')).text(), /Delivered — not invoiced/);
-  for (const p of ['/billing/profit', `/billing/parties/${ids.ctc}`, '/billing/aging', `/billing/parties/${ids.unlockt}/statement?basis=eta`, '/billing/aging?format=xlsx']) {
+  for (const p of ['/billing/profit', `/billing/parties/${ids.ctc}`, '/billing/aging', `/billing/parties/${ids.unlockt}/statement?basis=eta`, '/billing/aging?format=xlsx', '/vendor-bills']) {
     assert.equal((await admin(p)).status, 200, p);
     assert.equal((await acct(p)).status, 200, p);
     assert.equal((await staff(p)).status, 403, p);

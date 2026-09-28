@@ -80,4 +80,32 @@ async function extractAI({ buffer, filename, mime, text, pages = null, docType =
   return response.parsed_output;
 }
 
-module.exports = { extractAI, Extraction };
+const VendorInvoice = z.object({
+  vendor_name: str.describe('company that issued the invoice (not GlobalBridge, the bill-to)'),
+  invoice_no: str, invoice_date: str.describe('YYYY-MM-DD'), due_date: str.describe('YYYY-MM-DD'),
+  terms_days: numN, currency: str, total: numN.describe('total amount due on this invoice'),
+  lines: z.array(z.object({ description: z.string(), quantity: numN, rate: numN, amount: z.number() }))
+    .describe('one entry per charge line; skip subtotal / total / payment rows'),
+  container_nos: z.array(z.string()), bl_nos: z.array(z.string()).describe('MBL / HBL / AWB numbers referenced'),
+  other_refs: z.array(z.string()).describe('other reference numbers: PO, file no., booking no.'),
+});
+
+/** Vendor / CFS / trucker invoice to us: header fields, charge lines, shipment references. */
+async function extractVendorInvoiceAI({ buffer, filename, mime, text }) {
+  const { zodOutputFormat } = require('@anthropic-ai/sdk/helpers/zod');
+  const content = [];
+  if (mime === 'application/pdf' || /\.pdf$/i.test(filename)) content.push({ type: 'document', source: { type: 'base64', media_type: 'application/pdf', data: buffer.toString('base64') } });
+  else if (/^image\/(jpeg|png)$/.test(mime) || /\.(jpe?g|png)$/i.test(filename)) content.push({ type: 'image', source: { type: 'base64', media_type: /png/i.test(mime + filename) ? 'image/png' : 'image/jpeg', data: buffer.toString('base64') } });
+  else if (text && text.trim()) content.push({ type: 'text', text: `<document filename="${filename}">\n${text}\n</document>` });
+  else return null;
+  content.push({ type: 'text', text: `This is an invoice from a vendor (CFS, warehouse, trucker, customs broker, carrier or overseas agent) to GlobalBridge Logistics, a US freight forwarder.
+Extract the fields in the schema. Use null when a field is absent; never guess numbers. Dates as YYYY-MM-DD. Amounts as plain numbers (credits negative).
+Filename: ${filename}` });
+  const response = await getClient().messages.parse({
+    model: config.ai.model, max_tokens: 8000, messages: [{ role: 'user', content }], output_config: { format: zodOutputFormat(VendorInvoice) },
+  });
+  if (!response.parsed_output) throw new Error(`AI extraction returned no data (stop_reason: ${response.stop_reason})`);
+  return response.parsed_output;
+}
+
+module.exports = { extractAI, Extraction, extractVendorInvoiceAI, VendorInvoice };

@@ -30,6 +30,8 @@ router.get('/dashboard', auth.requireInternal, (req, res) => {
     active: active.length,
     notInvoiced: acct ? delivered.filter((b) => b?.code === 'not_invoiced').length : null,
     awaiting: acct ? delivered.filter((b) => ['unsent', 'awaiting', 'overdue'].includes(b?.code)).length : null,
+    noCost: acct ? S.list(req.user, { stage: 'delivered' }).filter((s) => S.costState(s)?.code === 'no_cost').length : null,
+    vendorToBook: acct ? db.get("SELECT COUNT(*) AS n FROM documents WHERE doc_type = 'VINV' AND invoice_id IS NULL").n : null,
     arriving: active.filter((s) => s.eta && s.eta >= today && s.eta <= in7).length,
     intakes: db.get("SELECT COUNT(*) AS n FROM intakes WHERE status = 'PENDING'").n,
     exam: active.filter((s) => s.customs_status === 'EXAM' || s.customs_status === 'HOLD').length,
@@ -57,7 +59,10 @@ router.get('/shipments', auth.requireLogin, (req, res) => {
   let rows = S.list(req.user, { q, status, mode, stage: stage === 'all' ? null : stage });
   // Accounting follow-up filters on delivered files.
   const bill = auth.canAccounting(req.user) ? req.query.bill || '' : '';
-  if (bill) rows = rows.filter((s) => (S.billingState(s)?.code || '') === bill || (bill === 'unpaid' && ['unsent', 'awaiting', 'overdue'].includes(S.billingState(s)?.code)));
+  if (bill) {
+    rows = rows.filter((s) => (S.billingState(s)?.code || '') === bill || (bill === 'unpaid' && ['unsent', 'awaiting', 'overdue'].includes(S.billingState(s)?.code))
+      || (['no_cost', 'to_book'].includes(bill) && S.costState(s)?.code === bill));
+  }
   res.render('shipments/list', { title: 'Shipments', rows, q, status, mode, stage, STAGES, bill, history: false });
 });
 
@@ -110,10 +115,11 @@ router.get('/shipments/:id', auth.requireLogin, (req, res) => {
     const c = db.get('SELECT emails, billing_emails FROM companies WHERE id = ?', i.company_id) || {};
     return { ...i, to: require('../invoicing').emailsOf(c) };
   });
+  const vendorPending = internal && acct ? require('../vendorbills').pending().filter((d) => d.shipment_id === s.id) : [];
   const acctParties = internal && acct ? db.all('SELECT id, name, type FROM companies ORDER BY type, name') : [];
   const trackEvents = db.all("SELECT * FROM tracking_events WHERE shipment_id = ? AND classifier IN ('ACT', '') ORDER BY event_time DESC LIMIT 30", s.id);
   const view = internal ? 'shipments/detail' : 'customer/detail';
-  res.render(view, { title: S.fileName(s), s, tr: S.tracking(s), docs, events, emails, trackEvents, invoices, profit, plLines, acctParties, outgoing, autoSend: db.setting('auto_send_reviewed') === '1',
+  res.render(view, { title: S.fileName(s), s, tr: S.tracking(s), docs, events, emails, trackEvents, invoices, profit, plLines, acctParties, outgoing, vendorPending, autoSend: db.setting('auto_send_reviewed') === '1',
     codes: A.CHARGE_CODES, billing: acct ? S.billingState(s) : null, trackingStatus: require('../tracking').status(), ...(internal ? partyLists() : {}) });
 });
 
@@ -215,8 +221,17 @@ router.post('/shipments/:id/issue/:type', auth.requirePerm('send_notices'), asyn
 });
 
 // ---------- documents ----------
-router.post('/shipments/:id/documents', auth.requirePerm('shipments_edit'), upload.array('files', 10), auth.checkCsrf, (req, res) => {
+router.post('/shipments/:id/documents', auth.requirePerm('shipments_edit'), upload.array('files', 10), auth.checkCsrf, async (req, res) => {
   const id = Number(req.params.id);
+  if (req.body.doc_type === 'VINV') {
+    const V = require('../vendorbills');
+    for (const f of req.files || []) {
+      await V.receive({ buffer: fs.readFileSync(f.path), filename: f.originalname, mime: f.mimetype, shipmentId: id, userId: req.user.id });
+      fs.rmSync(f.path, { force: true });
+    }
+    flash(req, 'ok', `${(req.files || []).length} vendor invoice(s) read and sent to accounting to book`);
+    return res.redirect(`/shipments/${id}#docs`);
+  }
   for (const f of req.files || []) {
     store.db.run(`INSERT INTO documents (shipment_id, doc_type, filename, stored_path, mime, size, customer_visible, uploaded_by)
       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`, id, req.body.doc_type || 'OTHER', f.originalname, f.path, f.mimetype, f.size,

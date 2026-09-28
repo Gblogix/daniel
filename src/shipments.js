@@ -117,7 +117,9 @@ const BASE_SELECT = `
          (SELECT COUNT(*) FROM invoices i WHERE i.shipment_id = s.id AND ${RECEIVABLE}) AS bill_count,
          (SELECT COUNT(*) FROM invoices i WHERE i.shipment_id = s.id AND ${RECEIVABLE} AND i.status = 'OPEN' AND i.sent_at IS NULL) AS bill_unsent,
          (SELECT ROUND(SUM(ABS(i.total) - i.paid_amount), 2) FROM invoices i WHERE i.shipment_id = s.id AND ${RECEIVABLE} AND i.status = 'OPEN') AS bill_open,
-         (SELECT MIN(i.due_date) FROM invoices i WHERE i.shipment_id = s.id AND ${RECEIVABLE} AND i.status = 'OPEN') AS bill_due
+         (SELECT MIN(i.due_date) FROM invoices i WHERE i.shipment_id = s.id AND ${RECEIVABLE} AND i.status = 'OPEN') AS bill_due,
+         (SELECT COUNT(*) FROM invoices i WHERE i.shipment_id = s.id AND i.kind = 'AP' AND i.status <> 'VOID') AS cost_count,
+         (SELECT COUNT(*) FROM documents d WHERE d.shipment_id = s.id AND d.doc_type = 'VINV' AND d.invoice_id IS NULL) AS vinv_pending
   FROM shipments s
   LEFT JOIN companies c ON c.id = s.customer_id
   LEFT JOIN companies a ON a.id = s.agent_id
@@ -398,6 +400,13 @@ function billingState(s, now = new Date()) {
     : { code: 'awaiting', label: `Awaiting payment${s.bill_due ? ` · due ${s.bill_due}` : ''}`, level: 'warn', amount: s.bill_open };
 }
 
+/** Cost side of a file: vendor invoice received but not booked yet, or delivered with no vendor cost at all. */
+function costState(s) {
+  if (s.vinv_pending) return { code: 'to_book', label: `Vendor invoice to book${s.vinv_pending > 1 ? ` (${s.vinv_pending})` : ''}`, level: 'warn' };
+  if (!s.cost_count && s.status === 'DELIVERED' && !s.closed_at) return { code: 'no_cost', label: 'No cost booked', level: 'warn' };
+  return null;
+}
+
 /** active → delivered (billing open) → closed (customer paid; lives in Shipment history). */
 function stage(s) {
   if (s.closed_at) return 'closed';
@@ -436,5 +445,5 @@ function setClosed(id, closed, { db = store.db, userId = null } = {}) {
 module.exports = {
   MODES, STATUSES, STATUS_INDEX, CUSTOMS_STATUSES, HOLD_TYPES, EDITABLE_FIELDS, checklist, lfdInfo,
   statusLabel, normalizeInput, saveLines, nextRefNo, create, update, addEvent, list, find, scopeFor, tracking,
-  shortParty, fileName, billingState, stage, refreshClosed, setClosed, RECEIVABLE, timeline,
+  shortParty, fileName, billingState, stage, refreshClosed, setClosed, RECEIVABLE, timeline, costState,
 };

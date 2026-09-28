@@ -71,3 +71,21 @@ document.querySelectorAll('input[data-col]').forEach((all) => {
   all.checked = boxes().length > 0 && boxes().every((b) => b.checked);
   all.addEventListener('change', () => boxes().forEach((b) => { b.checked = all.checked; }));
 });
+
+// Vendor bill booking: live sum of lines vs the invoice total.
+document.querySelectorAll('form[data-bill]').forEach((form) => {
+  const sumEl = form.querySelector('[data-sum]'); const diffEl = form.querySelector('[data-diff]');
+  const total = Number(form.querySelector('[data-total]').dataset.total);
+  const calc = () => {
+    let s = 0;
+    form.querySelectorAll('tbody tr').forEach((tr) => {
+      const g = (n) => Number(String(tr.querySelector(`[name="${n}"]`).value || '').replace(/,/g, ''));
+      const a = tr.querySelector('[name="l_amount"]').value.trim() ? g('l_amount') : g('l_rate') * (g('l_qty') || 1);
+      if (Number.isFinite(a)) s += a;
+    });
+    sumEl.textContent = s.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    const diff = Number.isFinite(total) && form.querySelector('[data-total]').dataset.total !== '' ? Math.round((s - total) * 100) / 100 : 0;
+    diffEl.textContent = diff ? `Difference ${diff > 0 ? '+' : ''}${diff.toFixed(2)}` : '';
+  };
+  form.addEventListener('input', calc); form.addEventListener('click', () => setTimeout(calc)); calc();
+});

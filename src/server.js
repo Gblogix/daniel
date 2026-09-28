@@ -62,6 +62,7 @@ function createApp() {
   app.use(require('./routes/customer'));
   app.use(require('./routes/admin'));
   app.use(require('./routes/billing'));
+  app.use(require('./routes/vendorbills'));
 
   app.use((req, res) => res.status(404).render('error', { title: 'Not found', message: 'The page you are looking for does not exist.' }));
   // eslint-disable-next-line no-unused-vars

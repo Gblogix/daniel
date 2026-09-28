@@ -144,6 +144,13 @@ Staff sign in to **/app**: ☰ opens the menu (Main, Shipments, Documents, Accou
   print, PDF, Excel, or email (PDF + Excel) to the party's billing emails.
 * **Aging report**: every party with open items — A/R, Debit, Credit, A/P, on-account, net, and current / 1-30 /
   31-60 / 61-90 / 90+ — by due date, invoice date or ETA; Excel export.
+* **Vendor / CFS invoices → A/P automatically**: upload on the file (Accounting › 📎 Vendor / CFS invoice), in
+  Billing › Vendor invoices, or let vendors email them (parties of type vendor / trucker / broker / warehouse). The invoice
+  no., date, terms → due date, charge lines (qty × rate) and total are read (rules + OCR; Claude when an API key is set),
+  the vendor and the file are matched from the container / B/L, duplicates are flagged. Accounting checks it next to the
+  PDF and books it. Operations staff can drop invoices on a file ("Vendor / CFS invoice" document type) for accounting.
+* **Follow-up flags**: vendor invoice to book, delivered with no cost booked, delivered not invoiced, invoice not sent,
+  awaiting payment, overdue — on the dashboard, shipment list (Billing filter) and each file.
 * **Closing files**: once the delivered file's customer invoices (and agent D/Ns) are paid, it closes automatically and moves to
   **History**. A new invoice reopens it. Accounting staff can also close / reopen by hand.
   Delivered files that are *not invoiced*, *invoice not sent*, *awaiting payment* or *overdue* are flagged on the dashboard,

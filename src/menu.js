@@ -31,6 +31,7 @@ const MENU = [
   ] },
   { key: 'accounting', label: 'Accounting', icon: '🧮', perm: 'accounting', cols: [
     { head: 'Operation', items: [
+      { id: 'vendor-bills', label: 'Vendor invoices — upload & book', href: '/vendor-bills' },
       { id: 'ar-entry', label: 'A/R invoice entry', href: '/invoices/new?kind=AR' },
       { id: 'ap-entry', label: 'A/P vendor bill entry', href: '/invoices/new?kind=AP' },
       { id: 'dn-entry', label: 'Debit / credit note (agent)', href: '/invoices/new?kind=DN' },
@@ -47,6 +48,7 @@ const MENU = [
       { id: 'pl', label: 'P&L by file', href: '/billing/profit' },
       { id: 'not-invoiced', label: 'Delivered — not invoiced', href: '/shipments?stage=delivered&bill=not_invoiced' },
       { id: 'not-paid', label: 'Invoiced — not paid', href: '/shipments?stage=delivered&bill=unpaid' },
+      { id: 'no-cost', label: 'Delivered — no cost booked', href: '/shipments?stage=delivered&bill=no_cost' },
     ] },
   ] },
   { key: 'master', label: 'Master Code', icon: '🗂', cols: [
@@ -64,7 +66,7 @@ const MENU = [
   ] },
 ];
 
-const DEFAULT_FAVORITES = ['dashboard', 'ship-list', 'track', 'intake', 'ar-entry', 'settle'];
+const DEFAULT_FAVORITES = ['dashboard', 'ship-list', 'track', 'intake', 'vendor-bills', 'ar-entry', 'settle'];
 
 /** The menu this user may see: categories and pages filtered by their permissions; empty columns / categories dropped. */
 function menuFor(user) {

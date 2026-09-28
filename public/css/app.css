@@ -412,3 +412,18 @@ table.aging td { vertical-align: middle; }
 .state.draft { background: #fff7ed; color: #9a3412; }
 .state.ready { background: #dcfce7; color: #166534; }
 .state.sent { background: #1e40af; color: #fff; }
+
+/* Vendor bill booking: invoice on the left, form on the right */
+.split { display: grid; grid-template-columns: minmax(0, 1fr) minmax(420px, 1fr); gap: 18px; align-items: start; }
+.docview { position: sticky; top: 12px; height: calc(100vh - 150px); min-height: 520px; }
+.docview iframe { width: 100%; height: 100%; border: 0; display: block; }
+.okbox { background: #f0fdf4; border: 1px solid #bbf7d0; color: #14532d; padding: 10px 14px; border-radius: 8px; margin-bottom: 14px; }
+.billsum { display: flex; gap: 18px; align-items: center; flex-wrap: wrap; margin: 10px 0 14px; font-size: 13px; }
+.billsum b { font-variant-numeric: tabular-nums; }
+.dropzone { border-style: dashed; border-color: #9ec1ff; background: #fbfdff; }
+@media (max-width: 1000px) { .split { grid-template-columns: 1fr; } .docview { position: static; height: 480px; } }
+
+.vendor-drop { margin-top: 14px; border: 1px dashed #9ec1ff; border-radius: var(--radius); padding: 10px 12px; background: #fbfdff; }
+.pending-list { display: flex; flex-direction: column; gap: 4px; margin-top: 8px; }
+.pending { display: block; padding: 6px 10px; border-radius: 6px; background: #fff7ed; color: #9a3412; font-size: 13px; }
+.pending:hover { background: #ffedd5; text-decoration: none; }

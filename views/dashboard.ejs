@@ -20,6 +20,8 @@
     <div class="sum-grid">
       <a class="<%= kpi.notInvoiced ? 'bad' : '' %>" href="/shipments?stage=delivered&bill=not_invoiced"><b><%= kpi.notInvoiced %></b><span>Delivered — not invoiced</span></a>
       <a class="<%= kpi.awaiting ? 'warn' : '' %>" href="/shipments?stage=delivered&bill=unpaid"><b><%= kpi.awaiting %></b><span>Awaiting payment</span></a>
+      <a class="<%= kpi.vendorToBook ? 'warn' : '' %>" href="/vendor-bills"><b><%= kpi.vendorToBook %></b><span>Vendor invoices to book</span></a>
+      <a class="<%= kpi.noCost ? 'warn' : '' %>" href="/shipments?stage=delivered&bill=no_cost"><b><%= kpi.noCost %></b><span>Delivered — no cost booked</span></a>
     </div>
   </div>
   <% } %>
