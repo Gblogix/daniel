@@ -72,7 +72,8 @@ async function xlsx(buffer) {
     const rows = [];
     ws.eachRow({ includeEmpty: false }, (row) => {
       const vals = [];
-      row.eachCell({ includeEmpty: true }, (cell, col) => { vals[col - 1] = cellText(cell.value); });
+      // A merged block repeats its value in every cell it covers — keep it once (in the top-left cell).
+      row.eachCell({ includeEmpty: true }, (cell, col) => { vals[col - 1] = cell.isMerged && cell.master && cell.master.address !== cell.address ? '' : cellText(cell.value); });
       const r = Array.from(vals, (v) => v ?? '');
       if (r.some((v) => String(v).trim())) rows.push(r);
     });

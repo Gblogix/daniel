@@ -187,7 +187,7 @@
       <b><%= b === '—' ? 'No buyer' : b %></b> <span class="muted small"><%= [...g.invoices].join(', ') || 'no invoice' %> · <%= g.lines %> line<%= g.lines === 1 ? "" : "s" %> · <%= g.pkgs || '—' %> pkgs · <%= g.kg ? fmtNum(g.kg, 1) : '—' %> kg · <%= g.cbm ? fmtNum(g.cbm, 3) : '—' %> cbm</span></button><% }) %>
   </div><% } %>
   <div class="tablewrap"><table class="t lines" data-lines="item">
-    <thead><tr><th>Final buyer</th><th>Invoice no.</th><th>PO</th><th style="min-width:220px">Description</th><th>HS code</th><th>Qty</th><th>Unit</th><th>Pkgs</th><th>KG</th><th>CBM</th><th></th></tr></thead>
+    <thead><tr><th>Final buyer</th><th>Invoice no.</th><th>PO / SKU</th><th style="min-width:220px">Description</th><th>HS code</th><th>Qty</th><th>Unit</th><th>Pkgs</th><th>KG</th><th>CBM</th><th></th></tr></thead>
     <tbody>
     <% items.forEach((i) => { %>
       <tr data-buyer-row="<%= i.buyer || '—' %>">

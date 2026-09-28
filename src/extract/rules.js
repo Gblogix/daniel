@@ -344,8 +344,9 @@ function extractRules(text, { filename = '', rows = null } = {}) {
   out.telex_release = /TELEX\s+RELEASE|SURRENDERED|SEA\s*WAYBILL|EXPRESS\s+RELEASE|电放/.test(U) || null;
 
   if (rows) {
-    const { items, totals } = itemsFromRows(rows);
+    const { items, totals, packageUnit } = itemsFromRows(rows);
     out.items = items;
+    if (items.length && packageUnit && out.packages == null) out.package_unit = packageUnit;
     if (items.length) {
       // Table totals beat free-text matching: use the TOTAL row, else the sum of the lines.
       const sum = (k) => { const v = items.reduce((a, i) => a + (i[k] || 0), 0); return v ? Math.round(v * 1000) / 1000 : null; };
@@ -431,15 +432,18 @@ function partyName(lines, labelRe) {
 function itemsFromRows(rows) {
   const COLS = {
     po_no: /^(P\.?O\.?|PO\s*NO|ORDER)/i,
+    sku: /^(SKU|ITEM\s*(NO|CODE|#)|STYLE\s*(NO|#)?$|MODEL|BARCODE|UPC)/i,
     description: /DESCRIPTION|ITEM|PRODUCT|GOODS|COMMODITY|품명|품목/i,
     hs_code: /HS\s*CODE|HTS/i,
     unit_price: /UNIT\s*PRICE|PRICE|단가/i,
     amount: /AMOUNT|TOTAL\s*VALUE|VALUE|금액/i,
     quantity: /^(Q'?TY|QUANTITY|PCS|수량)/i,
     unit: /^UNIT$/i,
-    packages: /CTNS?|CARTONS?|PKGS?|PACKAGES?|박스/i,
-    weight_kg: /^(?!.*\bN\.?\s?W\b)(?!.*NET).*(G\.?\s?W|GROSS|WEIGHT|중량)/i,
-    cbm: /CBM|MEAS|VOLUME|M3/i,
+    packages: /CTNS?|CARTONS?|PKGS?|PACKAGES?|^C\/?T\b|박스/i,
+    // Gross weight only — "N. WEIGHT", "N.W", "NET" are net weight.
+    weight_kg: /^(?!\s*N\.?\s*(W\b|WT|WEIGHT))(?!.*\bNET\b).*(G\.?\s?W|GROSS|WEIGHT|중량)/i,
+    // CBM / measurement; a bare "VOLUME" column on cosmetics lists is the bottle size (35ml), not CBM.
+    cbm: /CBM|MEAS|M3|^VOLUME\s*\(?\s*(CBM|M3)/i,
   };
   let header = -1; let map = {};
   for (let r = 0; r < Math.min(rows.length, 40); r++) {
@@ -451,6 +455,9 @@ function itemsFromRows(rows) {
     if ('description' in m && Object.keys(m).length >= 2) { header = r; map = m; break; }
   }
   if (header < 0) return { items: [], totals: null };
+  // "Q'TY(pcs)" / "Q'TY / (pcs)": the unit sits in the header.
+  const qh = 'quantity' in map ? /\(\s*([A-Z]{2,5})\s*\)/i.exec(String(rows[header][map.quantity])) : null;
+  const qtyHeaderUnit = qh ? qh[1].toUpperCase() : null;
   const items = [];
   let totals = null;
   // The table ends at its TOTAL row, or where the next form section / document starts ("PACKING LIST",
@@ -459,7 +466,8 @@ function itemsFromRows(rows) {
   for (const row of rows.slice(header + 1)) {
     const cells = row.map((c) => String(c ?? '').trim());
     const pick = (k) => (k in map ? cells[map[k]] || '' : '');
-    const n = (k) => { const v = numIn(pick(k)); return v; };
+    // Excel float noise (242.79999999999998) → 3 decimals.
+    const n = (k) => { const v = numIn(pick(k)); return v == null ? null : Math.round(v * 1000) / 1000; };
     const desc = pick('description');
     const isTotal = cells.some((c) => /^(TOTAL|SUB\s*-?TOTAL|G(RAND)?\.?\s*TOTAL|합계)\b/i.test(c));
     if (isTotal) {
@@ -473,12 +481,15 @@ function itemsFromRows(rows) {
     // "12,000 PCS" in the quantity cell carries the unit
     const qtyUnit = /[\d.,]+\s*([A-Z]{2,6})\b/i.exec(pick('quantity'));
     items.push({
-      po_no: pick('po_no') || null, description: desc, hs_code: pick('hs_code') || null,
-      quantity: n('quantity'), unit: pick('unit') || (qtyUnit ? qtyUnit[1].toUpperCase() : null),
+      po_no: pick('po_no') || pick('sku') || null, description: desc, hs_code: pick('hs_code') || null,
+      quantity: n('quantity'), unit: pick('unit') || (qtyUnit ? qtyUnit[1].toUpperCase() : null) || qtyHeaderUnit,
       packages: n('packages'), weight_kg: n('weight_kg'), cbm: n('cbm'), unit_price: n('unit_price'), amount: n('amount'),
     });
   }
-  return { items, totals };
+  // Unit of the packages column: cartons (CT / CTNS / CARTON), pallets, or plain packages.
+  const ph = 'packages' in map ? String(rows[header][map.packages]).toUpperCase() : '';
+  const packageUnit = /PALLET|PLT/.test(ph) ? 'PLTS' : /C\/?T|CTN|CARTON|BOX|박스/.test(ph) ? 'CTNS' : ph ? 'PKGS' : null;
+  return { items, totals, packageUnit };
 }
 
 // Final buyers (the retailer the goods are for) seen on P/L / C/I: named in the text, or coded in the invoice no.

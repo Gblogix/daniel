@@ -89,3 +89,29 @@ test('two P/Ls in one shipment keep their own invoice no. and final buyer (Targe
   const d = mergeExtractions([...a, ...b]);
   assert.deepEqual(d.items.map((i) => [i.buyer, i.invoice_no, i.description]), [['Target', 'EZVC_TGT_26-09', 'Facial serum'], ['Nordstrom Rack', 'BSBUS26091601', 'Shampoo']]);
 });
+
+test('Korean exporter CI/PL workbook: merged cells, 2-row header, VOLUME (35ml) is not CBM, gross not net weight, buyer under Terms', async () => {
+  const wb = new ExcelJS.Workbook();
+  const ws = wb.addWorksheet('Packing List');
+  const put = (r, c, v, to) => { ws.getCell(r, c).value = v; if (to) ws.mergeCells(r, c, r, to); };
+  put(1, 2, 'PACKING LIST', 16);
+  put(2, 2, '1. Shipper/Exporter', 6); put(2, 7, '9. No & Date of Invoice', 16);
+  put(3, 2, 'Sample Exporter Inc.', 6); put(3, 7, '#BSBUS99990001', 9);
+  put(4, 2, '2. Consignee', 6); put(4, 7, '11. Terms & Conditions', 16);
+  put(5, 2, 'Bright Brands Inc.', 6); put(5, 7, 'EXPORT STANDARD PACKING', 16);
+  put(6, 7, 'Walmart', 16);
+  put(7, 2, '13. Description of Goods', 16);
+  ['NO', 'SKU', 'HS CODE', 'BARCODE', 'PRODUCT NAME', 'VOLUME', "Q'TY / (pcs)", "CT / Q'ty", 'Pallet', 'Pallet / No.', 'CT SIZE(cm)', 'CT SIZE(cm)', 'CT SIZE(cm)', 'N. WEIGHT / (kg)', 'G. WEIGHT / (kg)']
+    .forEach((h, k) => { ws.getCell(8, k + 2).value = h; ws.getCell(9, k + 2).value = h.startsWith('CT SIZE') ? ['W', 'D', 'H'][k - 10] : h; });
+  [[1, 'SB1318', '3304.99-9000', '880001', 'Deep Collagen Capsule Cream', '55g', 1680, 56, 1, 1, 35, 22, 13.5, 240.79999999999998, 242.79999999999998],
+    [2, 'SB1447', '3304.99-1000', '880002', 'EGF Smoothing Toner', '300ml', 210, 7, 1, 1, 31, 26, 20, 80.5, 82.5]].forEach((r, k) => r.forEach((v, c) => { ws.getCell(10 + k, c + 2).value = v; }));
+  ws.getCell(12, 2).value = 'TOTAL'; ws.getCell(12, 8).value = 1890; ws.getCell(12, 9).value = 63; ws.getCell(12, 15).value = 321.3; ws.getCell(12, 16).value = 325.3;
+  const buf = Buffer.from(await wb.xlsx.writeBuffer());
+  const [pl] = await extractFile({ buffer: buf, filename: 'BSBUS99990001_CIPL.xlsx', docTypeHint: 'PL' });
+  assert.equal(pl.ci_invoice_no, 'BSBUS99990001');
+  assert.equal(pl.buyer, 'Walmart');
+  assert.equal(pl.consignee_name, 'Bright Brands Inc.');
+  assert.deepEqual(pl.items.map((i) => [i.po_no, i.quantity, i.unit, i.packages, i.weight_kg, i.cbm, i.buyer]),
+    [['SB1318', 1680, 'PCS', 56, 242.8, null, 'Walmart'], ['SB1447', 210, 'PCS', 7, 82.5, null, 'Walmart']]);
+  assert.deepEqual([pl.packages, pl.package_unit, pl.weight_kg], [63, 'CTNS', 325.3]);
+});
