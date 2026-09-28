@@ -5,12 +5,19 @@
     <a class="btn" href="/portal">+ Upload documents</a>
   </div>
 </div>
+<% const canDel = can('intake'); %>
+<form method="post" action="/intakes/delete" data-bulk>
+<input type="hidden" name="_csrf" value="<%= csrf %>"><input type="hidden" name="status" value="<%= status %>">
+<% if (canDel && rows.length) { %><div class="actions" style="margin-bottom:8px">
+  <button class="btn danger small" data-bulk-btn disabled data-confirm="Delete the checked uploads? Documents not applied to a file are removed.">🗑 Delete selected (<span data-bulk-count>0</span>)</button>
+  <span class="muted small">Documents already applied to a file stay on the file.</span></div><% } %>
 <div class="tablewrap"><table class="t">
-  <thead><tr><th>#</th><th>Received</th><th>Agent</th><th>Documents</th><th>MBL / HBL</th><th>Containers</th><th>ETA</th><th>Match</th><th>Method</th><th></th></tr></thead>
+  <thead><tr><% if (canDel) { %><th style="width:28px"><input type="checkbox" data-bulk-all title="Select all"></th><% } %><th>#</th><th>Received</th><th>Agent</th><th>Documents</th><th>MBL / HBL</th><th>Containers</th><th>ETA</th><th>Match</th><th>Method</th><th></th></tr></thead>
   <tbody>
-  <% if (!rows.length) { %><tr><td colspan="10" class="muted">Nothing here.</td></tr><% } %>
+  <% if (!rows.length) { %><tr><td colspan="11" class="muted">Nothing here.</td></tr><% } %>
   <% rows.forEach((r) => { %>
     <tr>
+      <% if (canDel) { %><td><input type="checkbox" name="ids" value="<%= r.id %>" data-bulk-item></td><% } %>
       <td><%= r.id %></td>
       <td class="nowrap small"><%= fmtDateTime(r.created_at) %><br><span class="muted"><%= r.uploader %></span></td>
       <td><%= r.agent_name || '—' %></td>
@@ -20,9 +27,11 @@
       <td><%= r.draft.eta || '' %></td>
       <td><%= r.ref_no ? r.ref_no : 'New' %></td>
       <td class="small"><%= { ai: 'AI', ocr: 'OCR', rules: 'Text' }[r.extraction_method] || 'Text' %><% if ((r.draft.warnings || []).length) { %> <span class="badge ARRIVED">⚠ <%= r.draft.warnings.length %></span><% } %></td>
-      <td><a class="btn small <%= r.status === 'PENDING' ? '' : 'secondary' %>" href="/intakes/<%= r.id %>"><%= r.status === 'PENDING' ? 'Review' : 'View' %></a></td>
+      <td class="nowrap"><a class="btn small <%= r.status === 'PENDING' ? '' : 'secondary' %>" href="/intakes/<%= r.id %>"><%= r.status === 'PENDING' ? 'Review' : 'View' %></a>
+        <% if (canDel) { %><button class="btn secondary small" name="one" value="<%= r.id %>" title="Delete this upload" data-confirm="Delete upload #<%= r.id %>?">🗑</button><% } %></td>
     </tr>
   <% }) %>
   </tbody>
 </table></div>
+</form>
 <%- include('../partials/foot') %>

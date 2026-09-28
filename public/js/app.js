@@ -239,3 +239,15 @@ document.querySelectorAll('[data-buyer-filter]').forEach((bar) => {
     table.querySelectorAll('tbody tr').forEach((tr) => { tr.hidden = Boolean(only) && tr.dataset.buyerRow !== only; });
   });
 });
+
+// Bulk selection: "select all" box, live count, button enabled only with a selection.
+document.querySelectorAll('form[data-bulk]').forEach((form) => {
+  const items = () => [...form.querySelectorAll('[data-bulk-item]')];
+  const btn = form.querySelector('[data-bulk-btn]');
+  const count = form.querySelector('[data-bulk-count]');
+  const all = form.querySelector('[data-bulk-all]');
+  const sync = () => { const n = items().filter((c) => c.checked).length; if (count) count.textContent = n; if (btn) btn.disabled = !n; if (all) all.checked = n && n === items().length; };
+  all?.addEventListener('change', () => { items().forEach((c) => { c.checked = all.checked; }); sync(); });
+  form.addEventListener('change', (e) => { if (e.target.matches('[data-bulk-item]')) sync(); });
+  sync();
+});

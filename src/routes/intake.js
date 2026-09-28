@@ -168,6 +168,41 @@ router.post('/intakes/:id/apply', auth.requirePerm('intake'), async (req, res) =
   res.redirect(`/shipments/${id}`);
 });
 
+/**
+ * Delete intakes from the list (one, or the checked ones). Documents that were never applied to a file are removed
+ * with their stored files; documents already on a file stay there. An Outlook email that was imported is not read again.
+ */
+function deleteIntakes(ids, db = store.db) {
+  let n = 0;
+  const files = [];
+  db.tx(() => {
+    for (const id of ids) {
+      if (!db.get('SELECT id FROM intakes WHERE id = ?', id)) continue;
+      const loose = db.all('SELECT id, stored_path FROM documents WHERE intake_id = ? AND shipment_id IS NULL', id);
+      for (const d of loose) {
+        db.run('DELETE FROM documents WHERE id = ?', d.id);
+        // Several documents can share one stored file (a merged PDF): remove it only when nothing points to it.
+        if (d.stored_path && !db.get('SELECT 1 FROM documents WHERE stored_path = ?', d.stored_path)) files.push(d.stored_path);
+      }
+      db.run('UPDATE documents SET intake_id = NULL WHERE intake_id = ?', id);
+      db.run('UPDATE mail_imports SET intake_id = NULL WHERE intake_id = ?', id);
+      db.run('DELETE FROM intakes WHERE id = ?', id);
+      n++;
+    }
+  });
+  for (const f of [...new Set(files)]) { try { fs.unlinkSync(f); } catch { /* already gone */ } }
+  return n;
+}
+
+router.post('/intakes/delete', auth.requirePerm('intake'), (req, res) => {
+  const arr = (v) => (Array.isArray(v) ? v : v == null ? [] : [v]);
+  const ids = (req.body.one ? [req.body.one] : arr(req.body.ids)).map(Number).filter(Boolean);
+  if (!ids.length) { req.session.flash = { type: 'err', msg: 'Tick the uploads to delete first' }; return res.redirect(req.get('referer') || '/intakes'); }
+  const n = deleteIntakes(ids);
+  req.session.flash = { type: 'ok', msg: `${n} upload${n === 1 ? '' : 's'} deleted` };
+  res.redirect(`/intakes?status=${encodeURIComponent(req.body.status || 'PENDING')}`);
+});
+
 router.post('/intakes/:id/reject', auth.requirePerm('intake'), (req, res) => {
   store.db.run("UPDATE intakes SET status = 'REJECTED', note = COALESCE(note, '') || ?, reviewed_at = datetime('now'), reviewed_by = ? WHERE id = ?",
     req.body.reason ? `\nRejected: ${req.body.reason}` : '', req.user.id, Number(req.params.id));
@@ -178,3 +213,4 @@ router.post('/intakes/:id/reject', auth.requirePerm('intake'), (req, res) => {
 module.exports = router;
 module.exports.processUpload = processUpload;
 module.exports.findMatch = findMatch;
+module.exports.deleteIntakes = deleteIntakes;
