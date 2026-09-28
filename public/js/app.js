@@ -248,6 +248,21 @@ document.querySelectorAll('form[data-bulk]').forEach((form) => {
   const all = form.querySelector('[data-bulk-all]');
   const sync = () => { const n = items().filter((c) => c.checked).length; if (count) count.textContent = n; if (btn) btn.disabled = !n; if (all) all.checked = n && n === items().length; };
   all?.addEventListener('change', () => { items().forEach((c) => { c.checked = all.checked; }); sync(); });
-  form.addEventListener('change', (e) => { if (e.target.matches('[data-bulk-item]')) sync(); });
+  form.addEventListener('change', (e) => { if (e.target === form || e.target.matches('[data-bulk-item]')) sync(); });
   sync();
 });
+
+// Documents on a file: change type in place; "Select duplicates" ticks the extra copies.
+document.querySelectorAll('select[data-doc-type]').forEach((sel) => {
+  sel.addEventListener('change', () => {
+    const f = document.createElement('form');
+    f.method = 'post'; f.action = `/documents/${sel.dataset.docType}/type`;
+    const csrf = sel.form?.querySelector('input[name="_csrf"]')?.value;
+    f.innerHTML = `<input type="hidden" name="_csrf" value="${csrf}"><input type="hidden" name="doc_type" value="${sel.value}">`;
+    document.body.appendChild(f); f.submit();
+  });
+});
+document.querySelectorAll('[data-check-dups]').forEach((b) => b.addEventListener('click', () => {
+  b.form.querySelectorAll('[data-dup]').forEach((c) => { c.checked = true; });
+  b.form.dispatchEvent(new Event('change', { bubbles: true }));
+}));

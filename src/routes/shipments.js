@@ -111,6 +111,12 @@ router.get('/shipments/:id', auth.requireLogin, (req, res) => {
   const db = store.db;
   const hideAcct = auth.canAccounting(req.user) ? '' : `AND doc_type NOT IN (${auth.ACCOUNTING_DOCS.map((t) => `'${t}'`).join(',')})`;
   const docs = db.all(`SELECT * FROM documents WHERE shipment_id = ? ${hideAcct} ${internal ? '' : docFilter(viewer)} ORDER BY id DESC`, s.id);
+  // Same file uploaded twice ("x.pdf" / "x (3).pdf", same size): the newer copy is marked as a duplicate.
+  const seenDoc = new Map();
+  for (const d of [...docs].reverse()) {
+    const key = `${d.doc_type}|${String(d.filename).toLowerCase().replace(/\s*\(\d+\)(?=\.[a-z0-9]+|\s*\[|$)/g, '').replace(/\s+/g, ' ')}|${d.size || ''}`;
+    if (seenDoc.has(key)) d.duplicate_of = seenDoc.get(key); else seenDoc.set(key, d.id);
+  }
   const events = db.all(`SELECT * FROM events WHERE shipment_id = ? ${internal ? '' : 'AND customer_visible = 1'} ORDER BY id DESC`, s.id);
   const emails = internal ? db.all(`SELECT id, kind, to_addr, subject, status, created_at FROM emails WHERE shipment_id = ?
     ${auth.canAccounting(req.user) ? '' : `AND kind NOT IN (${auth.ACCOUNTING_EMAILS.map((k) => `'${k}'`).join(',')})`} ORDER BY id DESC`, s.id) : [];
@@ -296,6 +302,41 @@ router.post('/documents/:id/visibility', auth.requirePerm('shipments_edit'), (re
   const d = store.db.get('SELECT * FROM documents WHERE id = ?', Number(req.params.id));
   if (!d) return res.status(404).end();
   store.db.run('UPDATE documents SET customer_visible = ? WHERE id = ?', d.customer_visible ? 0 : 1, d.id);
+  res.redirect(`/shipments/${d.shipment_id}#docs`);
+});
+
+/** Delete documents from a file (one, or the checked ones). The stored file goes when no other document uses it. */
+router.post('/documents/delete', auth.requirePerm('shipments_edit'), (req, res) => {
+  const db = store.db;
+  const arr = (v) => (Array.isArray(v) ? v : v == null ? [] : [v]);
+  const ids = (req.body.one ? [req.body.one] : arr(req.body.doc_ids)).map(Number).filter(Boolean);
+  const back = `/shipments/${Number(req.body.shipment_id) || ''}#docs`;
+  if (!ids.length) { flash(req, 'err', 'Tick the documents to delete first'); return res.redirect(back); }
+  const files = [];
+  let n = 0;
+  db.tx(() => {
+    for (const id of ids) {
+      const d = db.get('SELECT * FROM documents WHERE id = ? AND shipment_id = ?', id, Number(req.body.shipment_id));
+      if (!d) continue;
+      if (auth.ACCOUNTING_DOCS.includes(d.doc_type) && !auth.canAccounting(req.user)) continue;
+      db.run('UPDATE invoices SET document_id = NULL WHERE document_id = ?', d.id);
+      db.run('DELETE FROM documents WHERE id = ?', d.id);
+      if (d.stored_path && !db.get('SELECT 1 FROM documents WHERE stored_path = ?', d.stored_path)) files.push(d.stored_path);
+      n++;
+    }
+  });
+  for (const f of [...new Set(files)]) { try { fs.unlinkSync(f); } catch { /* already gone */ } }
+  if (n) S.addEvent(Number(req.body.shipment_id), 'DOCS_DELETED', `${n} document(s) deleted`, { userId: req.user.id, customerVisible: false });
+  flash(req, 'ok', `${n} document${n === 1 ? '' : 's'} deleted`);
+  res.redirect(back);
+});
+
+/** Correct a document's type (e.g. a C/I read as OTHER). */
+router.post('/documents/:id/type', auth.requirePerm('shipments_edit'), (req, res) => {
+  const d = store.db.get('SELECT * FROM documents WHERE id = ?', Number(req.params.id));
+  if (!d) return res.status(404).end();
+  const t = String(req.body.doc_type || '').toUpperCase();
+  if (/^[A-Z]{2,6}$/.test(t) && !(auth.ACCOUNTING_DOCS.includes(t) && !auth.canAccounting(req.user))) store.db.run('UPDATE documents SET doc_type = ? WHERE id = ?', t, d.id);
   res.redirect(`/shipments/${d.shipment_id}#docs`);
 });
 

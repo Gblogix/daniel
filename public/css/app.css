@@ -498,3 +498,5 @@ form[data-drop].busy { opacity: .6; pointer-events: none; }
 table[data-lines="item"] input[name=item_qty], table[data-lines="item"] input[name=item_kg], table[data-lines="item"] input[name=item_cbm] { min-width: 64px; }
 table[data-lines="item"] input[name=item_pkgs], table[data-lines="item"] input[name=item_unit] { min-width: 48px; }
 table[data-lines="item"] input[name=item_inv] { min-width: 130px; }
+.docs-table select.doc-type { font-size: 11px; font-weight: 700; padding: 2px 4px; border-radius: 999px; background: #eef2f8; border: 1px solid #dbe4f3; width: auto; }
+.docs-table tr.dup td { background: #fffaf0; }
