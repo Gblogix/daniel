@@ -12,8 +12,8 @@
       <div class="dropzone">
         <% const labels = { MBL: 'Master B/L', HBL: 'House B/L', PL: 'Packing list', CI: 'Commercial invoice', CIPL: 'C/I + P/L in one file (Excel tabs or PDF)', ISF: 'ISF', AWB: 'Air waybill (air)', OTHER: 'Other / auto-detect' }; %>
         <% slots.forEach((slot) => { %>
-          <div class="slot"><label for="u_<%= slot %>"><%= labels[slot] %><% if (slot === 'CIPL') { %><br><span class="small muted" style="font-weight:400">합본 파일 — split by tab / page title</span><% } %></label>
-            <input id="u_<%= slot %>" type="file" name="<%= slot %>" accept=".pdf,.xlsx,.csv,.txt,.jpg,.jpeg,.png" <%= slot === 'OTHER' ? 'multiple' : '' %>></div>
+          <div class="slot"><label for="u_<%= slot %>"><%= labels[slot] %><% if (slot === 'CIPL') { %><br><span class="small muted" style="font-weight:400">합본 파일 — split by tab / page title</span><% } %><% if (['PL', 'CI', 'CIPL'].includes(slot)) { %><br><span class="small muted" style="font-weight:400">여러 개 가능 (invoice / buyer별)</span><% } %></label>
+            <input id="u_<%= slot %>" type="file" name="<%= slot %>" accept=".pdf,.xlsx,.csv,.txt,.jpg,.jpeg,.png" multiple></div>
         <% }) %>
       </div>
       <div class="field" style="margin-top:12px"><label for="note">Note (optional)</label><textarea id="note" name="note" rows="2" placeholder="e.g. 2nd container to follow, telex release requested…"></textarea></div>

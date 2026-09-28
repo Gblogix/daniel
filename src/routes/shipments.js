@@ -11,7 +11,7 @@ const notify = require('../notify');
 const { expandMailFiles } = require('../extract/mailfile');
 
 const router = express.Router();
-const upload = multer({ dest: path.join(config.uploadDir, 'shipments'), limits: { fileSize: 25 * 1024 * 1024, files: 10 } });
+const upload = multer({ dest: path.join(config.uploadDir, 'shipments'), limits: { fileSize: 25 * 1024 * 1024, files: 20 } });
 
 const companies = (type) => store.db.all('SELECT id, name FROM companies WHERE type = ? ORDER BY name', type);
 const partyLists = () => ({
@@ -244,7 +244,7 @@ router.post('/shipments/:id/issue/:type', auth.requirePerm('send_notices'), asyn
 });
 
 // ---------- documents ----------
-router.post('/shipments/:id/documents', auth.requirePerm('shipments_edit'), upload.array('files', 10), auth.checkCsrf, async (req, res) => {
+router.post('/shipments/:id/documents', auth.requirePerm('shipments_edit'), upload.array('files', 20), auth.checkCsrf, async (req, res) => {
   const id = Number(req.params.id);
   // A dragged Outlook email (.msg / .eml) is stored as its attachments.
   const { files } = await expandMailFiles((req.files || []).map((f) => ({ buffer: fs.readFileSync(f.path), filename: f.originalname, mime: f.mimetype, path: f.path })));
@@ -258,17 +258,37 @@ router.post('/shipments/:id/documents', auth.requirePerm('shipments_edit'), uplo
     flash(req, 'ok', `${files.length} vendor invoice(s) read and sent to accounting to book`);
     return res.redirect(`/shipments/${id}#docs`);
   }
+  // P/L, C/I or a combined C/I + P/L: read the cargo lines and add them to the file (same invoice replaced).
+  const readLines = ['PL', 'CI', 'CIPL'].includes(req.body.doc_type);
+  const parts = [];
   for (const f of files) {
     let stored = f.path;
+    if (readLines) {
+      const got = await require('../extract/index').extractFile({ buffer: f.buffer, filename: f.filename, mime: f.mime, docTypeHint: req.body.doc_type === 'CIPL' ? 'AUTO' : req.body.doc_type }).catch(() => []);
+      parts.push(...got.map((p) => ({ ...p, doc_type: p.doc_type === 'OTHER' ? req.body.doc_type : p.doc_type })));
+    }
     if (!stored) {
       stored = path.join(config.uploadDir, 'shipments', `${crypto.randomBytes(12).toString('hex')}${path.extname(f.filename).toLowerCase()}`);
       fs.writeFileSync(stored, f.buffer);
     }
     store.db.run(`INSERT INTO documents (shipment_id, doc_type, filename, stored_path, mime, size, customer_visible, uploaded_by)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?)`, id, req.body.doc_type || 'OTHER', f.filename, stored, f.mime, f.buffer.length,
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?)`, id, req.body.doc_type === 'CIPL' ? 'CI' : req.body.doc_type || 'OTHER', f.filename, stored, f.mime, f.buffer.length,
     req.body.customer_visible ? 1 : 0, req.user.id);
   }
-  flash(req, 'ok', `${files.length} file(s) uploaded`);
+  let added = '';
+  if (parts.length) {
+    const { items } = require('../extract/index').mergeExtractions(parts);
+    if (items.length) {
+      const cur = S.find(id, null).items;
+      const merged = S.mergeItems(cur, items);
+      const col = (k) => merged.map((i) => i[k] ?? '');
+      S.saveLines(id, { item_buyer: col('buyer'), item_inv: col('invoice_no'), item_po: col('po_no'), item_desc: col('description'), item_hs: col('hs_code'),
+        item_qty: col('quantity'), item_unit: col('unit'), item_pkgs: col('packages'), item_kg: col('weight_kg'), item_cbm: col('cbm'), item_price: col('unit_price'), item_amount: col('amount') });
+      const invs = [...new Set(items.map((i) => i.invoice_no).filter(Boolean))];
+      added = ` · ${items.length} P/L line(s) added${invs.length ? ` (${invs.join(', ')})` : ''}`;
+    }
+  }
+  flash(req, 'ok', `${files.length} file(s) uploaded${added}`);
   res.redirect(`/shipments/${id}#docs`);
 });
 

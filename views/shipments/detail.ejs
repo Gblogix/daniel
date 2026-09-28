@@ -202,7 +202,7 @@
       </table>
 <% if (can('shipments_edit')) { %>      <form method="post" action="/shipments/<%= s.id %>/documents?_csrf=<%= csrf %>" enctype="multipart/form-data" style="margin-top:12px" class="dropzone" data-drop>
         <div class="grid g2" style="gap:8px">
-          <select name="doc_type"><% ['MBL','HBL','PL','CI','ISF','AWB','AN','DO','ATME','OTHER'].forEach((t) => { %><option><%= t %></option><% }) %><option value="VINV">Vendor / CFS invoice → accounting (auto-read)</option></select>
+          <select name="doc_type"><% ['MBL','HBL','PL','CI','ISF','AWB','AN','DO','ATME','OTHER'].forEach((t) => { %><option value="<%= t %>"><%= { PL: 'PL (lines added to P/L table)', CI: 'CI (lines added if no P/L)' }[t] || t %></option><% }) %><option value="CIPL">C/I + P/L in one file (lines added)</option><option value="VINV">Vendor / CFS invoice → accounting (auto-read)</option></select>
           <label class="check"><input type="checkbox" name="customer_visible" value="1"> Visible to customer</label>
         </div>
         <input type="file" name="files" multiple style="margin:8px 0">

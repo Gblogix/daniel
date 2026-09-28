@@ -21,10 +21,11 @@ const SLOTS = ['MBL', 'HBL', 'PL', 'CI', 'CIPL', 'ISF', 'AWB', 'OTHER'];
 const ALLOWED = /\.(pdf|xlsx|csv|txt|jpe?g|png)$/i;
 const upload = multer({
   dest: path.join(config.uploadDir, 'intake'),
-  limits: { fileSize: 25 * 1024 * 1024, files: 20 },
+  limits: { fileSize: 25 * 1024 * 1024, files: 60 },
   fileFilter: (req, file, cb) => cb(null, ALLOWED.test(file.originalname)),
 });
-const uploadFields = upload.fields(SLOTS.map((name) => ({ name, maxCount: 5 })));
+// Several files per line: a consolidated box has one C/I + P/L per invoice (Target, Walmart, Nordstrom…).
+const uploadFields = upload.fields(SLOTS.map((name) => ({ name, maxCount: 20 })));
 const canUpload = auth.requireRole('agent', 'admin', 'staff');
 
 router.get('/portal', canUpload, (req, res) => {
@@ -120,7 +121,8 @@ router.get('/intakes/:id', auth.requireInternal, (req, res) => {
   if (draft.mode === 'AIR' && draft.mbl_no && !draft.hbl_no) s.direct_shipment = 1;
   const sources = { ...(draft.sources || {}), ...(draft.sources?.freight_location ? { cfs_location: draft.sources.freight_location } : {}) };
   s.containers = draft.containers?.length ? draft.containers : target?.containers || [];
-  s.items = draft.items?.length ? draft.items : target?.items || [];
+  // New P/L lines replace the file's lines of the same invoice; lines of other invoices already on the file stay.
+  s.items = S.mergeItems(target?.items || [], draft.items || []);
   // Customer = the consignee on the B/L (the notify party when consigned "to order"); not on Parties yet → offer to add it.
   let newCustomer = null;
   if (!s.customer_id) {

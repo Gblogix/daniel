@@ -517,6 +517,17 @@ function guessCustomer(s, db = store.db) {
   return hits.length === 1 ? hits[0].id : null;
 }
 
+/**
+ * Cargo lines after adding a P/L: lines of the invoices in `incoming` are replaced, other invoices' lines are kept
+ * (a second P/L uploaded later does not wipe the first). Without invoice numbers the new list replaces the old one.
+ */
+function mergeItems(existing, incoming) {
+  if (!incoming.length) return existing;
+  const inv = new Set(incoming.map((i) => String(i.invoice_no || '').toUpperCase()).filter(Boolean));
+  if (!inv.size) return incoming;
+  return [...existing.filter((i) => i.invoice_no && !inv.has(String(i.invoice_no).toUpperCase())), ...incoming];
+}
+
 function setClosed(id, closed, { db = store.db, userId = null } = {}) {
   if (closed) db.run("UPDATE shipments SET closed_at = datetime('now'), closed_by = ? WHERE id = ?", userId || 0, id);
   else db.run('UPDATE shipments SET closed_at = NULL, closed_by = NULL WHERE id = ?', id);
@@ -526,5 +537,5 @@ function setClosed(id, closed, { db = store.db, userId = null } = {}) {
 module.exports = {
   MODES, isMisc, STATUSES, STATUS_INDEX, CUSTOMS_STATUSES, HOLD_TYPES, EDITABLE_FIELDS, checklist, lfdInfo,
   statusLabel, normalizeInput, saveLines, nextRefNo, create, update, addEvent, list, find, scopeFor, tracking,
-  inferStatus, guessCustomer, shortParty, fileName, billingState, stage, refreshClosed, setClosed, RECEIVABLE, timeline, costState, customerStep,
+  inferStatus, mergeItems, guessCustomer, shortParty, fileName, billingState, stage, refreshClosed, setClosed, RECEIVABLE, timeline, costState, customerStep,
 };

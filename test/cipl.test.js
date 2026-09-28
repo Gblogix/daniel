@@ -115,3 +115,15 @@ test('Korean exporter CI/PL workbook: merged cells, 2-row header, VOLUME (35ml) 
     [['SB1318', 1680, 'PCS', 56, 242.8, null, 'Walmart'], ['SB1447', 210, 'PCS', 7, 82.5, null, 'Walmart']]);
   assert.deepEqual([pl.packages, pl.package_unit, pl.weight_kg], [63, 'CTNS', 325.3]);
 });
+
+test('a later P/L adds its invoice lines; the same invoice uploaded again replaces its lines', () => {
+  const { mergeItems } = require('../src/shipments');
+  const target = [{ invoice_no: 'EZVC_TGT_26-09', buyer: 'Target', description: 'Serum' }];
+  const walmart = [{ invoice_no: 'BSBUS26091601', buyer: 'Walmart', description: 'Cream' }, { invoice_no: 'BSBUS26091601', buyer: 'Walmart', description: 'Toner' }];
+  const both = mergeItems(target, walmart);
+  assert.deepEqual(both.map((i) => i.description), ['Serum', 'Cream', 'Toner']);
+  const revised = mergeItems(both, [{ invoice_no: 'bsbus26091601', buyer: 'Walmart', description: 'Cream (revised)' }]);
+  assert.deepEqual(revised.map((i) => i.description), ['Serum', 'Cream (revised)']);
+  assert.deepEqual(mergeItems(both, [{ description: 'no invoice no.' }]).map((i) => i.description), ['no invoice no.']);
+  assert.equal(mergeItems(both, []), both);
+});
