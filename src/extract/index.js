@@ -68,6 +68,16 @@ const PRIORITY = {
   mbl_no: ['MBL', 'HBL', 'ISF', 'AWB'],
   hbl_no: ['HBL', 'ISF', 'PL', 'CI'],
   default: ['HBL', 'MBL', 'AWB', 'NOA', 'ISF', 'PL', 'CI', 'DO', 'OTHER'],
+  // The house parties (the carrier's MBL names the agent / us as shipper / consignee).
+  shipper_name: ['HBL', 'ISF', 'CI', 'PL', 'AWB', 'MBL'],
+  consignee_name: ['HBL', 'ISF', 'CI', 'PL', 'AWB', 'NOA', 'MBL'],
+  notify_party: ['HBL', 'ISF', 'CI', 'AWB', 'MBL'],
+  shipper_address: ['HBL', 'ISF', 'CI', 'MBL'],
+  consignee_address: ['HBL', 'ISF', 'CI', 'MBL'],
+  notify_address: ['HBL', 'ISF', 'MBL'],
+  consignee_contact: ['HBL', 'ISF', 'CI', 'MBL'],
+  eta: ['NOA', 'ISF', 'HBL', 'MBL', 'AWB'],
+  scac: ['MBL', 'ISF', 'HBL'],
   firms_code: ['NOA', 'AWB', 'MBL', 'HBL', 'ISF'],
   freight_location: ['NOA', 'DO', 'MBL', 'HBL'],
   last_free_day: ['NOA', 'DO'],
@@ -79,7 +89,7 @@ const SCALARS = ['mbl_no', 'hbl_no', 'mawb_no', 'hawb_no', 'carrier', 'vessel', 
   'place_of_delivery', 'etd', 'eta', 'shipper_name', 'consignee_name', 'notify_party', 'packages', 'package_unit',
   'weight_kg', 'cbm', 'chargeable_weight', 'commodity', 'firms_code', 'freight_location', 'last_free_day',
   'ci_invoice_no', 'cargo_value', 'isf_no', 'telex_release', 'sub_bl_no', 'agent_ref',
-  'shipper_address', 'consignee_address', 'notify_address', 'consignee_contact'];
+  'shipper_address', 'consignee_address', 'notify_address', 'consignee_contact', 'scac', 'ams_bl_no', 'service_term'];
 
 /** Combine per-document extractions into one shipment draft. */
 function mergeExtractions(docs) {
@@ -125,6 +135,7 @@ function mergeExtractions(docs) {
   if (!draft.mbl_no && draft.mawb_no) draft.mbl_no = draft.mawb_no;
   if (!draft.hbl_no && draft.hawb_no) draft.hbl_no = draft.hawb_no;
   const types = new Set(docs.map((d) => d.doc_type));
+  if (!draft.carrier && draft.scac) draft.carrier = require('../tracking/codes').CARRIERS[draft.scac] || null;
   draft.mode = types.has('AWB') || draft.mawb_no || draft.flight_no ? 'AIR' : draft.containers.length ? 'FCL' : 'LCL';
   for (const d of docs) for (const w of d.warnings || []) if (!draft.warnings.includes(w)) draft.warnings.push(w);
   draft.doc_types = [...types];

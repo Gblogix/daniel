@@ -31,10 +31,14 @@ async function readPdfSegments(buffer) {
   for (const p of pdf.pages) {
     const type = detectDocType(p.text.split('\n').slice(0, 12).join('\n'));
     const prev = segments[segments.length - 1];
-    // A page without its own title continues the previous document (multi-page B/L, P/L continuation sheets).
-    if (prev && (type === 'OTHER' || type === prev.docType)) {
+    // A page without its own title continues the previous document (multi-page B/L, P/L continuation sheets), and so
+    // does a rider ("== ATTACHED RIDER ==") even when it mentions "HOUSE B/L NO".
+    const rider = /\bRIDER\b|CONTINUATION\s+(SHEET|PAGE)|ATTACHED\s+SHEET/i.test(p.text.split('\n').slice(0, 4).join('\n'));
+    if (prev && (type === 'OTHER' || type === prev.docType || rider)) {
       prev.pages.push(p.num); prev.parts.push(p);
     } else {
+      // A first page with no printed title (labels as graphics) takes the type of the page that follows it.
+      if (prev && prev.docType === 'OTHER' && prev.pages.length === 1 && segments.length === 1) { prev.docType = type; prev.pages.push(p.num); prev.parts.push(p); continue; }
       segments.push({ docType: type, pages: [p.num], parts: [p] });
     }
   }

@@ -15,11 +15,13 @@ const EMAIL = /[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/i;
 const PHONE = /(?:TEL|PHONE|PH|T)\s*[.:#]?\s*(\+?[\d(][\d\s().-]{7,}\d)/i;
 
 const ROLES = [
-  ['shipper', /^(?:SHIPPER|EXPORTER|SELLER)(?:\s*\/\s*EXPORTER)?\b/i],
-  ['consignee', /^(?:CONSIGNEE|BUYER|IMPORTER)\b/i],
-  ['notify', /^NOTIFY\s+PARTY\b/i],
+  ['shipper', /^(?:\d{1,2}\.\s*)?(?:SHIPPER|EXPORTER|SELLER)(?:\s*\/\s*EXPORTER)?\b/i],
+  ['consignee', /^(?:\d{1,2}\.\s*)?(?:CONSIGNEE|BUYER|IMPORTER)\b/i],
+  ['notify', /^(?:\d{1,2}\.\s*)?NOTIFY(?:\s+PARTY)?\b/i],
   ['bill_to', /^(?:BILL(?:ED)?\s*TO|SOLD\s*TO|INVOICE\s*TO|CUSTOMER)\b/i],
 ];
+// The form's own small print under a box title ("(As principal, where 'care of'…)", "(see clause 22)", "(KSCT) …").
+const SMALL_PRINT = /^\(|^AS\s+PRINCIPAL|\b(NEGOTIABLE|CLAUSE|CARE\s+OF|OF\s+BEARER|THIS\s+CONTRACT)\b/i;
 const SUGGEST = { shipper: 'shipper', consignee: 'customer', notify: 'customer', bill_to: 'customer', letterhead: 'vendor' };
 
 function country(address) {
@@ -33,15 +35,23 @@ function country(address) {
 
 /** One labelled block: the name on the label line or the next line, then up to 4 address lines. */
 function block(lines, i, labelRe) {
-  const rest = lines[i].replace(labelRe, '').replace(/^[\s:()/A-Za-z]*?(?:NAME\s*(?:&|AND)\s*ADDRESS)?[\s:)]*/i, '').trim();
+  const left = (l) => String(l || '').split(/\s{2,}/)[0].trim();
+  const rest = left(lines[i]).replace(labelRe, '').replace(/^[\s:/]*(?:\(?\s*(?:NAME\s*(?:&|AND)\s*ADDRESS|IMPORTER\s+OF\s+RECORD)\s*\)?)?[\s:)]*/i, '')
+    .replace(/^(?:NAME\s*(?:&|AND)\s*ADDRESS|\(\s*IMPORTER\s+OF\s+RECORD\s*\))[\s:)]*/i, '').trim();
   let j = i + 1;
-  let name = rest.length > 2 && !/^(ADDRESS|NAME)/i.test(rest) ? rest : null;
-  if (!name) { name = lines[j] || null; j++; }
+  let name = rest.length > 2 && !/^(ADDRESS|NAME)/i.test(rest) && !SMALL_PRINT.test(rest) ? rest : null;
+  while (!name && j < lines.length && j <= i + 4) {
+    const v = left(lines[j]); j++;
+    if (v && !SMALL_PRINT.test(v)) name = v;
+  }
   if (!name || STOP.test(name) || /^SAME\s+AS|^TO\s+(THE\s+)?ORDER/i.test(name)) return null;
   const addr = [];
   const onLabelLine = Boolean(rest.length > 2);
   // When the name sits on the label line ("BUYER: X"), the next lines belong to other fields — no address.
-  while (!onLabelLine && j < lines.length && addr.length < 4 && lines[j] && !STOP.test(lines[j])) { addr.push(lines[j]); j++; }
+  while (!onLabelLine && j < lines.length && addr.length < 5 && lines[j] && !STOP.test(left(lines[j])) && !/^\d{1,2}\.\s*[A-Z]/i.test(left(lines[j]))) {
+    const v = left(lines[j]); j++;
+    if (v && !SMALL_PRINT.test(v)) addr.push(v);
+  }
   const text = addr.join('\n');
   return {
     name: name.replace(/\s{2,}.*$/, '').trim(),

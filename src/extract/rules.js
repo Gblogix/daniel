@@ -21,7 +21,7 @@ function detectDocType(text, filename = '') {
     [/NOTICE\s+OF\s+ARRIVAL|ARRIVAL\s+NOTICE|YOUR\s+SHIPMENT\s+HAS\s+ARRIVED/, 'NOA'],
     [/DELIVERY\s+ORDER/, 'DO'],
     [/AIR\s*WAYBILL|\bMAWB\b|\bHAWB\b/, 'AWB'],
-    [/HOUSE\s+BILL|\bHBL\b|\bH\.?\s?B\/L\b/, 'HBL'],
+    [/HOUSE\s+BILL|HOUSE\s+B\s*\/\s*L|\bHBL\b|\bH\.?\s?B\/L\b/, 'HBL'],
     [/SEA\s*WAYBILL|BILL\s+OF\s+LADING|\bB\/L\b/, 'MBL'],
   ];
   let best = null;
@@ -113,6 +113,92 @@ function labelValue(lines, labelRe) {
   return null;
 }
 
+/**
+ * Value under a label on a B/L-style form, where a row of labels ("Vessel  Voyage No.  Place of Receipt") sits over a
+ * row of values ("MAERSK CAP JACKSON  638E"). Cells are split on 2+ spaces. Tries the same cell after the label, then
+ * the cell at the same index (or counted from the right when the value row has extra cells on the left) on the next
+ * two lines. `ok(v)` validates and returns the value. The label must start a cell (so prose like "…after vessel
+ * departure…" is not a label).
+ */
+function cellBelow(raw, labelRe, ok) {
+  const anchored = new RegExp(`^(?:\\d{1,2}\\.\\s*)?(?:${labelRe.source})`, 'i');
+  for (let i = 0; i < raw.length; i++) {
+    const heads = raw[i].trim().split(/\s{2,}/);
+    const k = heads.findIndex((h) => anchored.test(h));
+    if (k < 0) continue;
+    const rest = heads[k].replace(anchored, '').replace(/^[\s:.#)(-]+/, '').trim();
+    if (rest && !/^[(]/.test(rest) && ok(rest)) return ok(rest);
+    if (k + 1 < heads.length && heads.length === 2 && !isLabelCell(heads[k + 1]) && ok(heads[k + 1])) return ok(heads[k + 1]);
+    for (let j = i + 1; j <= i + 2 && j < raw.length; j++) {
+      if (!raw[j].trim() || isLabelRow(raw[j])) continue;
+      const cells = raw[j].trim().split(/\s{2,}/);
+      // Same number of cells: same index. Fewer: values are left-aligned (empty trailing boxes). More: extra cells
+      // belong to a box on the left, so count from the right.
+      const cands = cells.length === heads.length ? [cells[k]]
+        : cells.length < heads.length ? [cells[k]] : [cells[cells.length - heads.length + k], cells[k]];
+      for (const c of cands) if (c && ok(c.trim())) return ok(c.trim());
+    }
+  }
+  return null;
+}
+const LABEL_WORDS = /^(?:\d{1,2}\.\s*)?(SHIPPER|CONSIGNEE|NOTIFY|VESSEL|VOYAGE|PORT\s+OF|PLACE\s+OF|PRE-?\s?CARRIAGE|ETD|ETA|BOOKING|B\/L|HOUSE|MASTER|AMS|COUNTRY|HTS|CARRIER|SCAC|CONTAINER|SEAL|MARKS|NUMBER\s+OF|KIND\s+OF|DESCRIPTION|GROSS|WEIGHT|MEASUREMENT|PARTICULARS|FREIGHT|EXPORT\s+REF|SVC|ONWARD|MANUFACTURER|SELLER|BUYER|SHIP\s+TO|IMPORTER|CONSOLIDATOR)\b/i;
+const isLabelCell = (c) => LABEL_WORDS.test(String(c).trim());
+const isLabelRow = (l) => { const cells = l.trim().split(/\s{2,}/); return cells.length > 0 && cells.every(isLabelCell); };
+// A place / vessel value: letters, not a label or contract prose.
+const PROSE = /\b(APPLICABLE|CLAUSE|WEIGHT|MEASUREMENT|PACKAGES|PARTICULARS|DESCRIPTION|CARRIER|DOCUMENT|MULTIMODAL|DEPARTURE|INVOICE|ISSUANCE|NEGOTIABLE|PRINCIPAL|RECEIPT|DELIVERY|DISCHARGE|LOADING|VOYAGE|PORT|PLACE|ETD|ETA)\b/i;
+const placeOk = (v) => { const t = String(v).trim().replace(/[.,;]+$/, ''); return t.length >= 3 && t.length <= 45 && /[A-Z]{3}/i.test(t) && !PROSE.test(t) && !/[:;]/.test(t) ? t.toUpperCase() : null; };
+const refOk = (v) => { const t = String(v).trim().toUpperCase().replace(/^[#:]\s*/, ''); return /^[A-Z0-9][A-Z0-9-]{5,24}$/.test(t) && /\d{4}/.test(t) ? t : null; };
+const dateOk = (v) => toISODate(String(v).trim());
+/** "MAERSK CAP JACKSON 638E" / "MAERSK CAP JACKSON / 638E" / "HMM BLESSING V.0071E" → [vessel, voyage]. */
+function splitVessel(v) {
+  if (!v) return [null, null];
+  const t = String(v).trim();
+  const slash = /^(.+?)\s*\/\s*([A-Z0-9]{2,8})$/i.exec(t);
+  if (slash) return [slash[1].trim(), slash[2]];
+  const vv = /^(.+?)\s+(?:V\.?|VOY\.?|VOYAGE)?\s*([0-9]{2,4}[A-Z]{0,2}|[A-Z]{0,2}[0-9]{2,4}[A-Z]?)$/i.exec(t);
+  return vv ? [vv[1].replace(/[\s/-]+$/, ''), vv[2]] : [t, null];
+}
+/** First match of a reference pattern whose value is a real number (has digits), not a label word. */
+function firstRef(U, re) {
+  for (const m of U.matchAll(new RegExp(re.source, 'g'))) { const v = refOk(m[1]); if (v) return v; }
+  return null;
+}
+
+/**
+ * National Shipping (NSC) house B/L: the form's labels are printed graphics, so page 1 is values only, in a fixed
+ * order: shipper (name + address, HBL no. at the right), consignee (name, address, TEL, E-MAIL), notify, place of
+ * receipt, "VESSEL VOY  PORT OF LOADING", "PORT OF DISCHARGE  PLACE OF DELIVERY", then marks / packages.
+ */
+function nscHouseLayout(raw) {
+  const L = raw.map((l) => l.trim()).filter(Boolean);
+  const vi = L.findIndex((l) => /^[A-Z][A-Z .-]+?\s+(?:V\.?\s*)?[0-9]{2,4}[A-Z]?\s{2,}[A-Z]/.test(l));
+  if (vi < 3) return null;
+  const out = {};
+  const [vesselVoy, pol] = L[vi].split(/\s{2,}/);
+  [out.vessel, out.voyage] = splitVessel(vesselVoy);
+  out.pol = placeOk(pol);
+  const podLine = (L[vi + 1] || '').split(/\s{2,}/);
+  out.pod = placeOk(podLine[0]); out.place_of_delivery = placeOk(podLine[1]);
+  const top = L.slice(0, vi);
+  const cells = top.map((l) => l.split(/\s{2,}/)[0]);
+  const companyLike = (l) => /\b(INC|LLC|LTD|CO|CORP|CORPORATION|COMPANY|TRADE|TRADING|LOGISTICS|GROUP)\b\.?/i.test(l) && !/\d{3,}/.test(l);
+  out.shipper_name = cells[0];
+  let c = cells.findIndex((l, i) => i > 0 && companyLike(l));
+  if (c > 0) {
+    out.shipper_address = cells.slice(1, c).join('\n') || null;
+    let e = c + 1;
+    while (e < cells.length && !/^SAME\s+AS|^TO\s+ORDER/i.test(cells[e]) && !companyLike(cells[e]) && e < vi - 1) e++;
+    out.consignee_name = cells[c];
+    const block = cells.slice(c + 1, e);
+    out.consignee_address = block.filter((l) => !/^(TEL|PHONE|FAX|E-?MAIL|ATTN)/i.test(l)).join('\n') || null;
+    const email = block.join(' ').match(/[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/i);
+    const tel = block.join(' ').match(/TEL\)?\s*[.:]?\s*(\+?[\d(][\d\s().-]{7,}\d)/i);
+    if (email || tel) out.consignee_contact = { email: email ? email[0].toLowerCase() : null, phone: tel ? tel[1].trim() : null };
+    if (cells[e]) out.notify_party = cells[e];
+  }
+  return out;
+}
+
 const REF = String.raw`([A-Z0-9][A-Z0-9-]{5,24})`;
 const SEP = String.raw`\s*(?:NO\.?|NUMBER|#)?\s*[:.]?\s*`;
 
@@ -123,9 +209,12 @@ function extractRules(text, { filename = '', rows = null } = {}) {
   const lines = T.split(/\r?\n/).map((l) => l.replace(/\s+/g, ' ').trim()).filter(Boolean);
   const out = { doc_type: docType, containers: [], items: [], warnings: [] };
 
-  out.mbl_no = firstMatch(U, [new RegExp(String.raw`(?:MASTER\s*B\/?L|M\.?\s?B\/?L|OCEAN\s*B\/?L)${SEP}${REF}`)]);
-  out.hbl_no = firstMatch(U, [new RegExp(String.raw`(?:HOUSE\s*B\/?L|H\.?\s?B\/?L)${SEP}${REF}`)]);
-  const genericBl = firstMatch(U, [new RegExp(String.raw`(?:B\/L|BILL\s+OF\s+LADING)${SEP}${REF}`)]);
+  const raw = T.split(/\r?\n/).map((l) => l.replace(/\s+$/, '')).filter((l) => l.trim());
+  out.mbl_no = firstRef(U, new RegExp(String.raw`(?:MASTER\s*B\/?L|\bM\.?\s?B\/?L\b|OCEAN\s*B\/?L)${SEP}(?:OR\s+BOOKING#?\s*)?${REF}`))
+    || cellBelow(raw, /MASTER\s*B\/?L(?:\s*(?:NUMBER|NO\.?))?(?:\s*OR\s*BOOKING#?)?/, refOk);
+  out.hbl_no = firstRef(U, new RegExp(String.raw`(?:HOUSE\s*B\/?L|\bH\.?\s?B\/?L\b)${SEP}${REF}`))
+    || cellBelow(raw, /HOUSE\s*B\/?L(?:\s*(?:NUMBER|NO\.?))?/, refOk);
+  const genericBl = firstRef(U, new RegExp(String.raw`(?:B\/L|BILL\s+OF\s+LADING)${SEP}${REF}`));
   if (genericBl) {
     if (docType === 'HBL' && !out.hbl_no) out.hbl_no = genericBl;
     else if (!out.mbl_no && docType !== 'HBL') out.mbl_no = genericBl;
@@ -142,6 +231,12 @@ function extractRules(text, { filename = '', rows = null } = {}) {
     out.hbl_no = nsc;
   }
   out.agent_ref = [out.sub_bl_no, out.hbl_no].find((v) => v && /^NSC/.test(v)) || null;
+  // Carrier SCAC ("SCAC  MAEU", "Carrier's SCAC CODE  MAEU"); a bare numeric master B/L gets it as prefix (MAEU277099556).
+  out.scac = firstMatch(U, [/\bSCAC(?:\s+CODE)?\s*[:.]?\s*([A-Z]{4})\b/]);
+  if (out.scac && out.mbl_no && /^\d{6,}$/.test(out.mbl_no)) out.mbl_no = out.scac + out.mbl_no;
+  // AMS house B/L: "(KSCT) LGB26090028A" → KSCTLGB26090028A
+  const ams = /\(([A-Z]{4})\)\s*([A-Z0-9]{8,20})\b/.exec(U);
+  out.ams_bl_no = ams && /\d/.test(ams[2]) ? ams[1] + ams[2] : firstMatch(U, [/AMS\s*(?:HOUSE\s*)?B\/?L\s*(?:NUMBER|NO\.?)?\s*[:.]?\s*([A-Z]{4}[A-Z0-9]{8,16})\b/]);
   out.mawb_no = firstMatch(U, [/(?:MAWB|MASTER\s+AIR\s*WAYBILL)\s*(?:NO\.?|#)?\s*[:.]?\s*(\d{3}[-\s]?\d{4}\s?\d{4})/]);
   out.hawb_no = firstMatch(U, [/(?:HAWB|HOUSE\s+AIR\s*WAYBILL)\s*(?:NO\.?|#)?\s*[:.]?\s*([A-Z0-9-]{6,20})/]);
   if (!out.mawb_no && docType === 'AWB') out.mawb_no = firstMatch(U, [/\b(\d{3}-\d{4}\s?\d{4})\b/, /\b(\d{3}-\d{8})\b/]);
@@ -151,6 +246,7 @@ function extractRules(text, { filename = '', rows = null } = {}) {
   const seen = new Set();
   const ctnRe = /\b([A-Z0-9]{3}[UJZ])\s?-?([0-9OISBZGTL]{6})\s?-?([0-9OISBZGTL])\b/g;
   let m;
+  const allCtn = [...U.matchAll(new RegExp(ctnRe.source, 'g'))].map((x) => x.index);
   while ((m = ctnRe.exec(U))) {
     const raw = m[1] + m[2] + m[3];
     if (!/[A-Z]{2}/.test(m[1]) || !/\d{4}/.test(m[2] + m[3])) continue; // not container-like
@@ -160,12 +256,22 @@ function extractRules(text, { filename = '', rows = null } = {}) {
     if (!isValidContainer(no)) { const fix = repairContainer(no); if (fix) { no = fix; repaired = true; } }
     if (seen.has(no)) continue;
     seen.add(no);
-    const ctx = U.slice(m.index, m.index + 160);
-    // "ABCU1234567/SEAL123" first, then an explicit SEAL label nearby.
+    // This container's own text: up to the next container number (so a row's packages / KGS / CBM stay with it).
+    const nextAt = allCtn.find((x) => x > m.index + 5);
+    const ctx = U.slice(m.index, Math.min(m.index + 200, nextAt ?? Infinity));
+    // "ABCU1234567/SEAL123", "ABCU1234567 ML-KR1178575 40 REEF", then an explicit SEAL label nearby.
     const seal = /^[A-Z0-9]{4}\s?-?[0-9A-Z]{6}\s?-?[0-9A-Z]\s*\/\s*(?:SEAL\s*(?:NO\.?|#)?\s*[:.]?\s*)?([A-Z0-9-]{5,20})/.exec(ctx)
+      || /^[A-Z0-9]{4}\s?-?[0-9A-Z]{6}\s?-?[0-9A-Z][ \t]+(?!(?:20|40|45)\b)([A-Z]{1,3}-?[A-Z0-9]*\d{4,}[A-Z0-9]*)\b/.exec(ctx)
       || /\bSEAL\s*(?:NO\.?|#|NUMBER)?\s*[:.]?\s*([A-Z0-9-]{5,20})/.exec(ctx);
     const size = /\b(20|40|45)\s*'?\s*(GP|DC|DV|HC|HQ|RF|RH|OT|FR|ST)\b/.exec(ctx);
-    const c = { container_no: no, seal_no: seal ? seal[1] : null, size_type: size ? size[1] + normSize(size[2]) : null };
+    const reef = /\b(20|40|45)\s*'?\s*(?:REEF(?:ER)?|RF)\b\s*(9'?\s?6|HC|HIGH\s*CUBE)?/.exec(ctx);
+    const dry = /\b(20|40|45)\s*'?\s*(?:DRY|DV|GP|STD|STANDARD)?\s*(9'?\s?6|HIGH\s*CUBE)\b/.exec(ctx);
+    const sizeType = reef ? `${reef[1]}${reef[2] ? 'RH' : 'RF'}` : size ? size[1] + normSize(size[2]) : dry ? `${dry[1]}HC` : null;
+    const pk = /(\d[\d,]*)\s*\(?\s*(PACKAGES?|PKGS?|CTNS?|CARTONS?|PALLETS?|PLTS?)\b/.exec(ctx);
+    const kg = /([\d,]+(?:\.\d+)?)\s*KGS?\b/.exec(ctx);
+    const cb = /([\d,]+(?:\.\d+)?)\s*(?:CBM|M3)\b/.exec(ctx);
+    const c = { container_no: no, seal_no: seal ? seal[1] : null, size_type: sizeType,
+      packages: pk ? num(pk[1]) : null, weight_kg: kg ? num(kg[1]) : null, cbm: cb ? num(cb[1]) : null };
     if (repaired || no !== raw) out.warnings.push(`Container ${raw} read as ${no} (corrected by check digit) — please verify`);
     else if (!isValidContainer(no)) out.warnings.push(`Container ${no}: check digit does not match — please verify`);
     out.containers.push(c);
@@ -178,28 +284,37 @@ function extractRules(text, { filename = '', rows = null } = {}) {
     if (size) for (const c of out.containers) c.size_type = size[2] + normSize(size[3]);
   }
 
-  out.vessel = labelValue(lines, /(?:OCEAN\s+)?VESSEL(?:\s*(?:NAME|\/\s*VOY(?:AGE)?\.?(?:\s*NO\.?)?))?/i);
-  if (out.vessel) {
-    const vv = /^(.+?)\s+(?:V\.?|VOY\.?|VOYAGE)?\s*([0-9]{2,4}[A-Z]{0,2}|[A-Z]{0,2}[0-9]{2,4}[A-Z]?)$/i.exec(out.vessel);
-    if (vv) { out.vessel = vv[1].replace(/[\s/-]+$/, ''); out.voyage = vv[2]; }
-  }
-  out.voyage = out.voyage || firstMatch(U, [/VOY(?:AGE)?\.?\s*(?:NO\.?)?\s*[:.]?\s*([A-Z0-9]{2,8})\b/]);
+  const vesselOk = (v) => { const t = String(v).trim(); return /^[A-Z][A-Z0-9 .'/-]{2,40}$/i.test(t) && !PROSE.test(t.replace(/\/\s*[A-Z0-9]+$/i, '')) ? t.toUpperCase() : null; };
+  const VESSEL_LABEL = /(?:OCEAN\s+)?VESSEL(?:\s*(?:NAME|\/\s*VOY(?:AGE)?\.?(?:\s*NO\.?)?))?(?:\s*\/\s*VOY(?:AGE)?\.?(?:\s*NO\.?)?)?/;
+  [out.vessel, out.voyage] = splitVessel(cellBelow(raw, VESSEL_LABEL, vesselOk));
+  const voyOk = (v) => { const t = String(v).trim().toUpperCase(); return /^[A-Z0-9]{2,8}$/.test(t) && /\d/.test(t) ? t : null; };
+  out.voyage = out.voyage || cellBelow(raw, /VOY(?:AGE)?\.?(?:\s*NO\.?)?/, voyOk)
+    || firstMatch(U, [/VOY(?:AGE)?\.?\s*(?:NO\.?)?\s*[:.]?\s*([A-Z0-9]*\d[A-Z0-9]*)\b/]);
   out.flight_no = firstMatch(U, [/FLIGHT\s*(?:NO\.?|#)?\s*[:.]?\s*([A-Z0-9]{2}\s?\d{2,4})/]);
-  out.pol = labelValue(lines, /PORT\s+OF\s+LOADING|\bPOL\b|AIRPORT\s+OF\s+DEPARTURE/i);
-  out.pod = labelValue(lines, /PORT\s+OF\s+DISCHARGE|\bPOD\b|AIRPORT\s+OF\s+DESTINATION/i);
-  out.place_of_delivery = labelValue(lines, /PLACE\s+OF\s+DELIVERY|FINAL\s+DESTINATION/i);
+  out.pol = cellBelow(raw, /PORT\s+OF\s+LOADING|POL\b|AIRPORT\s+OF\s+DEPARTURE/, placeOk);
+  out.pod = cellBelow(raw, /PORT\s+OF\s+DISCHARGE|POD\b|AIRPORT\s+OF\s+DESTINATION/, placeOk);
+  out.place_of_delivery = cellBelow(raw, /PLACE\s+OF\s+DELIVERY|FINAL\s+DESTINATION/, placeOk);
 
-  out.etd = toISODate(firstMatch(T, [new RegExp(String.raw`(?:ETD|ON\s*BOARD\s*DATE|SHIPPED\s+ON\s+BOARD|DEPARTURE\s+DATE|SAILING\s+DATE)\s*[:.]?\s*${DATE_RE}`, 'i')]));
-  out.eta = toISODate(firstMatch(T, [new RegExp(String.raw`(?:ETA|ARRIVAL\s+DATE|EST\.?\s+ARRIVAL)\s*[:.]?\s*${DATE_RE}`, 'i')]));
+  out.etd = toISODate(firstMatch(T, [new RegExp(String.raw`(?:ETD|ON\s*BOARD\s*DATE|SHIPPED\s+ON\s+BOARD(?:\s+DATE)?|LADEN\s+ON\s+BOARD(?:\s+DATE)?|DEPARTURE\s+DATE|SAILING\s+DATE)\s*[:.]?\s*${DATE_RE}`, 'i')]))
+    || cellBelow(raw, /ETD\b/, dateOk);
+  out.eta = toISODate(firstMatch(T, [new RegExp(String.raw`(?:ETA|ARRIVAL\s+DATE|EST\.?\s+ARRIVAL)\s*[:.]?\s*${DATE_RE}`, 'i')]))
+    || cellBelow(raw, /ETA\b/, dateOk);
+  out.service_term = firstMatch(U, [/\b((?:CY|CFS)\s*\/\s*(?:CY|CFS|DOOR))\b/]);
+  if (out.service_term) out.service_term = out.service_term.replace(/\s+/g, '');
 
-  out.shipper_name = partyName(lines, /^(?:SHIPPER|EXPORTER|SELLER)(?:\s*\/\s*EXPORTER)?\b/i);
-  out.consignee_name = partyName(lines, /^(?:CONSIGNEE|BUYER|IMPORTER)\b/i);
-  out.notify_party = partyName(lines, /^NOTIFY\s+PARTY\b/i);
+  out.shipper_name = partyName(raw, /^(?:\d{1,2}\.\s*)?(?:SHIPPER|EXPORTER|SELLER)(?:\s*\/\s*EXPORTER)?\b/i);
+  out.consignee_name = partyName(raw, /^(?:\d{1,2}\.\s*)?(?:CONSIGNEE|BUYER|IMPORTER)\b/i);
+  out.notify_party = partyName(raw, /^(?:\d{1,2}\.\s*)?NOTIFY(?:\s+PARTY)?\b/i);
+  // Label-less NSC house B/L page: read by position.
+  if (!out.shipper_name && !out.consignee_name && /\bNSC[A-Z]{2,5}\d{6,9}\b/.test(U)) {
+    const nsc = nscHouseLayout(raw);
+    if (nsc) for (const [k, v] of Object.entries(nsc)) if (v != null && (out[k] == null || out[k] === '')) out[k] = v;
+  }
   // Addresses under the SHIPPER / CONSIGNEE / NOTIFY boxes (used to add a new customer from the documents).
   for (const p of require('./party').readParties(T, { db: null, withLetterhead: false })) {
     const k = { shipper: 'shipper_address', consignee: 'consignee_address', notify: 'notify_address' }[p.role];
-    if (k && p.address) out[k] = p.address;
-    if (p.role === 'consignee' && (p.email || p.phone)) out.consignee_contact = { email: p.email, phone: p.phone };
+    if (k && p.address && !out[k]) out[k] = p.address;
+    if (p.role === 'consignee' && (p.email || p.phone) && !out.consignee_contact) out.consignee_contact = { email: p.email, phone: p.phone };
   }
 
   // Totals. Prefer labelled gross weight, else the largest KGS figure.
@@ -214,12 +329,14 @@ function extractRules(text, { filename = '', rows = null } = {}) {
   if (pk.length) { const best = pk.reduce((a, b) => (b.n > a.n ? b : a)); out.packages = best.n; out.package_unit = best.unit; }
   out.chargeable_weight = num(firstMatch(U, [/CHARGEABLE\s+WEIGHT[^0-9\n]{0,20}([\d,]+(?:\.\d+)?)/]));
   out.commodity = labelValue(lines, /DESCRIPTION\s+OF\s+(?:GOODS|PACKAGES\s+AND\s+GOODS)|COMMODITY/i);
+  if (out.commodity && (/[;]|MARKS|CONTAINER\s+NO|WEIGHT|MEASUREMENT/i.test(out.commodity) || !/[A-Z]{3}/i.test(out.commodity))) out.commodity = null;
+  out.commodity = out.commodity || firstMatch(U, [/SAID\s+TO\s+CONTAIN[^\n]*\n(?:\s*N\/?M\s+)?\s*([A-Z][A-Z ,&()-]{3,60})/, /\bN\/M\s{1,}([A-Z][A-Z ,&()-]{3,60})/]);
   out.firms_code = firstMatch(U, [/FIRMS?\s*(?:CODE)?\s*(?:NO\.?|#)?\s*[:.]?\s*([A-Z][A-Z0-9]\d{2}|[A-Z]\d[A-Z0-9]\d|[A-Z]{2}[A-Z0-9]\d)\b/]);
   out.freight_location = labelValue(lines, /(?:FREIGHT|CARGO)\s+LOCATION|DISCHARGE\s+TERMINAL|\bTERMINAL\s*(?:NAME)?\s*:|CFS\s+LOCATION|AVAILABLE\s+AT/i);
   out.last_free_day = toISODate(firstMatch(T, [new RegExp(String.raw`(?:LAST\s+FREE\s+DAY|\bLFD)\s*[:.-]?\s*${DATE_RE}`, 'i')]));
   // "INVOICE NO: X", or the Korean-style box "9. No & Date of Invoice" with "#BSBUS26091601 / 2026.09.16" under it.
-  out.ci_invoice_no = invoiceNoBelow(rows) || firstMatch(U, [/NO\.?\s*(?:&|AND)\s*DATE\s+OF\s+INVOICE[^\n]*\n(?:[^\n]*?#\s*|\s*)([A-Z0-9][A-Z0-9-]{3,24})/,
-    /INVOICE\s*(?:NO\.?|#|NUMBER)\s*[:.]?\s*#?\s*([A-Z0-9][A-Z0-9-]{3,20})/]);
+  out.ci_invoice_no = invoiceNoBelow(rows) || firstMatch(U, [/NO\.?\s*(?:&|AND)\s*DATE\s+OF\s+INVOICE[^\n]*\n(?:[^\n]*?#\s*|\s*)([A-Z0-9][A-Z0-9_-]{3,24})/,
+    /INVOICE\s*(?:NO\.?|#|NUMBER)\s*[:.]?\s*#?\s*([A-Z0-9][A-Z0-9_-]{3,24})/]);
   out.isf_no = firstMatch(U, [/ISF\s*(?:NO\.?|#|TRANSACTION\s*(?:NO\.?)?)\s*[:.]?\s*([A-Z0-9-]{6,25})/]);
   out.telex_release = /TELEX\s+RELEASE|SURRENDERED|SEA\s*WAYBILL|EXPRESS\s+RELEASE|电放/.test(U) || null;
 
@@ -242,7 +359,16 @@ function extractRules(text, { filename = '', rows = null } = {}) {
     }
   }
   if (out.containers.length === 1) {
-    Object.assign(out.containers[0], { packages: out.packages ?? null, weight_kg: out.weight_kg ?? null, cbm: out.cbm ?? null });
+    const c0 = out.containers[0];
+    Object.assign(c0, { packages: c0.packages ?? out.packages ?? null, weight_kg: c0.weight_kg ?? out.weight_kg ?? null, cbm: c0.cbm ?? out.cbm ?? null });
+  }
+  // Several containers each with their own figures: the totals are their sum (a rider page may list only one of the
+  // "12,490 KGS" totals, and the largest single figure would otherwise win).
+  if (out.containers.length > 1 && out.containers.every((c) => c.weight_kg != null)) {
+    const sum = (k) => Math.round(out.containers.reduce((a, c) => a + (c[k] || 0), 0) * 1000) / 1000;
+    if (!out.weight_kg || out.weight_kg < sum('weight_kg')) out.weight_kg = sum('weight_kg');
+    if (out.containers.every((c) => c.cbm != null) && (!out.cbm || out.cbm < sum('cbm'))) out.cbm = sum('cbm');
+    if (out.containers.every((c) => c.packages != null) && (!out.packages || out.packages < sum('packages'))) out.packages = sum('packages');
   }
   for (const k of Object.keys(out)) if (out[k] === undefined) out[k] = null;
   return out;
@@ -262,7 +388,8 @@ function invoiceNoBelow(rows) {
   return null;
 }
 
-function normSize(s) { return { HQ: 'HC', DV: 'GP', DC: 'GP', ST: 'GP', RH: 'RF' }[s] || s; }
+// RH (reefer high cube, "40 REEF 9'6") is kept apart from RF — the terminal / trucker needs the height.
+function normSize(s) { return { HQ: 'HC', DV: 'GP', DC: 'GP', ST: 'GP' }[s] || s; }
 function normUnit(u) {
   if (/^CT|^CART/.test(u)) return 'CTNS';
   if (/^PL|^PALLET/.test(u)) return 'PLTS';
@@ -270,12 +397,25 @@ function normUnit(u) {
   return u;
 }
 
+/**
+ * Party name under / after a SHIPPER / CONSIGNEE / NOTIFY label. Skips the form's own small print ("(As principal,
+ * where 'care of'…)", "(see clause 22)"), keeps only the left cell when a right-hand column shares the line.
+ */
+const SMALL_PRINT = /^\(|^AS\s+PRINCIPAL|\b(NEGOTIABLE|CLAUSE|CARE\s+OF|PRINCIPAL|OF\s+BEARER)\b/i;
 function partyName(lines, labelRe) {
   for (let i = 0; i < lines.length; i++) {
-    if (!labelRe.test(lines[i])) continue;
-    const rest = lines[i].replace(labelRe, '').replace(/^[\s:()/A-Za-z]*?(?:NAME\s*(?:&|AND)\s*ADDRESS)?[\s:)]*/i, '').trim();
-    if (rest.length > 2 && !/^(ADDRESS|NAME)/i.test(rest)) return rest;
-    if (lines[i + 1]) return lines[i + 1];
+    const line = lines[i].trim();
+    if (!labelRe.test(line)) continue;
+    const cell = line.split(/\s{2,}/)[0];
+    const rest = cell.replace(labelRe, '').replace(/^[\s:/]*(?:\(?\s*(?:NAME\s*(?:&|AND)\s*ADDRESS|IMPORTER\s+OF\s+RECORD)\s*\)?)?[\s:)]*/i, '')
+      .replace(/^(?:NAME\s*(?:&|AND)\s*ADDRESS|\(\s*IMPORTER\s+OF\s+RECORD\s*\))[\s:)]*/i, '').trim();
+    if (rest.length > 2 && !/^(ADDRESS|NAME)\b/i.test(rest) && !SMALL_PRINT.test(rest)) return rest;
+    for (let j = i + 1; j < Math.min(lines.length, i + 5); j++) {
+      const v = lines[j].trim().split(/\s{2,}/)[0];
+      if (!v || SMALL_PRINT.test(v) || /^\([A-Z]{4}\)/.test(v)) continue;
+      if (/^(ADDRESS|NAME)\b/i.test(v) || isLabelCell(v)) break;
+      return v;
+    }
   }
   return null;
 }
