@@ -9,7 +9,15 @@
         <td><%= c.users %></td><td><a class="btn secondary small" href="/companies/<%= c.id %>">Edit</a></td></tr>
     <% }) %>
   </table></div>
-  <% if (can('parties')) { %><form class="card" method="post" action="/companies">
+  <% if (can('parties')) { %><div>
+  <% if (!edit) { %><div class="card dropzone party-reader" data-party-reader data-csrf="<%= csrf %>">
+    <label class="drop-hint" style="padding:4px"><span class="ico">📄</span>
+      <span><b>Add from a document</b> — drag a B/L, invoice or the Outlook email here, or <span class="pick">choose file</span><br>
+        <span class="small muted">Shipper / consignee / bill-to / vendor letterhead are read — click one to fill the form.</span></span>
+      <input type="file" multiple accept=".pdf,.jpg,.jpeg,.png,.xlsx,.msg,.eml"></label>
+    <div data-party-results class="party-results"></div>
+  </div><% } %>
+  <form class="card" method="post" action="/companies" id="party-form">
     <h2><%= edit ? 'Edit party' : 'Add party' %></h2>
     <input type="hidden" name="_csrf" value="<%= csrf %>">
     <% const c = edit || {}; if (edit) { %><input type="hidden" name="id" value="<%= c.id %>"><% } %>
@@ -28,6 +36,6 @@
       <div class="field"><label>Report emails (default: notice emails)</label><input name="report_emails" value="<%= c.report_emails || '' %>"></div></div>
     <div class="field"><label>Address (printed on invoices / A/N)</label><textarea name="address" rows="3"><%= c.address || '' %></textarea></div>
     <button class="btn">Save</button> <% if (edit) { %><a class="btn secondary" href="/companies">Cancel</a><% } %>
-  </form><% } %>
+  </form></div><% } %>
 </div>
 <%- include('../partials/foot') %>

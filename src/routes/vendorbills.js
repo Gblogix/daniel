@@ -41,7 +41,7 @@ router.post('/vendor-bills/upload', canUpload, upload.array('files', 20), auth.c
   for (const f of files) {
     const sender = f.mail?.from && !req.body.company_id ? vendorForSender(f.mail.from) : null;
     ids.push(await V.receive({ buffer: f.buffer, filename: f.filename, mime: f.mime, shipmentId: Number(req.body.shipment_id) || null,
-      companyId: Number(req.body.company_id) || sender?.id || null, userId: req.user.id }));
+      companyId: Number(req.body.company_id) || sender?.id || null, userId: req.user.id, sender: f.mail?.from }));
   }
   if (!auth.canAccounting(req.user)) {
     flash(req, 'ok', `${ids.length} vendor invoice(s) sent to accounting to book — thank you`);
@@ -57,6 +57,10 @@ router.get('/vendor-bills/:id', auth.requireAccounting, (req, res) => {
   if (!d) return res.status(404).render('error', { title: 'Not found', message: 'Vendor invoice not found.' });
   if (d.invoice_id) return res.redirect(`/invoices/${d.invoice_id}`);
   const ex = d.ex || {};
+  if (ex.vendor_new && !d.company_id) {
+    const hit = require('../extract/party').findParty(ex.vendor_new.name);
+    if (hit) { ex.vendor = { id: hit.id, name: hit.name }; delete ex.vendor_new; }
+  }
   const matched = (ex.shipments || []).map((id) => S.find(id, null)).filter(Boolean);
   const current = d.shipment_id ? S.find(d.shipment_id, null) : null;
   const recent = store.db.all('SELECT id FROM shipments WHERE closed_at IS NULL ORDER BY id DESC LIMIT 200').map((r) => S.find(r.id, null));
@@ -71,6 +75,7 @@ router.post('/vendor-bills/:id', auth.requireAccounting, (req, res) => {
   const d = V.get(Number(req.params.id));
   if (!d) return res.status(404).end();
   const b = req.body;
+  const added = require('../extract/party').fromForm(b, 'company_id', { type: ['vendor', 'trucker', 'broker', 'delivery', 'agent'].includes(b.new_party_type) ? b.new_party_type : 'vendor' });
   const lines = arr(b.l_desc).map((desc, i) => ({ description: desc, qty: arr(b.l_qty)[i], rate: arr(b.l_rate)[i], amount: arr(b.l_amount)[i] }))
     .filter((l) => String(l.description || '').trim());
   if (!b.company_id || !String(b.number || '').trim() || !lines.length) {
@@ -86,7 +91,7 @@ router.post('/vendor-bills/:id', auth.requireAccounting, (req, res) => {
     return res.redirect(`/vendor-bills/${d.id}`);
   }
   const inv = A.getInvoice(id);
-  flash(req, 'ok', `Vendor bill ${inv.number} booked — USD ${inv.total.toLocaleString('en-US', { minimumFractionDigits: 2 })}${inv.shipment_id ? ` on ${S.fileName(S.find(inv.shipment_id, null))}` : ''}`);
+  flash(req, 'ok', `Vendor bill ${inv.number} booked — USD ${inv.total.toLocaleString('en-US', { minimumFractionDigits: 2 })}${inv.shipment_id ? ` on ${S.fileName(S.find(inv.shipment_id, null))}` : ''}${added ? ` · ${added} added to Parties` : ''}`);
   if (b.next === '1') {
     const nxt = V.pending()[0];
     if (nxt) return res.redirect(`/vendor-bills/${nxt.id}`);

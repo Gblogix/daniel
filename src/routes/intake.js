@@ -11,6 +11,7 @@ const config = require('../config');
 const store = require('../db');
 const auth = require('../auth');
 const S = require('../shipments');
+const Party = require('../extract/party');
 const notify = require('../notify');
 const { extractFile, mergeExtractions } = require('../extract');
 
@@ -119,9 +120,18 @@ router.get('/intakes/:id', auth.requireInternal, (req, res) => {
   const sources = { ...(draft.sources || {}), ...(draft.sources?.freight_location ? { cfs_location: draft.sources.freight_location } : {}) };
   s.containers = draft.containers?.length ? draft.containers : target?.containers || [];
   s.items = draft.items?.length ? draft.items : target?.items || [];
-  if (!target && draft.consignee_name) {
-    const guess = db.get("SELECT id FROM companies WHERE type = 'customer' AND ? LIKE '%' || name || '%'", draft.consignee_name.toUpperCase().replace(/[^A-Z0-9 ]/g, ''));
-    if (guess) s.customer_id = guess.id;
+  // Customer = the consignee on the B/L (the notify party when consigned "to order"); not on Parties yet → offer to add it.
+  let newCustomer = null;
+  if (!s.customer_id) {
+    const toOrder = /^TO\s+(THE\s+)?ORDER/i.test(draft.consignee_name || '');
+    const name = toOrder ? draft.notify_party : draft.consignee_name;
+    if (name && !/^SAME\s+AS/i.test(name)) {
+      const hit = Party.findParty(name, { types: ['customer', 'importer'] });
+      if (hit) s.customer_id = hit.id;
+      else if (!Party.findParty(name)) {
+        newCustomer = { name, address: toOrder ? draft.notify_address : draft.consignee_address, email: draft.consignee_contact?.email, phone: draft.consignee_contact?.phone };
+      }
+    }
   }
   const lists = {
     customers: db.all("SELECT id, name FROM companies WHERE type = 'customer' ORDER BY name"),
@@ -131,7 +141,7 @@ router.get('/intakes/:id', auth.requireInternal, (req, res) => {
     deliveries: db.all("SELECT id, name FROM companies WHERE type = 'delivery' ORDER BY name"),
   };
   const openShipments = db.all("SELECT id, ref_no, mbl_no, hbl_no FROM shipments WHERE status <> 'DELIVERED' ORDER BY id DESC LIMIT 200");
-  res.render('intakes/review', { title: `Intake #${intake.id}`, intake, draft, perDoc, docs, target, s, sources, openShipments, ...lists });
+  res.render('intakes/review', { title: `Intake #${intake.id}`, intake, draft, perDoc, docs, target, s, sources, openShipments, newCustomer, ...lists });
 });
 
 router.post('/intakes/:id/apply', auth.requirePerm('intake'), async (req, res) => {
@@ -141,6 +151,7 @@ router.post('/intakes/:id/apply', auth.requirePerm('intake'), async (req, res) =
   const targetId = req.body.target === 'new' ? null : Number(req.body.target) || null;
   let id;
   require('./shipments').stripAccounting(req);
+  const added = Party.fromForm(req.body, 'customer_id');
   if (targetId) {
     S.update(targetId, req.body);
     id = targetId;
@@ -152,7 +163,7 @@ router.post('/intakes/:id/apply', auth.requirePerm('intake'), async (req, res) =
   db.run("UPDATE intakes SET status = 'APPLIED', shipment_id = ?, reviewed_at = datetime('now'), reviewed_by = ? WHERE id = ?", id, req.user.id, intake.id);
   if (req.body.send_notices) await notify.onDocumentsApplied(id, { userId: req.user.id });
   else S.addEvent(id, 'DOCS_RECEIVED', 'Shipping documents received from origin agent', { userId: req.user.id });
-  req.session.flash = { type: 'ok', msg: `Documents applied to shipment${req.body.send_notices ? ' — notices sent' : ''}` };
+  req.session.flash = { type: 'ok', msg: `Documents applied to shipment${req.body.send_notices ? ' — notices sent' : ''}${added ? ` · ${added} added to Parties as a new customer` : ''}` };
   res.redirect(`/shipments/${id}`);
 });
 

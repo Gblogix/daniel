@@ -14,9 +14,17 @@
     <% if ((ex.warnings || []).length) { %><div class="warnbox"><b>Please check</b><ul><% ex.warnings.forEach((w) => { %><li><%= w %></li><% }) %></ul></div>
     <% } else { %><div class="okbox">✔ Everything was read — check against the invoice and book.</div><% } %>
     <div class="grid g2">
-      <div class="field"><label>Vendor</label><select name="company_id" required data-party-search><option value="">— pick —</option>
+      <div class="field"><label>Vendor</label><select name="company_id" required data-party-search data-new-party><option value="">— pick —</option>
+        <% const nv = !d.company_id && !ex.vendor && ex.vendor_new; if (nv) { %><option value="new" selected>＋ New vendor from the invoice: <%= nv.name %></option><% } %>
         <%- include('../partials/party-options', { parties, selected: d.company_id || ex.vendor?.id, prefer: ['vendor', 'trucker', 'broker', 'delivery', 'agent'] }) %></select>
-        <% if (ex.vendor_name_read && !ex.vendor) { %><span class="small muted">On the invoice: <%= ex.vendor_name_read %> — add it on Parties if new</span><% } %></div>
+        <% if (nv) { %><div class="new-party" data-new-party-box>
+          <span class="small muted">Not on Parties yet — added when you book (edit if needed):</span>
+          <input name="new_party_name" value="<%= nv.name %>" placeholder="Vendor name">
+          <select name="new_party_type"><% [['vendor', 'Vendor (CFS / carrier / terminal / other)'], ['trucker', 'Trucker'], ['broker', 'Customs broker'], ['delivery', 'Warehouse / delivery location'], ['agent', 'Overseas agent']].forEach(([v, l]) => { %><option value="<%= v %>" <%= /CFS|WAREHOUSE/i.test(nv.name) && v === 'vendor' ? 'selected' : '' %>><%= l %></option><% }) %></select>
+          <textarea name="new_party_address" rows="2" placeholder="Address"><%= nv.address || '' %></textarea>
+          <input name="new_party_email" value="<%= nv.email || '' %>" placeholder="Email (vendor invoices from this address are matched automatically)">
+          <input type="hidden" name="new_party_phone" value="<%= nv.phone || '' %>"></div>
+        <% } else if (ex.vendor_name_read && !ex.vendor) { %><span class="small muted">On the invoice: <%= ex.vendor_name_read %> — add it on Parties if new</span><% } %></div>
       <div class="field"><label>File</label><select name="shipment_id"><option value="">— no file (overhead) —</option>
         <% files.forEach((s) => { %><option value="<%= s.id %>" <%= sid === s.id ? 'selected' : '' %>><%= matchedIds.includes(s.id) ? '★ ' : '' %><%= S.fileName(s) %> · <%= s.ref_no %></option><% }) %></select>
         <span class="small muted">★ = matched from the invoice (container / B/L)</span></div>

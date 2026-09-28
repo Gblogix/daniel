@@ -94,6 +94,7 @@ function stripAccounting(req) {
 }
 
 router.post('/shipments', auth.requirePerm('shipments_edit'), (req, res) => {
+  require('../extract/party').fromForm(req.body, 'customer_id');
   const id = S.create(stripAccounting(req), { userId: req.user.id });
   S.saveLines(id, req.body);
   flash(req, 'ok', req.body.mode === 'OTHER' ? 'Other file created — add its invoices / vendor bills below' : 'Shipment created');
@@ -128,7 +129,13 @@ router.get('/shipments/:id', auth.requireLogin, (req, res) => {
   const trackEvents = db.all("SELECT * FROM tracking_events WHERE shipment_id = ? AND classifier IN ('ACT', '') ORDER BY event_time DESC LIMIT 30", s.id);
   const view = internal ? 'shipments/detail' : 'customer/detail';
   const nextActions = internal ? require('../followups').forUser(req.user, { shipmentId: s.id }) : [];
-  res.render(view, { title: S.fileName(s), s, nextActions, tr: S.tracking(s), docs, events, emails, trackEvents, invoices, profit, plLines, acctParties, outgoing, vendorPending, autoSend: db.setting('auto_send_reviewed') === '1',
+  // No customer on the file yet but the B/L names a consignee that is not on Parties → offer to add it.
+  let newCustomer = null;
+  if (internal && !s.customer_id && s.consignee_name && !/^(TO\s+(THE\s+)?ORDER|SAME\s+AS)/i.test(s.consignee_name)) {
+    const P = require('../extract/party');
+    if (!P.findParty(s.consignee_name)) newCustomer = { name: s.consignee_name, address: s.consignee_address };
+  }
+  res.render(view, { title: S.fileName(s), s, newCustomer, nextActions, tr: S.tracking(s), docs, events, emails, trackEvents, invoices, profit, plLines, acctParties, outgoing, vendorPending, autoSend: db.setting('auto_send_reviewed') === '1',
     codes: A.CHARGE_CODES, billing: acct ? S.billingState(s) : null, trackingStatus: require('../tracking').status(), ...(internal ? partyLists() : {}) });
 });
 
@@ -143,6 +150,7 @@ function docFilter(user) {
 
 router.post('/shipments/:id', auth.requirePerm('shipments_edit'), async (req, res) => {
   const id = Number(req.params.id);
+  const addedCustomer = require('../extract/party').fromForm(req.body, 'customer_id');
   if (req.body.accept_delivery_request) {
     const cur = store.db.get('SELECT delivery_request_date, delivery_request_time FROM shipments WHERE id = ?', id);
     if (cur?.delivery_request_date) req.body.delivery_date = cur.delivery_request_date;
@@ -152,7 +160,7 @@ router.post('/shipments/:id', auth.requirePerm('shipments_edit'), async (req, re
   const changes = S.update(id, stripAccounting(req));
   S.saveLines(id, req.body);
   await notify.onShipmentChanged(id, changes, { userId: req.user.id });
-  flash(req, 'ok', changes.length ? `Saved (${changes.length} field${changes.length > 1 ? 's' : ''} changed)` : 'Saved');
+  flash(req, 'ok', `${changes.length ? `Saved (${changes.length} field${changes.length > 1 ? 's' : ''} changed)` : 'Saved'}${addedCustomer ? ` · ${addedCustomer} added to Parties as a new customer` : ''}`);
   res.redirect(`/shipments/${id}`);
 });
 

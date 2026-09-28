@@ -35,6 +35,27 @@ router.post('/companies', auth.requirePerm('parties'), (req, res) => {
   res.redirect('/companies');
 });
 
+/**
+ * Read a document (B/L, commercial invoice, vendor invoice, or a whole Outlook email) and list the parties it names,
+ * so a new customer / vendor is filled in with one click instead of typed.
+ */
+const readUpload = require('multer')({ storage: require('multer').memoryStorage(), limits: { fileSize: 25 * 1024 * 1024, files: 5 } });
+router.post('/companies/read', auth.requirePerm('parties'), readUpload.array('files', 5), auth.checkCsrf, async (req, res) => {
+  const Party = require('../extract/party');
+  const { readDocument } = require('../extract/text');
+  const { files, mails } = await require('../extract/mailfile').expandMailFiles((req.files || []).map((f) => ({ buffer: f.buffer, filename: f.originalname, mime: f.mimetype })));
+  const out = [];
+  for (const f of files) {
+    let text = '';
+    try { text = (await readDocument(f.buffer, f.filename, f.mime)).segments.map((s) => s.text).join('\n'); } catch { continue; }
+    for (const p of Party.readParties(text, Party.own())) {
+      if (p.role === 'letterhead' && !p.email && f.mail?.from) p.email = f.mail.from.toLowerCase();
+      if (!out.some((x) => Party.norm(x.name) === Party.norm(p.name))) out.push({ ...p, file: f.filename });
+    }
+  }
+  res.json({ parties: out, read: files.length, mails: mails.length });
+});
+
 // ---------- users — admin only ----------
 router.get('/admin/users', auth.requirePerm('users'), (req, res) => {
   const users = store.db.all('SELECT u.*, c.name AS company_name FROM users u LEFT JOIN companies c ON c.id = u.company_id ORDER BY u.role, u.name');

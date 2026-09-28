@@ -78,7 +78,8 @@ const PRIORITY = {
 const SCALARS = ['mbl_no', 'hbl_no', 'mawb_no', 'hawb_no', 'carrier', 'vessel', 'voyage', 'flight_no', 'pol', 'pod',
   'place_of_delivery', 'etd', 'eta', 'shipper_name', 'consignee_name', 'notify_party', 'packages', 'package_unit',
   'weight_kg', 'cbm', 'chargeable_weight', 'commodity', 'firms_code', 'freight_location', 'last_free_day',
-  'ci_invoice_no', 'cargo_value', 'isf_no', 'telex_release', 'sub_bl_no', 'agent_ref'];
+  'ci_invoice_no', 'cargo_value', 'isf_no', 'telex_release', 'sub_bl_no', 'agent_ref',
+  'shipper_address', 'consignee_address', 'notify_address', 'consignee_contact'];
 
 /** Combine per-document extractions into one shipment draft. */
 function mergeExtractions(docs) {

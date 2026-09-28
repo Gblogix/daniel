@@ -39,7 +39,12 @@ router.get('/invoices/new', auth.requireAccounting, (req, res) => {
   const s = req.query.shipment ? S.find(Number(req.query.shipment), null) : null;
   const inv = { kind, shipment_id: s?.id || null, invoice_date: new Date().toISOString().slice(0, 10), currency: 'USD', lines: [] };
   if (s) {
-    if (kind === 'AR') { inv.company_id = S.guessCustomer(s); inv.guessed_party = !s.customer_id && Boolean(inv.company_id); inv.ship_to = s.consignee_name || ''; inv.customer_ref = s.customer_ref || ''; }
+    if (kind === 'AR') {
+      inv.company_id = S.guessCustomer(s); inv.guessed_party = !s.customer_id && Boolean(inv.company_id);
+      // Consignee on the B/L that is not on Parties yet → "＋ New customer" pre-picked.
+      if (!inv.company_id && s.consignee_name && !/^(TO\s+(THE\s+)?ORDER|SAME\s+AS)/i.test(s.consignee_name) && !require('../extract/party').findParty(s.consignee_name)) {
+        inv.new_party = { name: s.consignee_name, address: s.consignee_address };
+      } inv.ship_to = s.consignee_name || ''; inv.customer_ref = s.customer_ref || ''; }
     if (kind === 'DN') { inv.company_id = s.agent_id; inv.agent_ref = s.agent_ref || s.sub_bl_no || s.hbl_no || ''; inv.profit_share = 0; }
     if (kind === 'AP') inv.company_id = s.trucker_id;
     // D/N = cost recovery: start from the AP costs already booked on the shipment.
@@ -68,8 +73,9 @@ function linesFromBody(b) {
 }
 
 router.post('/invoices', auth.requireAccounting, (req, res) => {
+  const added = require('../extract/party').fromForm(req.body, 'company_id', { type: { AR: 'customer', DN: 'agent', AP: 'vendor' }[req.body.kind] });
   const id = A.saveInvoice({ ...req.body, lines: linesFromBody(req.body) }, { userId: req.user.id });
-  flash(req, 'ok', 'Saved');
+  flash(req, 'ok', `Saved${added ? ` · ${added} added to Parties` : ''}`);
   res.redirect(`/invoices/${id}`);
 });
 router.post('/invoices/:id', auth.requireAccounting, (req, res) => {

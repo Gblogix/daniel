@@ -195,6 +195,12 @@ function extractRules(text, { filename = '', rows = null } = {}) {
   out.shipper_name = partyName(lines, /^(?:SHIPPER|EXPORTER|SELLER)(?:\s*\/\s*EXPORTER)?\b/i);
   out.consignee_name = partyName(lines, /^(?:CONSIGNEE|BUYER|IMPORTER)\b/i);
   out.notify_party = partyName(lines, /^NOTIFY\s+PARTY\b/i);
+  // Addresses under the SHIPPER / CONSIGNEE / NOTIFY boxes (used to add a new customer from the documents).
+  for (const p of require('./party').readParties(T, { db: null, withLetterhead: false })) {
+    const k = { shipper: 'shipper_address', consignee: 'consignee_address', notify: 'notify_address' }[p.role];
+    if (k && p.address) out[k] = p.address;
+    if (p.role === 'consignee' && (p.email || p.phone)) out.consignee_contact = { email: p.email, phone: p.phone };
+  }
 
   // Totals. Prefer labelled gross weight, else the largest KGS figure.
   const gw = firstMatch(U, [/(?:GROSS\s*WEIGHT|G\.?\s?W\.?|TOTAL\s+WEIGHT)[^0-9\n]{0,20}([\d,]+(?:\.\d+)?)\s*(?:KGS?|KILOS?)?/]);

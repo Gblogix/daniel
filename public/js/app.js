@@ -182,3 +182,48 @@ document.querySelectorAll('select[data-party-search]').forEach((sel) => {
     if (first) { sel.value = first.value; sel.dispatchEvent(new Event('change', { bubbles: true })); }
   });
 });
+
+// "＋ New … from documents": show the editable name / address only while that option is picked.
+document.querySelectorAll('select[data-new-party]').forEach((sel) => {
+  const box = sel.closest('.field').querySelector('[data-new-party-box]');
+  if (!box) return;
+  const apply = () => { box.hidden = sel.value !== 'new'; };
+  sel.addEventListener('change', apply);
+  apply();
+});
+
+// Parties: read a dropped B/L / invoice / email and fill the "Add party" form from the party picked.
+document.querySelectorAll('[data-party-reader]').forEach((zone) => {
+  const form = document.getElementById('party-form');
+  const out = zone.querySelector('[data-party-results]');
+  const input = zone.querySelector('input[type=file]');
+  const ROLE = { letterhead: 'Issuer (letterhead)', shipper: 'Shipper', consignee: 'Consignee', notify: 'Notify party', bill_to: 'Bill to' };
+  const esc = (v) => String(v ?? '').replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+  const set = (name, v) => { const el = form.querySelector(`[name="${name}"]`); if (el && v) el.value = v; };
+  const read = async (files) => {
+    if (!files.length) return;
+    const fd = new FormData();
+    [...files].forEach((f) => fd.append('files', f));
+    out.innerHTML = '<p class="small muted">Reading…</p>';
+    zone.classList.add('busy');
+    try {
+      const r = await fetch(`/companies/read?_csrf=${encodeURIComponent(zone.dataset.csrf)}`, { method: 'POST', body: fd }).then((x) => x.json());
+      if (!r.parties.length) { out.innerHTML = '<p class="small muted">No company names found — type them in the form.</p>'; return; }
+      out.innerHTML = r.parties.map((p, i) => `<div class="party-cand">
+        <div><span class="badge">${ROLE[p.role] || p.role}</span> <b>${esc(p.name)}</b>${p.address ? `<br><span class="small muted">${esc(p.address).replace(/\n/g, ', ')}</span>` : ''}${p.email ? `<br><span class="small">${esc(p.email)}</span>` : ''}</div>
+        ${p.match ? `<a class="btn secondary small" href="/companies/${p.match.id}">Already on Parties — edit</a>` : `<button type="button" class="btn small" data-i="${i}">Use →</button>`}</div>`).join('');
+      out.querySelectorAll('button[data-i]').forEach((b) => b.addEventListener('click', () => {
+        const p = r.parties[Number(b.dataset.i)];
+        set('name', p.name); set('address', p.address); set('country', p.country); set('phone', p.phone); set('emails', p.email);
+        if (p.email && ['customer', 'agent'].includes(p.suggest)) set('billing_emails', p.email);
+        set('type', p.suggest);
+        form.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        form.querySelector('[name="name"]').focus();
+      }));
+    } catch (e) { out.innerHTML = `<p class="small late">Could not read the document (${esc(e.message)})</p>`; } finally { zone.classList.remove('busy'); }
+  };
+  input.addEventListener('change', () => read(input.files));
+  zone.addEventListener('dragover', (e) => { e.preventDefault(); e.stopPropagation(); zone.classList.add('over'); });
+  zone.addEventListener('dragleave', (e) => { if (!zone.contains(e.relatedTarget)) zone.classList.remove('over'); });
+  zone.addEventListener('drop', (e) => { e.preventDefault(); e.stopPropagation(); zone.classList.remove('over'); read(e.dataTransfer.files); });
+});

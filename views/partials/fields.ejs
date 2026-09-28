@@ -14,7 +14,17 @@
     <%- ship(sel('status', 'Status', S.STATUSES.map((x) => ({ id: x.code, name: `${x.label} (${x.ko})` })), false)) %>
     <%- ship(sel('customs_status', 'Customs', S.CUSTOMS_STATUSES.map((x) => ({ id: x, name: x })), false)) %>
     <%- ship(sel('origin_country', 'Origin', [{ id: 'KR', name: 'Korea' }, { id: 'CN', name: 'China' }, { id: 'VN', name: 'Vietnam' }, { id: 'OTHER', name: 'Other' }])) %>
-    <%- sel('customer_id', 'Customer (CNEE)', customers) %>
+    <% if (locals.newCustomer) { const nc = newCustomer; %>
+    <div class="field"><label for="f_customer_id">Customer (CNEE)</label><select id="f_customer_id" name="customer_id" data-new-party>
+      <option value="">—</option><option value="new" <%= s.customer_id ? '' : 'selected' %>>＋ New customer from documents: <%= nc.name %></option>
+      <% customers.forEach((o) => { %><option value="<%= o.id %>" <%= String(s.customer_id) === String(o.id) ? 'selected' : '' %>><%= o.name %></option><% }) %></select>
+      <div class="new-party" data-new-party-box <%= s.customer_id ? 'hidden' : '' %>>
+        <span class="small muted">Not on Parties yet — added as a customer when you apply (edit if needed):</span>
+        <input name="new_party_name" value="<%= nc.name %>" placeholder="Company name">
+        <textarea name="new_party_address" rows="2" placeholder="Address"><%= nc.address || '' %></textarea>
+        <input name="new_party_email" value="<%= nc.email || '' %>" placeholder="Notice / billing email (optional)">
+        <input type="hidden" name="new_party_phone" value="<%= nc.phone || '' %>"><input type="hidden" name="new_party_type" value="customer"></div></div>
+    <% } else { %><%- sel('customer_id', 'Customer (CNEE)', customers) %><% } %>
     <%- ship(sel('agent_id', 'Overseas agent', agents)) %>
     <%- ship(sel('broker_id', 'Customs broker', brokers)) %>
     <%- ship(sel('trucker_id', 'Trucker', truckers)) %>

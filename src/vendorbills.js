@@ -53,6 +53,20 @@ async function extract({ buffer, filename, mime, db = store.db }) {
     } catch (e) { r.warnings.push(`AI reading unavailable: ${e.message}`); }
   }
   r.shipments = matchShipments(r.refs, db);
+  // Vendor not on Parties yet: take name / address / email from the letterhead so it can be added when booking.
+  if (!r.vendor) {
+    const Party = require('./extract/party');
+    const lh = Party.readParties(text, { ...Party.own(), db }).find((p) => p.role === 'letterhead');
+    const name = r.vendor_name_read || lh?.name;
+    if (name) {
+      const same = lh && Party.norm(lh.name) === Party.norm(name);
+      r.vendor_new = { name, address: same ? lh.address : null, email: same ? lh.email : null, phone: same ? lh.phone : null };
+      r.vendor_name_read = name;
+      r.warnings = r.warnings.map((w) => (/^Vendor not recognised/.test(w) ? `New vendor ${name} — added to Parties when you book (check the details)` : w));
+      const hit = Party.findParty(name, { db });
+      if (hit) { r.vendor = { id: hit.id, name: hit.name }; delete r.vendor_new; }
+    }
+  }
   if (r.vendor && r.number) {
     const dup = db.get("SELECT id, number FROM invoices WHERE kind = 'AP' AND company_id = ? AND UPPER(number) = UPPER(?) AND status <> 'VOID'", r.vendor.id, r.number);
     if (dup) { r.duplicate = dup.id; r.warnings.unshift(`Already booked: ${dup.number} — this may be a duplicate`); }
@@ -64,13 +78,14 @@ async function extract({ buffer, filename, mime, db = store.db }) {
  * Store a received vendor invoice and read it. Returns the document id (doc_type VINV, waiting to be booked).
  * shipmentId / companyId given by the uploader win over the automatic match.
  */
-async function receive({ buffer, filename, mime, shipmentId = null, companyId = null, userId = null, via = 'upload', ex = null, db = store.db }) {
+async function receive({ buffer, filename, mime, shipmentId = null, companyId = null, userId = null, via = 'upload', ex = null, sender = null, db = store.db }) {
   const dir = path.join(config.uploadDir, 'vendor');
   fs.mkdirSync(dir, { recursive: true });
   const stored = path.join(dir, `${crypto.randomBytes(12).toString('hex')}${path.extname(filename).toLowerCase()}`);
   fs.writeFileSync(stored, buffer);
   let r;
   try { r = ex || await extract({ buffer, filename, mime, db }); } catch (e) { r = { warnings: [`Could not read the document: ${e.message}`], lines: [], refs: {}, shipments: [] }; }
+  if (r.vendor_new && sender && !r.vendor_new.email) r.vendor_new.email = String(sender).toLowerCase();
   if (companyId) r.vendor = { id: Number(companyId), name: db.get('SELECT name FROM companies WHERE id = ?', Number(companyId))?.name };
   const sid = shipmentId ? Number(shipmentId) : r.shipments?.length === 1 ? r.shipments[0] : null;
   if (!shipmentId && r.shipments?.length > 1) r.warnings.push(`References match ${r.shipments.length} files — pick the right one`);
