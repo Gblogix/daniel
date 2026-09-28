@@ -111,3 +111,23 @@ test('delivered file with no vendor cost is flagged; email senders map to vendor
   assert.equal(vendorForSender('someone@unknown.com'), undefined ?? null);
   assert.equal(agentForSender('ar@pacificcfs.com'), null);
 });
+
+// Oh! My Customs (broker) invoice: "INVOICE NO." / "INVOICE DATE" with the value beside, under (header row, single-
+// spaced labels) or after a stack of labels; EFFECTIVE DATE of the bond is not the invoice date; NET 14 DAYS.
+test('Oh! My Customs invoice: number / date in any layout, bond effective date ignored', () => {
+  const head = 'REMIT PAYMENT TO: YOON HEE KIM DBA OH! MY CUSTOMS\n10900 E. 183rd St. #171-L\nCerritos, CA 90703\nE: info@ohmycustoms.com\nINVOICE\nT O\nGLOBALBRIDGE LOGISTICS INC.\nFULLERTON, CA 92831';
+  const tail = 'DESCRIPTION  AMOUNT (USD)\nANNUAL BOND FEE  600.00\nLIMIT OF LIABILITY : 100K EFFECTIVE DATE : 10/09/2026\nNET 14 DAYS  Balance (USD): 600.00';
+  const layouts = [
+    'INVOICE NO.  0000131-C\nINVOICE DATE  09/28/26',
+    'INVOICE NO. INVOICE DATE CLIENT REF. NO.\n0000131-C  09/28/26  UNLOCKT BRANDS INC.',
+    'INVOICE NO.   INVOICE DATE   CLIENT REF. NO.\n0000131-C   09/28/26   UNLOCKT BRANDS INC.',
+    'INVOICE NO.\nINVOICE DATE\nCLIENT REF. NO.\n0000131-C\n09/28/26\nUNLOCKT BRANDS INC.',
+  ];
+  const companies = [{ id: 9, name: 'Oh! My Customs', type: 'broker' }];
+  for (const mid of layouts) {
+    const r = parseVendorInvoice(`${head}\n${mid}\n${tail}`, { companies, ownName: 'GlobalBridge Logistics' });
+    assert.deepEqual([r.number, r.invoice_date, r.terms_days, r.due_date, r.total, r.vendor?.name], ['0000131-C', '2026-09-28', 14, '2026-10-12', 600, 'Oh! My Customs'], mid);
+    assert.deepEqual(r.lines, [{ description: 'ANNUAL BOND FEE', qty: null, rate: null, amount: 600 }]);
+    assert.deepEqual(r.warnings, []);
+  }
+});

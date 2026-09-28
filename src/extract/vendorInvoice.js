@@ -18,43 +18,74 @@ const round = (v) => Math.round(v * 100) / 100;
 const NOT_A_CHARGE = /\b(SUB\s*-?\s*TOTAL|TOTAL|BALANCE|AMOUNT\s+DUE|AMOUNT\s+PAID|PAID|PAYMENT|CREDIT\s+CARD|DEPOSIT|INVOICE\s*(DATE|NO|#|NUMBER)|DUE\s+DATE|TERMS|ROUTING|ACCOUNT|ACH|WIRE|SWIFT|PAGE\s+\d|TEL|PHONE|FAX|EMAIL|WEIGHT|KGS?\b|LBS\b|CBM\b|PIECES|PCS\b|PKGS?\b|CARTONS|CTNS\b|ETA\b|ETD\b)/i;
 const HEADER = /\b(DESCRIPTION|CHARGES?|SERVICE|ITEM)\b.*\b(AMOUNT|TOTAL|PRICE|RATE)\b/i;
 
-function labelDate(lines, re) {
-  for (let i = 0; i < lines.length; i += 1) {
-    const m = re.exec(lines[i]);
+// A label with nothing after it ("INVOICE NO." / "INVOICE DATE" on their own line or as table headers).
+const LABEL = String.raw`(?:INVOICE\s*(?:NO\.?|NUMBER|#|DATE)|INV\.?\s*(?:NO\.?|#|DATE)|BILL\s*(?:NO\.?|#)|(?:DUE|SHIP|ENTRY|EFFECTIVE)\s*DATE|DATE(?:\s+OF\s+ENTRY)?|CLIENT\s+REF\.?\s*(?:NO\.?)?|(?:CUSTOMER|ACCOUNT|P\.?\s*O\.?)\s*(?:NO\.?|#|ID)|REF(?:ERENCE)?\s*(?:NO\.?|#)|TERMS|PAGE|CARRIER|COUNTRY|ENTRY\s+(?:NO\.?|TYPE)|ARRIVAL|SHIPMENT|GROSS\s+WEIGHT)`;
+const LABEL_ONLY = new RegExp(`^\\s*${LABEL}[\\s:.#]*$`, 'i');
+const LABEL_START = new RegExp(`^${LABEL}\\b`, 'i');
+
+/**
+ * The value that belongs to a label, whichever way the PDF text came out:
+ *   same line        "INVOICE NO.  0000131-C"
+ *   header row       "INVOICE NO.   INVOICE DATE" over "0000131-C   09/28/26"
+ *   stacked labels   "INVOICE NO." / "INVOICE DATE" / "0000131-C" / "09/28/26"
+ * `ok(v)` says whether a candidate is a real value (a number with digits, a date…).
+ */
+function labelled(lines, labelRe, ok) {
+  const raw = lines.map((l) => l.replace(/\s+$/, ''));
+  for (let i = 0; i < raw.length; i += 1) {
+    const m = labelRe.exec(raw[i]);
     if (!m) continue;
-    const rest = lines[i].slice(m.index + m[0].length).replace(/^[\s:.#-]+/, '');
-    const d = toISODate(rest) || toISODate((lines[i + 1] || '').trim());
-    if (d) return d;
-    // Table header: the date sits under the label on the next line, in the same column position.
-    const col = m.index;
-    const below = lines[i + 1] || '';
-    const cell = below.slice(Math.max(0, col - 4)).trim();
-    if (toISODate(cell)) return toISODate(cell);
+    // 1. Same line, right after the label (skipping other labels on a header row).
+    const after = raw[i].slice(m.index + m[0].length).replace(/^[\s:.#-]+/, '');
+    const firstCell = after.split(/\s{2,}/)[0].trim();
+    if (firstCell && !LABEL_START.test(firstCell)) {
+      if (ok(firstCell)) return ok(firstCell);
+      const tok = firstCell.split(/\s+/)[0];
+      if (ok(tok)) return ok(tok);
+    }
+    // 2. Header row: the value sits in the same column on the next line.
+    // Header cells: split on wide gaps, or — when the PDF put single spaces between them — on the known labels.
+    const labelsOnLine = [...raw[i].matchAll(new RegExp(LABEL, 'gi'))].map((x) => x[0]);
+    const onlyLabels = labelsOnLine.length > 1 && !raw[i].replace(new RegExp(LABEL, 'gi'), '').replace(/[\s:.#]/g, '');
+    const heads = onlyLabels ? labelsOnLine : raw[i].trim().split(/\s{2,}/);
+    const k = heads.findIndex((h) => labelRe.test(h));
+    const next = (raw[i + 1] || '').trim();
+    if (heads.length > 1 && next && !LABEL_ONLY.test(next)) {
+      const cells = next.split(/\s{2,}/);
+      const cand = cells.length === heads.length ? cells[k] : null;
+      if (cand && ok(cand.trim())) return ok(cand.trim());
+      const byPos = (raw[i + 1] || '').slice(Math.max(0, raw[i].indexOf(heads[k]) - 3)).trim().split(/\s{2,}/)[0];
+      if (byPos && ok(byPos)) return ok(byPos);
+    }
+    // 3. Stacked labels: n label-only lines, then n values in the same order.
+    if (LABEL_ONLY.test(raw[i])) {
+      let a = i; while (a > 0 && LABEL_ONLY.test(raw[a - 1])) a -= 1;
+      let b = i; while (b + 1 < raw.length && LABEL_ONLY.test(raw[b + 1])) b += 1;
+      const v = (raw[b + 1 + (i - a)] || '').trim();
+      if (v && ok(v)) return ok(v);
+      const v1 = (raw[b + 1 + (i - a)] || '').trim().split(/\s{2,}/)[0];
+      if (v1 && ok(v1)) return ok(v1);
+    }
   }
   return null;
 }
 
+function labelDate(lines, re) {
+  return labelled(lines, re, (v) => toISODate(v) || toISODate(v.split(/\s+/)[0]));
+}
+
+const NUMBER_OK = (v) => {
+  const t = String(v).trim().toUpperCase().replace(/^[#:.\s]+/, '');
+  return /^[A-Z0-9][A-Z0-9\-/]{2,24}$/.test(t) && /\d/.test(t) && !toISODate(t) ? t : null;
+};
+
 function invoiceNumber(lines, text) {
+  const byLabel = labelled(lines, /INVOICE\s*(?:NO\.?|NUMBER|#)|\bINV\.?\s*(?:NO\.?|#)/i, NUMBER_OK)
+    || labelled(lines, /\bBILL\s*(?:NO\.?|#)/i, NUMBER_OK);
+  if (byLabel) return byLabel;
   const U = text.toUpperCase();
-  const pats = [
-    /INVOICE\s*(?:NO\.?|NUMBER|#)\s*[:#.]?\s*([A-Z0-9][A-Z0-9\-/]{2,24})/,
-    /\bINV(?:OICE)?\s*#\s*[:.]?\s*([A-Z0-9][A-Z0-9\-/]{2,24})/,
-    /\bBILL\s*(?:NO\.?|#)\s*[:.]?\s*([A-Z0-9][A-Z0-9\-/]{2,24})/,
-    /\bREF(?:ERENCE)?\s*(?:NO\.?|#)\s*[:.]?\s*([A-Z0-9][A-Z0-9\-/]{3,24})/,
-  ];
-  for (const re of pats) {
-    const m = re.exec(U);
-    if (m && !/^(DATE|NO|NUMBER|DUE|TERMS)$/.test(m[1])) return m[1];
-  }
-  // "INVOICE NO." as a column header with the value on the next line
-  for (let i = 0; i < lines.length - 1; i += 1) {
-    const m = /INVOICE\s*(?:NO\.?|NUMBER|#)/i.exec(lines[i]);
-    if (!m) continue;
-    const cells = lines[i + 1].split(/\s{2,}/);
-    const heads = lines[i].split(/\s{2,}/);
-    const k = heads.findIndex((h) => /INVOICE\s*(NO|NUMBER|#)/i.test(h));
-    const v = (cells[k] || cells[0] || '').trim();
-    if (/^[A-Z0-9][A-Z0-9\-/]{2,24}$/i.test(v)) return v.toUpperCase();
+  for (const re of [/\bINV(?:OICE)?\s*#\s*[:.]?\s*([A-Z0-9][A-Z0-9\-/]{2,24})/g, /\bREF(?:ERENCE)?\s*(?:NO\.?|#)\s*[:.]?\s*([A-Z0-9][A-Z0-9\-/]{3,24})/g]) {
+    for (const m of U.matchAll(re)) if (NUMBER_OK(m[1])) return NUMBER_OK(m[1]);
   }
   return null;
 }
@@ -131,8 +162,10 @@ function parseVendorInvoice(text, { companies = [], ownName = 'GLOBALBRIDGE' } =
   const flat = lines.map((l) => l.replace(/\s+/g, ' ').trim());
   const out = { warnings: [] };
   out.number = invoiceNumber(lines, T);
-  out.invoice_date = labelDate(flat, /INVOICE\s*DATE|INV\.?\s*DATE|BILLING\s*DATE|\bDATE\b(?!\s*(DUE|OF))/i);
-  out.due_date = labelDate(flat, /DUE\s*DATE|PAYMENT\s*DUE/i);
+  // The invoice's own date first; a bare DATE only when there is none (never EFFECTIVE / ENTRY / SHIP / DUE DATE).
+  out.invoice_date = labelDate(lines, /INVOICE\s*DATE|INV\.?\s*DATE|BILLING\s*DATE|STATEMENT\s*DATE/i)
+    || labelDate(lines, /(?<!(?:DUE|EFFECTIVE|ENTRY|SHIP|ARRIVAL|EXPIRY|EXPIRATION|DELIVERY|PICK\s?UP)\s*)\bDATE\b(?!\s*(?:DUE|OF))/i);
+  out.due_date = labelDate(lines, /DUE\s*DATE|PAYMENT\s*DUE/i);
   out.terms_days = termsDays(T);
   if (!out.due_date && out.invoice_date && out.terms_days != null) {
     const d = new Date(`${out.invoice_date}T00:00:00Z`); d.setUTCDate(d.getUTCDate() + out.terms_days);
