@@ -16,7 +16,8 @@ const notify = require('../notify');
 const { extractFile, mergeExtractions } = require('../extract');
 
 const router = express.Router();
-const SLOTS = ['MBL', 'HBL', 'PL', 'CI', 'ISF', 'AWB', 'OTHER'];
+// CIPL: commercial invoice + packing list in one file (Excel tabs or PDF pages) — split and typed automatically.
+const SLOTS = ['MBL', 'HBL', 'PL', 'CI', 'CIPL', 'ISF', 'AWB', 'OTHER'];
 const ALLOWED = /\.(pdf|xlsx|csv|txt|jpe?g|png)$/i;
 const upload = multer({
   dest: path.join(config.uploadDir, 'intake'),
@@ -53,10 +54,10 @@ async function processUpload(files, { userId, agentId, note, db = store.db }) {
   const perDoc = [];
   for (const f of files) {
     const buffer = fs.readFileSync(f.path);
-    const parts = await extractFile({ buffer, filename: f.originalname, mime: f.mimetype, docTypeHint: f.slot === 'OTHER' ? 'AUTO' : f.slot });
+    const parts = await extractFile({ buffer, filename: f.originalname, mime: f.mimetype, docTypeHint: f.slot === 'OTHER' || f.slot === 'CIPL' ? 'AUTO' : f.slot });
     for (const ex of parts) {
       // A merged PDF becomes one document row per detected document (same file, page range in the name).
-      const name = parts.length > 1 && ex.pages ? `${f.originalname} [p.${ex.pages.join(',')}]` : f.originalname;
+      const name = parts.length > 1 && ex.sheet ? `${f.originalname} [${ex.sheet}]` : parts.length > 1 && ex.pages ? `${f.originalname} [p.${ex.pages.join(',')}]` : f.originalname;
       perDoc.push({ filename: name, ...ex });
       db.run(`INSERT INTO documents (intake_id, doc_type, filename, stored_path, mime, size, extracted_json, uploaded_by)
         VALUES (?, ?, ?, ?, ?, ?, ?, ?)`, intakeId, ex.doc_type, name, f.path, f.mimetype, f.size, JSON.stringify(ex), userId);

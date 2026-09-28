@@ -217,7 +217,9 @@ function extractRules(text, { filename = '', rows = null } = {}) {
   out.firms_code = firstMatch(U, [/FIRMS?\s*(?:CODE)?\s*(?:NO\.?|#)?\s*[:.]?\s*([A-Z][A-Z0-9]\d{2}|[A-Z]\d[A-Z0-9]\d|[A-Z]{2}[A-Z0-9]\d)\b/]);
   out.freight_location = labelValue(lines, /(?:FREIGHT|CARGO)\s+LOCATION|DISCHARGE\s+TERMINAL|\bTERMINAL\s*(?:NAME)?\s*:|CFS\s+LOCATION|AVAILABLE\s+AT/i);
   out.last_free_day = toISODate(firstMatch(T, [new RegExp(String.raw`(?:LAST\s+FREE\s+DAY|\bLFD)\s*[:.-]?\s*${DATE_RE}`, 'i')]));
-  out.ci_invoice_no = firstMatch(U, [/INVOICE\s*(?:NO\.?|#|NUMBER)\s*[:.]?\s*([A-Z0-9][A-Z0-9-]{3,20})/]);
+  // "INVOICE NO: X", or the Korean-style box "9. No & Date of Invoice" with "#BSBUS26091601 / 2026.09.16" under it.
+  out.ci_invoice_no = invoiceNoBelow(rows) || firstMatch(U, [/NO\.?\s*(?:&|AND)\s*DATE\s+OF\s+INVOICE[^\n]*\n(?:[^\n]*?#\s*|\s*)([A-Z0-9][A-Z0-9-]{3,24})/,
+    /INVOICE\s*(?:NO\.?|#|NUMBER)\s*[:.]?\s*#?\s*([A-Z0-9][A-Z0-9-]{3,20})/]);
   out.isf_no = firstMatch(U, [/ISF\s*(?:NO\.?|#|TRANSACTION\s*(?:NO\.?)?)\s*[:.]?\s*([A-Z0-9-]{6,25})/]);
   out.telex_release = /TELEX\s+RELEASE|SURRENDERED|SEA\s*WAYBILL|EXPRESS\s+RELEASE|电放/.test(U) || null;
 
@@ -244,6 +246,20 @@ function extractRules(text, { filename = '', rows = null } = {}) {
   }
   for (const k of Object.keys(out)) if (out[k] === undefined) out[k] = null;
   return out;
+}
+
+/** Spreadsheet C/I: the value under a "No & Date of Invoice" / "Invoice No." cell, same column. */
+function invoiceNoBelow(rows) {
+  if (!rows) return null;
+  for (let r = 0; r < rows.length; r += 1) {
+    const c = rows[r].findIndex((v) => /NO\.?\s*(?:&|AND)\s*DATE\s+OF\s+INVOICE|^\s*INVOICE\s*(?:NO\.?|#|NUMBER)\s*[:.]?\s*$/i.test(String(v)));
+    if (c < 0) continue;
+    for (let k = r + 1; k <= r + 3 && k < rows.length; k += 1) {
+      const m = /^\s*#?\s*([A-Z0-9][A-Z0-9-]{3,24})\b/i.exec(String(rows[k][c] || ''));
+      if (m && /\d/.test(m[1])) return m[1].toUpperCase();
+    }
+  }
+  return null;
 }
 
 function normSize(s) { return { HQ: 'HC', DV: 'GP', DC: 'GP', ST: 'GP', RH: 'RF' }[s] || s; }

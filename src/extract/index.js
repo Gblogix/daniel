@@ -42,7 +42,7 @@ async function extractFile({ buffer, filename, mime, docTypeHint }) {
     } else if (seg.ocr && method === 'ocr') {
       result.warnings.push(`Scanned document read by OCR (confidence ${seg.ocrConfidence ?? '?'}%) — please double-check numbers`);
     }
-    out.push({ ...result, method, pages: seg.pages || null, ocr: Boolean(seg.ocr), warnings: result.warnings || [] });
+    out.push({ ...result, method, pages: seg.pages || null, sheet: seg.sheet || null, ocr: Boolean(seg.ocr), warnings: result.warnings || [] });
   }
   return out;
 }
