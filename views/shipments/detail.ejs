@@ -150,14 +150,14 @@
     <input type="hidden" name="_csrf" value="<%= csrf %>">
     <div class="grid g4">
       <div class="field"><label>Type</label>
-        <select name="kind" data-kind-select data-ar="<%= s.customer_id || '' %>" data-dn="<%= s.agent_id || '' %>" data-ap="<%= s.trucker_id || '' %>">
+        <select name="kind" data-kind-select data-ar="<%= S.guessCustomer(s) || '' %>" data-dn="<%= s.agent_id || '' %>" data-ap="<%= s.trucker_id || '' %>">
           <option value="AP">Vendor bill (cost) — trucker, broker, warehouse, carrier…</option>
           <option value="AR">AR invoice to customer (revenue)</option>
           <option value="DN">D/N to agent (revenue; negative = credit)</option>
         </select></div>
       <div class="field"><label>Party</label>
-        <select name="company_id" required><option value="">—</option>
-          <% acctParties.forEach((p) => { %><option value="<%= p.id %>" data-type="<%= p.type %>"><%= p.name %> (<%= p.type %>)</option><% }) %></select>
+        <select name="company_id" required data-party-search><option value="">— pick —</option>
+          <%- include('../partials/party-options', { parties: acctParties, selected: null, prefer: ['customer', 'agent', 'vendor', 'trucker', 'broker'] }) %></select>
         <span class="muted small">Customer: <%= s.customer_name || '—' %> · Agent: <%= s.agent_name || '—' %> · Trucker: <%= s.trucker_name || '—' %> · Broker: <%= s.broker_name || '—' %></span></div>
       <div class="field"><label>Vendor invoice no. <span class="muted">(bills only — ours are numbered automatically)</span></label><input name="number" placeholder="e.g. CTC-7781"></div>
       <div class="field"><label>Invoice date</label><input type="date" name="invoice_date" value="<%= new Date().toISOString().slice(0, 10) %>"></div>

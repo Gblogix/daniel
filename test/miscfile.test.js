@@ -38,3 +38,12 @@ test('an Other file gets an OTH number, its own name, A/R + A/P + profit, and st
   const items = F.forUser(admin).filter((i) => i.shipment_id === id);
   assert.ok(items.length && items.every((i) => i.area === 'acct'), 'only accounting follow-ups (review / send the invoice) — no shipping follow-ups (ISF, A/N, D/O…)');
 });
+
+test('the customer of an Other file is picked from its name, and the first A/R fills it in', () => {
+  const id = S.create({ mode: 'OTHER', title: 'Annual Bond - Unlockt Brands' });
+  const s = S.find(id, null);
+  assert.equal(S.guessCustomer(s), co('UNLOCKT'));
+  assert.equal(S.guessCustomer({ mode: 'OTHER', title: 'Office rent' }), null);
+  A.saveInvoice({ kind: 'AR', shipment_id: id, company_id: co('UNLOCKT'), lines: [{ description: 'ANNUAL BOND', amount: 450 }] });
+  assert.equal(S.find(id, null).customer_id, co('UNLOCKT'));
+});

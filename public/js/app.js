@@ -162,3 +162,23 @@ document.querySelectorAll('select[name="mode"]').forEach((sel) => {
   };
   sel.addEventListener('change', apply);
 });
+
+// Long party lists: a small search box above the drop-down filters it as you type (Enter / single match picks it).
+document.querySelectorAll('select[data-party-search]').forEach((sel) => {
+  const box = document.createElement('input');
+  box.type = 'search'; box.placeholder = 'Type to find a party…'; box.className = 'party-search';
+  sel.parentNode.insertBefore(box, sel);
+  const opts = [...sel.querySelectorAll('option')].filter((o) => o.value);
+  box.addEventListener('input', () => {
+    const q = box.value.trim().toLowerCase();
+    const hits = opts.filter((o) => { const on = !q || o.textContent.toLowerCase().includes(q); o.hidden = !on; return on; });
+    sel.querySelectorAll('optgroup').forEach((g) => { g.hidden = ![...g.children].some((o) => !o.hidden); });
+    if (q && hits.length === 1) { sel.value = hits[0].value; sel.dispatchEvent(new Event('change', { bubbles: true })); }
+  });
+  box.addEventListener('keydown', (e) => {
+    if (e.key !== 'Enter') return;
+    e.preventDefault();
+    const first = opts.find((o) => !o.hidden);
+    if (first) { sel.value = first.value; sel.dispatchEvent(new Event('change', { bubbles: true })); }
+  });
+});

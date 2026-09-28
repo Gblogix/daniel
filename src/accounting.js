@@ -84,6 +84,11 @@ function saveInvoice(data, { db = store.db, userId = null, id = null } = {}) {
         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`, id, l.mh, l.bl_no, l.description, l.unit, l.rate, l.qty, l.amount, l.pc, l.side);
     }
     refreshStatus(id, db);
+    // The first bill-to on a file with no customer / agent yet becomes the file's customer / agent.
+    if (row.shipment_id && row.company_id && (kind === 'AR' || kind === 'DN')) {
+      const col = kind === 'AR' ? 'customer_id' : 'agent_id';
+      db.run(`UPDATE shipments SET ${col} = ? WHERE id = ? AND ${col} IS NULL`, row.company_id, row.shipment_id);
+    }
     if (row.company_id && (kind === 'AP' || kind === 'DN')) applyUnapplied(row.company_id, { db });
     return id;
   });

@@ -14,8 +14,8 @@
     <% if ((ex.warnings || []).length) { %><div class="warnbox"><b>Please check</b><ul><% ex.warnings.forEach((w) => { %><li><%= w %></li><% }) %></ul></div>
     <% } else { %><div class="okbox">✔ Everything was read — check against the invoice and book.</div><% } %>
     <div class="grid g2">
-      <div class="field"><label>Vendor</label><select name="company_id" required><option value="">— pick —</option>
-        <% parties.forEach((p) => { %><option value="<%= p.id %>" <%= d.company_id === p.id || (!d.company_id && ex.vendor && ex.vendor.id === p.id) ? 'selected' : '' %>><%= p.name %> (<%= p.type %>)</option><% }) %></select>
+      <div class="field"><label>Vendor</label><select name="company_id" required data-party-search><option value="">— pick —</option>
+        <%- include('../partials/party-options', { parties, selected: d.company_id || ex.vendor?.id, prefer: ['vendor', 'trucker', 'broker', 'delivery', 'agent'] }) %></select>
         <% if (ex.vendor_name_read && !ex.vendor) { %><span class="small muted">On the invoice: <%= ex.vendor_name_read %> — add it on Parties if new</span><% } %></div>
       <div class="field"><label>File</label><select name="shipment_id"><option value="">— no file (overhead) —</option>
         <% files.forEach((s) => { %><option value="<%= s.id %>" <%= sid === s.id ? 'selected' : '' %>><%= matchedIds.includes(s.id) ? '★ ' : '' %><%= S.fileName(s) %> · <%= s.ref_no %></option><% }) %></select>

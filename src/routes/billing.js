@@ -39,7 +39,7 @@ router.get('/invoices/new', auth.requireAccounting, (req, res) => {
   const s = req.query.shipment ? S.find(Number(req.query.shipment), null) : null;
   const inv = { kind, shipment_id: s?.id || null, invoice_date: new Date().toISOString().slice(0, 10), currency: 'USD', lines: [] };
   if (s) {
-    if (kind === 'AR') { inv.company_id = s.customer_id; inv.ship_to = s.consignee_name || ''; inv.customer_ref = s.customer_ref || ''; }
+    if (kind === 'AR') { inv.company_id = S.guessCustomer(s); inv.guessed_party = !s.customer_id && Boolean(inv.company_id); inv.ship_to = s.consignee_name || ''; inv.customer_ref = s.customer_ref || ''; }
     if (kind === 'DN') { inv.company_id = s.agent_id; inv.agent_ref = s.agent_ref || s.sub_bl_no || s.hbl_no || ''; inv.profit_share = 0; }
     if (kind === 'AP') inv.company_id = s.trucker_id;
     // D/N = cost recovery: start from the AP costs already booked on the shipment.

@@ -26,7 +26,8 @@
   <div class="card">
     <div class="grid g4">
       <div class="field"><label><%= k === 'AR' ? 'Bill to (customer)' : k === 'DN' ? 'Agent' : 'Vendor' %></label>
-        <select name="company_id" required><option value="">—</option><% parties.forEach((p) => { %><option value="<%= p.id %>" <%= inv.company_id === p.id ? 'selected' : '' %>><%= p.name %> (<%= p.type %>)</option><% }) %></select></div>
+        <select name="company_id" required data-party-search><option value="">— pick —</option><%- include('../partials/party-options', { parties, selected: inv.company_id, prefer: { AR: ['customer', 'importer'], DN: ['agent'], AP: ['vendor', 'trucker', 'broker', 'delivery'] }[k] }) %></select>
+        <div class="small"><% if (inv.guessed_party) { %><span class="muted">★ picked from the file name — change if wrong · </span><% } %><a href="/companies" target="_blank">＋&nbsp;New&nbsp;party</a></div></div>
       <% if (k === 'AP') { %><div class="field"><label>Vendor invoice no.</label><input name="number" value="<%= inv.number || '' %>" required></div><% } %>
       <div class="field"><label>Date</label><input type="date" name="invoice_date" value="<%= inv.invoice_date %>"></div>
       <div class="field"><label>Terms (days)</label><input type="number" name="terms_days" value="<%= inv.terms_days ?? '' %>" placeholder="customer default"></div>

@@ -499,6 +499,22 @@ function refreshClosed(id, { db = store.db } = {}) {
 }
 
 /** Manual close / reopen by accounting staff (e.g. no invoice needed, or written off). */
+/**
+ * Customer for a file that has none yet — mostly "Other" files named like "Annual Bond - Unlockt Brands":
+ * the customer party whose short name or first word(s) appear in the file name.
+ */
+function guessCustomer(s, db = store.db) {
+  if (!s || s.customer_id) return s?.customer_id || null;
+  const text = ` ${String(s.title || s.consignee_name || '').toUpperCase().replace(/[^A-Z0-9]+/g, ' ')} `;
+  if (!text.trim()) return null;
+  const words = (v) => String(v || '').toUpperCase().replace(/[^A-Z0-9]+/g, ' ').trim();
+  const hits = db.all("SELECT id, name, short_name FROM companies WHERE type = 'customer'").filter((c) => {
+    const keys = [words(c.short_name), words(shortParty(c.name)), words(c.name).split(' ')[0]].filter((k) => k.length >= 3);
+    return keys.some((k) => text.includes(` ${k} `));
+  });
+  return hits.length === 1 ? hits[0].id : null;
+}
+
 function setClosed(id, closed, { db = store.db, userId = null } = {}) {
   if (closed) db.run("UPDATE shipments SET closed_at = datetime('now'), closed_by = ? WHERE id = ?", userId || 0, id);
   else db.run('UPDATE shipments SET closed_at = NULL, closed_by = NULL WHERE id = ?', id);
@@ -508,5 +524,5 @@ function setClosed(id, closed, { db = store.db, userId = null } = {}) {
 module.exports = {
   MODES, isMisc, STATUSES, STATUS_INDEX, CUSTOMS_STATUSES, HOLD_TYPES, EDITABLE_FIELDS, checklist, lfdInfo,
   statusLabel, normalizeInput, saveLines, nextRefNo, create, update, addEvent, list, find, scopeFor, tracking,
-  inferStatus, shortParty, fileName, billingState, stage, refreshClosed, setClosed, RECEIVABLE, timeline, costState, customerStep,
+  inferStatus, guessCustomer, shortParty, fileName, billingState, stage, refreshClosed, setClosed, RECEIVABLE, timeline, costState, customerStep,
 };
