@@ -89,3 +89,12 @@ document.querySelectorAll('form[data-bill]').forEach((form) => {
   };
   form.addEventListener('input', calc); form.addEventListener('click', () => setTimeout(calc)); calc();
 });
+
+// Inside a workspace tab: "/" jumps to the global search; saving anything refreshes the bell.
+if (document.documentElement.classList.contains('embedded')) {
+  document.addEventListener('keydown', (e) => {
+    if (e.key !== '/' || /INPUT|TEXTAREA|SELECT/.test(e.target.tagName) || e.target.isContentEditable) return;
+    if (window.top.gbFocusSearch) { e.preventDefault(); window.top.gbFocusSearch(); }
+  });
+  if (window.top.gbRefreshBell) window.top.gbRefreshBell();
+}

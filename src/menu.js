@@ -6,11 +6,12 @@ const auth = require('./auth');
 
 const MENU = [
   { key: 'main', label: 'Main', icon: '🏠', cols: [
-    { head: 'Main', items: [{ id: 'dashboard', label: 'Dashboard', href: '/dashboard' }] },
+    { head: 'Main', items: [{ id: 'dashboard', label: 'Dashboard', href: '/dashboard' }, { id: 'followups', label: 'Follow-ups (my to-do)', href: '/followups' }] },
   ] },
   { key: 'shipments', label: 'Shipments', icon: '🚢', cols: [
     { head: 'Files', items: [
       { id: 'ship-list', label: 'Shipment list (open)', href: '/shipments' },
+      { id: 'ship-mine', label: 'My files', href: '/shipments?mine=1' },
       { id: 'ship-new', label: 'New shipment', href: '/shipments/new', perm: 'shipments_edit' },
       { id: 'ship-active', label: 'Active — before delivery', href: '/shipments?stage=active' },
       { id: 'ship-delivered', label: 'Delivered — billing open', href: '/shipments?stage=delivered' },
@@ -66,7 +67,7 @@ const MENU = [
   ] },
 ];
 
-const DEFAULT_FAVORITES = ['dashboard', 'ship-list', 'track', 'intake', 'vendor-bills', 'ar-entry', 'settle'];
+const DEFAULT_FAVORITES = ['dashboard', 'followups', 'ship-list', 'track', 'intake', 'vendor-bills', 'ar-entry', 'settle'];
 
 /** The menu this user may see: categories and pages filtered by their permissions; empty columns / categories dropped. */
 function menuFor(user) {

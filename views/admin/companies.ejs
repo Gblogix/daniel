@@ -21,6 +21,11 @@
     <div class="grid g2" style="gap:8px"><div class="field"><label>Payment terms (days)</label><input name="terms_days" type="number" value="<%= c.terms_days ?? '' %>"></div>
       <div class="field"><label>Short name (file names)</label><input name="short_name" value="<%= c.short_name || '' %>" placeholder="Unlockt"></div></div>
     <div class="field"><label>Phone</label><input name="phone" value="<%= c.phone || '' %>"></div>
+    <div class="field"><label>Default person in charge (new files)</label><select name="default_pic_id"><option value="">— whoever creates the file —</option>
+      <% staffUsers.forEach((u) => { %><option value="<%= u.id %>" <%= c.default_pic_id === u.id ? 'selected' : '' %>><%= u.name %></option><% }) %></select></div>
+    <div class="grid g2" style="gap:8px"><div class="field"><label>Shipment report to customer</label><select name="report_frequency">
+      <option value="">Off</option><option value="daily" <%= c.report_frequency === 'daily' ? 'selected' : '' %>>Daily (7am)</option><option value="weekly" <%= c.report_frequency === 'weekly' ? 'selected' : '' %>>Weekly (Monday 7am)</option></select></div>
+      <div class="field"><label>Report emails (default: notice emails)</label><input name="report_emails" value="<%= c.report_emails || '' %>"></div></div>
     <div class="field"><label>Address (printed on invoices / A/N)</label><textarea name="address" rows="3"><%= c.address || '' %></textarea></div>
     <button class="btn">Save</button> <% if (edit) { %><a class="btn secondary" href="/companies">Cancel</a><% } %>
   </form><% } %>

@@ -273,6 +273,13 @@ CREATE TABLE IF NOT EXISTS smartsheet_files (
   created_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
 
+-- Follow-up items a user snoozed or marked done (items themselves are computed from the data).
+CREATE TABLE IF NOT EXISTS followup_state (
+  key TEXT PRIMARY KEY,
+  snoozed_until TEXT,
+  done_at TEXT,
+  user_id INTEGER REFERENCES users(id)
+);
 CREATE TABLE IF NOT EXISTS settings (
   key TEXT PRIMARY KEY,
   value TEXT
@@ -301,13 +308,16 @@ const MIGRATIONS = {
     devan_location: 'TEXT', freight_location_tel: 'TEXT', available_date: 'TEXT', go_date: 'TEXT', final_destination: 'TEXT',
     service_term: 'TEXT', release_type: 'TEXT', consignee_address: 'TEXT', notify_address: 'TEXT', marks: 'TEXT',
     agent_ref: 'TEXT', closed_at: 'TEXT', closed_by: 'INTEGER',
+    owner_id: 'INTEGER', // person in charge (PIC)
+    delivery_request_date: 'TEXT', delivery_request_time: 'TEXT', delivery_request_note: 'TEXT',
+    delivery_request_at: 'TEXT', delivery_request_by: 'INTEGER', delivery_request_done: 'INTEGER NOT NULL DEFAULT 0',
   },
   containers: {
     pickup_lfd: 'TEXT', available: 'INTEGER', holds: 'TEXT', discharged_at: 'TEXT', full_out_at: 'TEXT',
     empty_returned_at: 'TEXT', current_status: 'TEXT', location: 'TEXT', pickup_no: 'TEXT',
   },
   cargo_items: { unit_price: 'REAL', amount: 'REAL', source: 'TEXT' },
-  companies: { billing_emails: 'TEXT', terms_days: 'INTEGER', short_name: 'TEXT' },
+  companies: { billing_emails: 'TEXT', terms_days: 'INTEGER', short_name: 'TEXT', default_pic_id: 'INTEGER', report_frequency: 'TEXT', report_emails: 'TEXT', report_last: 'TEXT' },
   invoices: { document_id: 'INTEGER', reviewed_at: 'TEXT', reviewed_by: 'INTEGER' },
   documents: { invoice_id: 'INTEGER', company_id: 'INTEGER' },
   users: { can_accounting: 'INTEGER NOT NULL DEFAULT 0', favorites: 'TEXT', perms: 'TEXT' },
@@ -329,6 +339,9 @@ const DEFAULT_SETTINGS = {
   smartsheet_sync: '1',         // pull shared Smartsheet sheets (needs SMARTSHEET_TOKEN)
   smartsheet_push: '0',         // write ETA back into the customer-shared sheets (opt-in)
   auto_send_reviewed: '0',      // email an invoice / D/N to its party as soon as it is marked reviewed
+  auto_status: '1',             // advance the status from dates (ATD, ATA, customs release, pick-up, POD)
+  daily_digest: '1',            // 7am email to each staff member with their follow-ups
+  customer_reports: '1',        // scheduled shipment reports to customers (per party: daily / weekly)
   // Next document numbers (continue from the current system; admin can change them)
   seq_OI: '11828', seq_AI: '10009', seq_OTH: '10582', seq_INV: '12215', seq_DCN: '11665',
   ar_terms_days: '25',

@@ -9,16 +9,17 @@ const COMPANY_TYPES = {
   delivery: 'Delivery location / warehouse', shipper: 'Shipper / factory', vendor: 'Vendor (CFS / carrier / terminal / other)',
 };
 const flash = (req, type, msg) => { req.session.flash = { type, msg }; };
+const staffUsers = () => store.db.all("SELECT id, name FROM users WHERE role IN ('admin', 'staff') AND active = 1 ORDER BY name");
 
 // ---------- companies (parties) — staff can manage ----------
 router.get('/companies', auth.requireInternal, (req, res) => {
   const rows = store.db.all(`SELECT c.*, (SELECT COUNT(*) FROM users u WHERE u.company_id = c.id) AS users FROM companies c ORDER BY c.type, c.name`);
-  res.render('admin/companies', { title: 'Parties', rows, COMPANY_TYPES, edit: null });
+  res.render('admin/companies', { title: 'Parties', rows, COMPANY_TYPES, edit: null, staffUsers: staffUsers() });
 });
 router.get('/companies/:id', auth.requireInternal, (req, res) => {
   const edit = store.db.get('SELECT * FROM companies WHERE id = ?', Number(req.params.id));
   const rows = store.db.all(`SELECT c.*, (SELECT COUNT(*) FROM users u WHERE u.company_id = c.id) AS users FROM companies c ORDER BY c.type, c.name`);
-  res.render('admin/companies', { title: 'Parties', rows, COMPANY_TYPES, edit });
+  res.render('admin/companies', { title: 'Parties', rows, COMPANY_TYPES, edit, staffUsers: staffUsers() });
 });
 router.post('/companies', auth.requirePerm('parties'), (req, res) => {
   const { id, name, type, country, emails, phone, address, billing_emails, short_name } = req.body;
@@ -26,6 +27,10 @@ router.post('/companies', auth.requirePerm('parties'), (req, res) => {
   if (!name || !COMPANY_TYPES[type]) { flash(req, 'err', 'Name and type are required'); return res.redirect('/companies'); }
   if (id) store.db.run('UPDATE companies SET name = ?, type = ?, country = ?, emails = ?, phone = ?, address = ?, billing_emails = ?, terms_days = ?, short_name = ? WHERE id = ?', name, type, country, emails, phone, address, billing_emails, terms, short_name, Number(id));
   else store.db.run('INSERT INTO companies (name, type, country, emails, phone, address, billing_emails, terms_days, short_name) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)', name, type, country, emails, phone, address, billing_emails, terms, short_name);
+  const cid = id ? Number(id) : Number(store.db.get('SELECT MAX(id) AS id FROM companies').id);
+  const freq = ['daily', 'weekly'].includes(req.body.report_frequency) ? req.body.report_frequency : null;
+  store.db.run('UPDATE companies SET default_pic_id = ?, report_frequency = ?, report_emails = ? WHERE id = ?',
+    Number(req.body.default_pic_id) || null, freq, (req.body.report_emails || '').trim() || null, cid);
   flash(req, 'ok', 'Saved');
   res.redirect('/companies');
 });
@@ -107,6 +112,9 @@ const SETTINGS = [
   ['auto_tracking', 'Carrier / GPS tracking: update ETD, ETA, vessel, LFD and terminal status automatically'],
   ['lfd_alerts', 'Daily 7am LFD / pickup digest email to staff'],
   ['smartsheet_sync', 'Smartsheet: import shipments, P/L and documents from the shared sheets every 30 min'],
+  ['auto_status', 'Status follows the dates: ATD → Departed, ATA → Arrived, 1C → Customs released, picked up → Out for delivery, POD → Delivered'],
+  ['daily_digest', 'Heads-up: 7am email to each staff member with their follow-ups (overdue, today, coming up)'],
+  ['customer_reports', 'Customer shipment reports: email each customer their shipment list (daily / weekly — set per party)'],
   ['auto_send_reviewed', 'Accounting: email an invoice / D/N / C/N to its party as soon as it is marked reviewed (otherwise use "Send reviewed")'],
   ['smartsheet_push', 'Smartsheet: write ETA / ETD back to the shared sheets ("old > new" style) — changes the customer\'s sheet'],
 ];

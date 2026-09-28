@@ -39,9 +39,9 @@ const EDITABLE_FIELDS = [
   'picked_up_at', 'pallets', 'pod_received', 'empty_returned_at', 'tracking_enabled', 'vessel_imo', 'vessel_mmsi',
   'ams_bl_no', 'customer_ref', 'sub_bl_no', 'it_no', 'it_place', 'it_date', 'devan_location', 'freight_location_tel',
   'available_date', 'go_date', 'final_destination', 'service_term', 'release_type', 'consignee_address', 'notify_address',
-  'marks', 'agent_ref',
+  'marks', 'agent_ref', 'owner_id',
 ];
-const NUMERIC_FIELDS = new Set(['customer_id', 'agent_id', 'broker_id', 'trucker_id', 'delivery_company_id',
+const NUMERIC_FIELDS = new Set(['owner_id', 'customer_id', 'agent_id', 'broker_id', 'trucker_id', 'delivery_company_id',
   'packages', 'weight_kg', 'cbm', 'chargeable_weight', 'service_price', 'invoice_amount', 'cargo_value', 'pallets']);
 const BOOL_FIELDS = new Set(['isf_filed', 'paid', 'direct_shipment', 'telex_release', 'freight_paid', 'carrier_released',
   'pod_received', 'tracking_enabled']);
@@ -72,6 +72,12 @@ function nextRefNo(db, mode = 'FCL') {
 
 function create(input, { db = store.db, userId } = {}) {
   const data = normalizeInput(input);
+  // Person in charge: as given, else the customer's default PIC, else whoever created it.
+  if (!data.owner_id) {
+    const pic = data.customer_id ? db.get('SELECT default_pic_id FROM companies WHERE id = ?', data.customer_id)?.default_pic_id : null;
+    const creator = userId ? db.get("SELECT id FROM users WHERE id = ? AND role IN ('admin', 'staff')", userId)?.id : null;
+    if (pic || creator) data.owner_id = pic || creator;
+  }
   let ref = input.ref_no && String(input.ref_no).trim();
   if (!ref || db.get('SELECT 1 FROM shipments WHERE ref_no = ?', ref)) ref = nextRefNo(db, data.mode || 'FCL');
   const cols = ['ref_no', ...Object.keys(data)];
@@ -87,6 +93,10 @@ function update(id, input, { db = store.db } = {}) {
   const current = db.get('SELECT * FROM shipments WHERE id = ?', id);
   if (!current) throw new Error('Shipment not found');
   const data = normalizeInput(input);
+  if (!('status' in data) || data.status === current.status) {
+    const next = inferStatus({ ...current, ...data }, db);
+    if (next) data.status = next;
+  }
   const changes = [];
   for (const [k, v] of Object.entries(data)) {
     const before = current[k] ?? null;
@@ -111,7 +121,7 @@ const RECEIVABLE = "i.status <> 'VOID' AND (i.kind = 'AR' OR (i.kind = 'DN' AND 
 
 const BASE_SELECT = `
   SELECT s.*, c.name AS customer_name, a.name AS agent_name, b.name AS broker_name, t.name AS trucker_name,
-         d.name AS delivery_company_name,
+         d.name AS delivery_company_name, o.name AS owner_name,
          (SELECT k.container_no FROM containers k WHERE k.shipment_id = s.id ORDER BY k.id LIMIT 1) AS first_ctn,
          (SELECT COUNT(*) FROM containers k WHERE k.shipment_id = s.id) AS ctn_count,
          (SELECT COUNT(*) FROM invoices i WHERE i.shipment_id = s.id AND ${RECEIVABLE}) AS bill_count,
@@ -125,7 +135,26 @@ const BASE_SELECT = `
   LEFT JOIN companies a ON a.id = s.agent_id
   LEFT JOIN companies b ON b.id = s.broker_id
   LEFT JOIN companies t ON t.id = s.trucker_id
-  LEFT JOIN companies d ON d.id = s.delivery_company_id`;
+  LEFT JOIN companies d ON d.id = s.delivery_company_id
+  LEFT JOIN users o ON o.id = s.owner_id`;
+
+/**
+ * Status follows the facts (only ever forward): ATD → Departed, ATA → Arrived, 1C → Customs released,
+ * picked up → Out for delivery, POD → Delivered. Returns the new status or null. Off with setting auto_status = 0.
+ */
+function inferStatus(s, db = store.db) {
+  if (db.setting('auto_status') === '0') return null;
+  const cur = STATUS_INDEX[s.status] ?? 0;
+  let want = cur;
+  const at = (code) => { want = Math.max(want, STATUS_INDEX[code]); };
+  const today = isoDay(todayUTC());
+  if (s.atd && s.atd <= today) at('DEPARTED');
+  if (s.ata && s.ata <= today) at('ARRIVED');
+  if (s.customs_status === 'RELEASED' && want >= STATUS_INDEX.ARRIVED) at('CUSTOMS_CLEARED');
+  if (s.picked_up_at) at('OUT_FOR_DELIVERY');
+  if (Number(s.pod_received) === 1) at('DELIVERED');
+  return want > cur ? STATUSES[want].code : null;
+}
 
 /** Returns SQL WHERE fragment + params restricting shipments to what the user may see. */
 function scopeFor(user) {
@@ -140,7 +169,7 @@ function scopeFor(user) {
   }
 }
 
-function list(user, { q, status, mode, active, stage, db = store.db } = {}) {
+function list(user, { q, status, mode, active, stage, owner, db = store.db } = {}) {
   const scope = scopeFor(user);
   const where = [scope.where];
   const params = [...scope.params];
@@ -151,6 +180,7 @@ function list(user, { q, status, mode, active, stage, db = store.db } = {}) {
     params.push(...Array(9).fill(`%${q}%`));
   }
   if (status) { where.push('s.status = ?'); params.push(status); }
+  if (owner) { where.push('s.owner_id = ?'); params.push(owner); }
   if (mode) { where.push('s.mode = ?'); params.push(mode); }
   if (active) stage = 'active';
   if (stage === 'active') where.push("s.status <> 'DELIVERED' AND s.closed_at IS NULL");
@@ -400,6 +430,34 @@ function billingState(s, now = new Date()) {
     : { code: 'awaiting', label: `Awaiting payment${s.bill_due ? ` · due ${s.bill_due}` : ''}`, level: 'warn', amount: s.bill_open };
 }
 
+/** Plain-language "where is it / what's next" for customers. */
+function customerStep(s, now = new Date()) {
+  const md = (x) => (x ? `${Number(x.slice(5, 7))}/${Number(x.slice(8, 10))}` : 'TBA');
+  const T = todayUTC(now);
+  const daysTo = (x) => (x ? Math.round((parseDate(x) - T) / DAY) : null);
+  const air = s.mode === 'AIR';
+  const when = s.delivery_date ? `${md(s.delivery_date)}${s.delivery_time ? ` ${s.delivery_time}` : ''}` : null;
+  switch (s.status) {
+    case 'BOOKED': case 'CARGO_READY':
+      return { icon: '📦', text: `Departing ${md(s.etd)} from ${(s.pol || 'origin').split(',')[0]}`, ask: false };
+    case 'DEPARTED': case 'IN_TRANSIT': {
+      const n = daysTo(s.eta);
+      return { icon: air ? '✈' : '🚢', text: `${air ? 'In the air' : 'On the water'} — arriving ${md(s.eta)}${n != null && n >= 0 ? ` (${n} day${n === 1 ? '' : 's'})` : ''}`, ask: n != null && n <= 7 && !s.delivery_date };
+    }
+    case 'ARRIVED':
+      if (s.customs_status === 'EXAM' || s.customs_status === 'HOLD') return { icon: '🛃', text: 'Arrived — held for customs exam; we will update you on release', ask: !s.delivery_date };
+      return { icon: '⚓', text: `Arrived ${md(s.ata || s.eta)} — customs clearance in progress`, ask: !s.delivery_date };
+    case 'CUSTOMS_CLEARED':
+      return when ? { icon: '✅', text: `Customs released — delivery ${when}`, ask: false } : { icon: '✅', text: 'Customs released — scheduling delivery', ask: true };
+    case 'OUT_FOR_DELIVERY':
+      return { icon: '🚚', text: `On the truck${when ? ` — delivery ${when}` : ''}`, ask: false };
+    case 'DELIVERED':
+      return { icon: '🏁', text: `Delivered${s.delivery_date ? ` ${md(s.delivery_date)}` : ''}`, ask: false };
+    default:
+      return { icon: '•', text: statusLabel(s.status), ask: false };
+  }
+}
+
 /** Cost side of a file: vendor invoice received but not booked yet, or delivered with no vendor cost at all. */
 function costState(s) {
   if (s.vinv_pending) return { code: 'to_book', label: `Vendor invoice to book${s.vinv_pending > 1 ? ` (${s.vinv_pending})` : ''}`, level: 'warn' };
@@ -445,5 +503,5 @@ function setClosed(id, closed, { db = store.db, userId = null } = {}) {
 module.exports = {
   MODES, STATUSES, STATUS_INDEX, CUSTOMS_STATUSES, HOLD_TYPES, EDITABLE_FIELDS, checklist, lfdInfo,
   statusLabel, normalizeInput, saveLines, nextRefNo, create, update, addEvent, list, find, scopeFor, tracking,
-  shortParty, fileName, billingState, stage, refreshClosed, setClosed, RECEIVABLE, timeline, costState,
+  inferStatus, shortParty, fileName, billingState, stage, refreshClosed, setClosed, RECEIVABLE, timeline, costState, customerStep,
 };

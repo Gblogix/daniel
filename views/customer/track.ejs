@@ -17,6 +17,7 @@
   <input type="hidden" name="filter" value="<%= filter %>">
   <input name="q" value="<%= q %>" placeholder="Search PO, B/L, container…">
   <button class="btn secondary">Search</button>
+  <a class="btn secondary" href="/track.xlsx?q=<%= encodeURIComponent(q) %>">⬇ Excel</a>
 </form>
 <% if (!cards.length) { %><div class="card muted">No shipments to show.</div><% } %>
 <div class="cards">
@@ -28,6 +29,7 @@
     </div>
     <% const b = canAccounting && isInternal ? S.billingState(s) : null; if (b && b.code !== 'paid') { %>
     <div style="margin:-2px 0 6px"><span class="badge bill-<%= b.level %>">💲 <%= b.label %><%= b.amount ? ` · $${fmtNum(b.amount, 2)}` : '' %></span></div><% } %>
+    <% const step = S.customerStep(s); %><div class="cstep"><span><%= step.icon %></span> <%= step.text %></div>
     <%- include('../partials/trackbar', { s, tr, big: false }) %>
     <div class="facts">
       <div><span>Shipper</span><%= s.shipper_name || '—' %></div>

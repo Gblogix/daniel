@@ -19,6 +19,12 @@
   </div>
 </div>
 
+<div class="card next-actions <%= nextActions.length ? '' : 'clear' %>">
+  <h2 style="margin-bottom:4px"><%= nextActions.length ? `Next actions (${nextActions.length})` : '✔ Nothing pending on this file' %>
+    <span class="muted small" style="font-weight:400"> · PIC: <a href="#pic"><%= s.owner_name || 'not assigned' %></a></span></h2>
+  <% nextActions.forEach((i) => { %><%- include('../partials/fu-item', { i, back: `/shipments/${s.id}`, showFile: false }) %><% }) %>
+</div>
+
 <div class="card">
   <%- include('../partials/trackbar', { s, tr, big: true }) %>
   <%- include('../partials/steps', { tr }) %>

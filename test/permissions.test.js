@@ -141,3 +141,38 @@ test('permission matrix: check / uncheck per staff user is enforced', async () =
   assert.equal(store.db.get('SELECT active FROM users WHERE id = ?', staffRow.id).active, 0);
   store.db.run('UPDATE users SET active = 1, perms = NULL WHERE id = ?', staffRow.id);
 });
+
+test('workspace helpers: follow-ups page, bell count, global search; customer delivery request and Excel', async () => {
+  const staff = await login('staff@gblogix.com');
+  const acct = await login('accounting@gblogix.com');
+  const customer = await login('customer@unlockt.example');
+  assert.equal((await staff('/followups')).status, 200);
+  assert.equal((await customer('/followups')).status, 403);
+  const c = await (await staff('/followups/count.json')).json();
+  assert.ok(Number.isInteger(c.critical) && Number.isInteger(c.total));
+  const found = await (await staff('/search.json?q=TCLU1234567')).json();
+  assert.equal(found[0].type, 'File');
+  assert.match(found[0].label, /TCLU1234567/);
+  assert.ok(!(await (await staff('/search.json?q=INV')).json()).some((r) => r.type === 'Invoice'), 'no invoices for non-accounting staff');
+  assert.equal((await customer('/search.json?q=TCLU')).status, 403);
+  void acct;
+
+  const s = store.db.get("SELECT id FROM shipments WHERE mbl_no = 'HDMUPUSA1234567'");
+  const page = await (await customer(`/shipments/${s.id}`)).text();
+  assert.match(page, /Request a delivery date|Need a different delivery date/);
+  const csrf = /name="_csrf" value="([^"]+)"/.exec(page)[1];
+  const r = await customer.form(`/shipments/${s.id}/delivery-request`, new URLSearchParams({ _csrf: csrf, date: '2026-10-06', time: '9:00-12:00', note: 'Dock 4' }));
+  assert.equal(r.status, 302);
+  const row = store.db.get('SELECT * FROM shipments WHERE id = ?', s.id);
+  assert.equal(row.delivery_request_date, '2026-10-06');
+  assert.ok(store.db.get("SELECT 1 FROM emails WHERE kind = 'CUSTOMER_REQUEST' AND subject LIKE '%2026-10-06%'"));
+  const F = require('../src/followups');
+  assert.ok(F.forUser({ id: 0, role: 'admin' }, { shipmentId: s.id }).some((i) => i.key.includes(':custreq')));
+  // Another customer cannot touch it.
+  const other = await login('customer@leepop.example');
+  const csrf2 = /name="_csrf" value="([^"]+)"/.exec(await (await other('/track')).text())[1];
+  assert.equal((await other.form(`/shipments/${s.id}/delivery-request`, new URLSearchParams({ _csrf: csrf2, date: '2026-10-07' }))).status, 404);
+  const x = await customer('/track.xlsx');
+  assert.equal(x.status, 200);
+  assert.match(x.headers.get('content-type'), /spreadsheetml/);
+});

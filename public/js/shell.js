@@ -144,6 +144,55 @@
     } catch (e) { /* offline — kept for this session */ }
   }
 
+  // ---------- global search ----------
+  const gs = $('gsearch'); const gr = $('gresults');
+  let timer = null; let results = []; let sel = 0;
+  const esc = (v) => String(v || '').replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+  const draw = () => {
+    if (!results.length) { gr.innerHTML = gs.value.trim().length >= 2 ? '<div class="gempty">No match</div>' : ''; gr.hidden = gs.value.trim().length < 2; return; }
+    gr.innerHTML = results.map((r, i) => `<a href="${esc(r.href)}" class="${i === sel ? 'on' : ''}" data-i="${i}"><span class="gt">${esc(r.type)}</span><b>${esc(r.label)}</b><span class="gs">${esc(r.sub)}</span></a>`).join('');
+    gr.hidden = false;
+  };
+  const go = (r) => { if (!r) return; open(r.href, r.label); gs.value = ''; results = []; draw(); gr.hidden = true; gs.blur(); };
+  gs.addEventListener('input', () => {
+    clearTimeout(timer);
+    timer = setTimeout(async () => {
+      const q = gs.value.trim();
+      if (q.length < 2) { results = []; draw(); return; }
+      try { results = await (await fetch(`/search.json?q=${encodeURIComponent(q)}`)).json(); } catch (e) { results = []; }
+      sel = 0; draw();
+    }, 180);
+  });
+  gs.addEventListener('keydown', (e) => {
+    if (e.key === 'ArrowDown') { sel = Math.min(results.length - 1, sel + 1); draw(); e.preventDefault(); }
+    if (e.key === 'ArrowUp') { sel = Math.max(0, sel - 1); draw(); e.preventDefault(); }
+    if (e.key === 'Enter') { go(results[sel]); e.preventDefault(); }
+    if (e.key === 'Escape') { gs.value = ''; results = []; draw(); gr.hidden = true; gs.blur(); }
+  });
+  gr.addEventListener('mousedown', (e) => { const a = e.target.closest('a[data-i]'); if (a) { e.preventDefault(); go(results[Number(a.dataset.i)]); } });
+  gs.addEventListener('blur', () => setTimeout(() => { gr.hidden = true; }, 150));
+  const focusSearch = (e) => {
+    const t = e.target; if (e.key !== '/' || /INPUT|TEXTAREA|SELECT/.test(t.tagName) || t.isContentEditable) return;
+    e.preventDefault(); gs.focus();
+  };
+  document.addEventListener('keydown', focusSearch);
+  window.gbFocusSearch = () => gs.focus();
+
+  // ---------- bell: my follow-ups ----------
+  const bell = $('bell'); const bc = $('bellcount');
+  bell.onclick = (e) => { e.preventDefault(); open('/followups', 'Follow-ups'); };
+  async function refreshBell() {
+    try {
+      const c = await (await fetch('/followups/count.json')).json();
+      const n = c.critical + c.high;
+      bc.hidden = !n; bc.textContent = n > 99 ? '99+' : String(n);
+      bc.className = c.critical ? 'crit' : '';
+      bell.title = `My follow-ups: ${c.critical} critical, ${c.high} high, ${c.total} open`;
+    } catch (e) { /* offline */ }
+  }
+  refreshBell(); setInterval(refreshBell, 120000);
+  window.gbRefreshBell = refreshBell;
+
   // ---------- start ----------
   let saved = null;
   try { saved = JSON.parse(localStorage.getItem(KEY) || 'null'); } catch (e) { saved = null; }

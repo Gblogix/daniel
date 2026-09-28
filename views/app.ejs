@@ -10,7 +10,10 @@
 <header class="shell-top">
   <button type="button" class="burger" id="burger" aria-label="Menu" aria-expanded="false">☰</button>
   <a class="brand" href="/app">GB Logix</a>
+  <div class="gsearch"><input id="gsearch" type="search" placeholder="Search container, B/L, shipper, invoice…  ( / )" autocomplete="off" aria-label="Search">
+    <div class="gresults" id="gresults" hidden></div></div>
   <nav class="favbar" id="favbar" aria-label="Favorites"></nav>
+  <a class="bell" id="bell" href="/followups" title="My follow-ups">🔔<span id="bellcount" hidden></span></a>
   <div class="who">
     <span><%= user.name %></span>
     <span class="role-chip"><%= ROLES[user.role].label %></span>

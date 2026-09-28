@@ -12,6 +12,9 @@
   </div>
 </div>
 
+<% const step = S.customerStep(s); %>
+<div class="card cstep-big"><span class="ico"><%= step.icon %></span><div><b><%= step.text %></b>
+  <% if (s.delivery_request_at && !s.delivery_request_done) { %><div class="small muted">Your delivery request for <%= s.delivery_request_date %> <%= s.delivery_request_time || '' %> was received — we will confirm.</div><% } %></div></div>
 <div class="card">
   <%- include('../partials/trackbar', { s, tr, big: true }) %>
   <%- include('../partials/steps', { tr }) %>
@@ -39,6 +42,18 @@
     <div class="deliv" style="font-size:14px">📍 <div><b><%= s.delivery_company_name || s.customer_name || 'Delivery' %></b><br><%= s.delivery_address || 'Address to be confirmed' %></div></div>
     <p style="font-size:16px;margin:14px 0 6px">🗓 <b><%= s.delivery_date || 'Date TBA' %></b> <%= s.delivery_time || '' %></p>
     <% if (s.cfs_location) { %><p class="muted small">Pick-up: <%= s.cfs_location %></p><% } %>
+    <% if (s.status !== 'DELIVERED' && (user.role === 'customer')) { %>
+    <form method="post" action="/shipments/<%= s.id %>/delivery-request" class="reqbox" id="request">
+      <input type="hidden" name="_csrf" value="<%= csrf %>">
+      <b><%= s.delivery_date ? 'Need a different delivery date?' : 'Request a delivery date' %></b>
+      <div class="grid g2" style="gap:8px;margin-top:6px">
+        <div class="field" style="margin:0"><label>Date</label><input type="date" name="date" required value="<%= s.delivery_request_date || '' %>"></div>
+        <div class="field" style="margin:0"><label>Time window</label><input name="time" placeholder="e.g. 9:00–12:00" value="<%= s.delivery_request_time || '' %>"></div>
+      </div>
+      <div class="field" style="margin:8px 0"><label>Notes (dock, contact, appointment no.)</label><input name="note" maxlength="500"></div>
+      <button class="btn small">Send request</button>
+    </form>
+    <% } %>
     <h3 style="margin-top:18px">Containers</h3>
     <% if (!s.containers.length) { %><p class="muted small">Loose cargo / not assigned</p><% } %>
     <% s.containers.forEach((c) => { %><div class="mono"><%= c.container_no %> <span class="muted"><%= c.size_type || '' %> · seal <%= c.seal_no || '—' %></span></div><% }) %>

@@ -5,7 +5,7 @@
   const inp = (k, label, type = 'text', extra = '') => `<div class="field"><label for="f_${k}">${label}${src(k)}</label><input id="f_${k}" name="${k}" type="${type}" value="${e(s[k])}" ${extra}></div>`;
   const sel = (k, label, opts, blank = true) => `<div class="field"><label for="f_${k}">${label}</label><select id="f_${k}" name="${k}">${blank ? '<option value="">—</option>' : ''}${opts.map((o) => `<option value="${e(o.id)}" ${String(s[k]) === String(o.id) ? 'selected' : ''}>${e(o.name)}</option>`).join('')}</select></div>`;
 %>
-<fieldset class="fieldset"><legend>Parties & status</legend>
+<fieldset class="fieldset" id="pic"><legend>Parties & status</legend>
   <div class="grid g4">
     <%- sel('mode', 'Mode', Object.entries(S.MODES).map(([id, m]) => ({ id, name: m.label })), false) %>
     <%- sel('status', 'Status', S.STATUSES.map((x) => ({ id: x.code, name: `${x.label} (${x.ko})` })), false) %>
@@ -15,6 +15,7 @@
     <%- sel('agent_id', 'Overseas agent', agents) %>
     <%- sel('broker_id', 'Customs broker', brokers) %>
     <%- sel('trucker_id', 'Trucker', truckers) %>
+    <% if (locals.staffUsers) { %><%- sel('owner_id', 'Person in charge (PIC) — gets the heads-up', staffUsers) %><% } %>
   </div>
   <% const ta = (k, label) => `<div class="field"><label for="f_${k}">${label}${src(k)}</label><textarea id="f_${k}" name="${k}" rows="2">${e(s[k])}</textarea></div>`; %>
   <div class="grid g3">
@@ -68,7 +69,7 @@
   </div>
 </fieldset>
 
-<fieldset class="fieldset"><legend>Clearance & release</legend>
+<fieldset class="fieldset" id="pickup"><legend>Clearance & release</legend>
   <div class="grid g4">
     <%- inp('entry_no', 'Customs entry no.', 'text', 'placeholder="8TV-2703851-3"') %>
     <%- inp('css_no', 'CES / CSS no.') %>
@@ -110,7 +111,12 @@
   </div>
 </fieldset>
 
-<fieldset class="fieldset"><legend>Delivery</legend>
+<fieldset class="fieldset" id="delivery"><legend>Delivery</legend>
+  <% if (s.delivery_request_at && !s.delivery_request_done) { %>
+    <div class="warnbox">📅 <b>Customer requested delivery:</b> <%= s.delivery_request_date || '' %> <%= s.delivery_request_time || '' %>
+      <%= s.delivery_request_note ? `— “${s.delivery_request_note}”` : '' %> <span class="muted small">(<%= fmtDateTime(s.delivery_request_at) %> UTC)</span>
+      <div class="small" style="margin-top:6px"><label class="check"><input type="checkbox" name="accept_delivery_request" value="1"> Use this date / time and mark the request handled (the customer is notified)</label></div></div>
+  <% } %>
   <div class="grid g4">
     <%- sel('delivery_company_id', 'Deliver to (location)', deliveries.concat(customers)) %>
     <%- inp('delivery_address', 'Delivery address') %>

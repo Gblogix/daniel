@@ -114,6 +114,15 @@ Company name, address, tel/fax, accounting contact and **payment instructions** 
 (stored in the database only — keep bank details out of source control). Filing numbers continue the current sequence:
 `OI-#####` ocean import, `AI-#####` air import, `OTH#######` other; `INV-#####`, `DCN-#####` (next numbers editable).
 
+## How the four principles show up
+| Principle | Where |
+|---|---|
+| **Automation** | agent docs / vendor invoices read automatically (portal, email, upload); A/N · D/O · status emails on events; status follows the dates (ATD → Departed … POD → Delivered); tracking updates ETA / LFD; PIC assigned on create; files close when paid |
+| **Easy for the in-house team** | workspace with tabs, ☰ menu and favorites; **global search** (`/`) by container, B/L, shipper, invoice no.; one-click actions on every follow-up; "Next actions" at the top of each file; "My files" |
+| **No missed follow-up** | **Follow-ups** list computed from the data: ISF, missing HBL/PL/CI, A/N, delivery date, customs, holds, D/O, LFD, POD, empty return, tracking errors, customer requests, not invoiced, review / send, overdue A/R, payables due, vendor invoices to book, no cost booked — with severity, due date, PIC, snooze / done |
+| **Heads-up** | 🔔 bell count in the top bar; 7am email to each staff member with their follow-ups; LFD digest to the office mailbox |
+| **Customer convenience** | plain-language "where is it / what's next" on every shipment; delivery-date request from the portal (goes to the PIC); daily / weekly shipment report emails per customer; Excel download of their shipments; documents and packing list online |
+
 ## Permissions
 Admin › **Permissions**: one row per user, one checkbox per permission — create / edit shipments, send notices,
 document intake, edit parties, accounting, delete shipments, automation & company settings, users & permissions — plus

@@ -15,7 +15,9 @@ const companies = (type) => store.db.all('SELECT id, name FROM companies WHERE t
 const partyLists = () => ({
   customers: companies('customer'), agents: companies('agent'), brokers: companies('broker'),
   truckers: companies('trucker'), deliveries: companies('delivery'),
+  staffUsers: store.db.all("SELECT id, name FROM users WHERE role IN ('admin', 'staff') AND active = 1 ORDER BY name"),
 });
+const safeBack = (v) => (typeof v === 'string' && /^\/(?!\/)/.test(v) ? v : null);
 const flash = (req, type, msg) => { req.session.flash = { type, msg }; };
 
 // ---------- internal dashboard ----------
@@ -46,7 +48,9 @@ router.get('/dashboard', auth.requireInternal, (req, res) => {
   const lfdWatch = active.map((s) => ({ s, lfd: S.lfdInfo(s), next: S.checklist(s).find((x) => x.next) }))
     .filter((x) => x.lfd && x.lfd.days <= 5).sort((a, b) => a.lfd.days - b.lfd.days);
   kpi.lfd = lfdWatch.filter((x) => x.lfd.days <= 1).length;
-  res.render('dashboard', { title: 'Dashboard', kpi, active, events, lfdWatch });
+  const F = require('../followups');
+  const mineItems = F.forUser(req.user, { mine: true });
+  res.render('dashboard', { title: 'Dashboard', kpi, active, events, lfdWatch, followups: mineItems, fcount: F.counts(mineItems) });
 });
 
 // ---------- list ----------
@@ -56,14 +60,15 @@ router.get('/shipments', auth.requireLogin, (req, res) => {
   const { q = '', status = '', mode = '' } = req.query;
   const internal = auth.INTERNAL.includes(req.user.role);
   const stage = internal && STAGES[req.query.stage] ? req.query.stage : internal ? 'open' : 'all';
-  let rows = S.list(req.user, { q, status, mode, stage: stage === 'all' ? null : stage });
+  const mine = internal && req.query.mine === '1';
+  let rows = S.list(req.user, { q, status, mode, stage: stage === 'all' ? null : stage, owner: mine ? req.user.id : null });
   // Accounting follow-up filters on delivered files.
   const bill = auth.canAccounting(req.user) ? req.query.bill || '' : '';
   if (bill) {
     rows = rows.filter((s) => (S.billingState(s)?.code || '') === bill || (bill === 'unpaid' && ['unsent', 'awaiting', 'overdue'].includes(S.billingState(s)?.code))
       || (['no_cost', 'to_book'].includes(bill) && S.costState(s)?.code === bill));
   }
-  res.render('shipments/list', { title: 'Shipments', rows, q, status, mode, stage, STAGES, bill, history: false });
+  res.render('shipments/list', { title: 'Shipments', rows, q, status, mode, stage, STAGES, bill, history: false, mine });
 });
 
 /** Shipment history: closed files (customer paid), kept for look-up later. */
@@ -72,7 +77,7 @@ router.get('/history', auth.requireInternal, (req, res) => {
   const rows = S.list(req.user, { q, mode, stage: 'closed' });
   const A = require('../accounting');
   if (auth.canAccounting(req.user)) for (const r of rows) r.pl = A.shipmentProfit(r.id);
-  res.render('shipments/list', { title: 'Shipment history', rows, q, status: '', mode, stage: 'closed', STAGES, bill: '', history: true });
+  res.render('shipments/list', { title: 'Shipment history', rows, q, status: '', mode, stage: 'closed', STAGES, bill: '', history: true, mine: false });
 });
 
 router.get('/shipments/new', auth.requirePerm('shipments_edit'), (req, res) => {
@@ -119,7 +124,8 @@ router.get('/shipments/:id', auth.requireLogin, (req, res) => {
   const acctParties = internal && acct ? db.all('SELECT id, name, type FROM companies ORDER BY type, name') : [];
   const trackEvents = db.all("SELECT * FROM tracking_events WHERE shipment_id = ? AND classifier IN ('ACT', '') ORDER BY event_time DESC LIMIT 30", s.id);
   const view = internal ? 'shipments/detail' : 'customer/detail';
-  res.render(view, { title: S.fileName(s), s, tr: S.tracking(s), docs, events, emails, trackEvents, invoices, profit, plLines, acctParties, outgoing, vendorPending, autoSend: db.setting('auto_send_reviewed') === '1',
+  const nextActions = internal ? require('../followups').forUser(req.user, { shipmentId: s.id }) : [];
+  res.render(view, { title: S.fileName(s), s, nextActions, tr: S.tracking(s), docs, events, emails, trackEvents, invoices, profit, plLines, acctParties, outgoing, vendorPending, autoSend: db.setting('auto_send_reviewed') === '1',
     codes: A.CHARGE_CODES, billing: acct ? S.billingState(s) : null, trackingStatus: require('../tracking').status(), ...(internal ? partyLists() : {}) });
 });
 
@@ -134,6 +140,12 @@ function docFilter(user) {
 
 router.post('/shipments/:id', auth.requirePerm('shipments_edit'), async (req, res) => {
   const id = Number(req.params.id);
+  if (req.body.accept_delivery_request) {
+    const cur = store.db.get('SELECT delivery_request_date, delivery_request_time FROM shipments WHERE id = ?', id);
+    if (cur?.delivery_request_date) req.body.delivery_date = cur.delivery_request_date;
+    if (cur?.delivery_request_time) req.body.delivery_time = cur.delivery_request_time;
+    store.db.run('UPDATE shipments SET delivery_request_done = 1 WHERE id = ?', id);
+  }
   const changes = S.update(id, stripAccounting(req));
   S.saveLines(id, req.body);
   await notify.onShipmentChanged(id, changes, { userId: req.user.id });
@@ -192,13 +204,13 @@ router.post('/shipments/:id/actions/:action', auth.requirePerm('send_notices'), 
   const fn = ACTIONS[req.params.action];
   if (!fn) return res.status(400).render('error', { title: 'Unknown action', message: 'Unknown action.' });
   flash(req, 'ok', await fn(id, req.user));
-  res.redirect(`/shipments/${id}#emails`);
+  res.redirect(safeBack(req.body.back) || `/shipments/${id}#emails`);
 });
 
 router.post('/shipments/:id/track', auth.requirePerm('shipments_edit'), async (req, res) => {
   const r = await require('../tracking').refreshShipment(Number(req.params.id), { userId: req.user.id });
   flash(req, r.ok ? 'ok' : 'err', r.ok ? `Tracking updated${r.changes.length ? ` — ${r.changes.map((c) => c.field).join(', ')} changed` : ' — no changes'}` : `Tracking: ${r.error}`);
-  res.redirect(`/shipments/${req.params.id}#tracking`);
+  res.redirect(safeBack(req.body.back) || `/shipments/${req.params.id}#tracking`);
 });
 
 // Preview renders the document without saving it (saved copies are created when a notice is sent).

@@ -26,6 +26,15 @@
   </div>
   <% } %>
 </div>
+<div class="card">
+  <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap">
+    <h2 style="margin:0">My follow-ups <span class="muted small" style="font-weight:400"><%= fcount.critical %> critical · <%= fcount.high %> high · <%= fcount.total %> open</span></h2>
+    <a class="btn secondary small" href="/followups">See all follow-ups →</a>
+  </div>
+  <% if (!followups.length) { %><p class="okbox" style="margin:10px 0 0">✔ All caught up.</p><% } %>
+  <% followups.slice(0, 8).forEach((i) => { %><%- include('partials/fu-item', { i, back: '/dashboard' }) %><% }) %>
+  <% if (followups.length > 8) { %><p class="small" style="margin:8px 0 0"><a href="/followups">+ <%= followups.length - 8 %> more</a></p><% } %>
+</div>
 <% if (lfdWatch.length) { %>
 <div class="card" id="lfd">
   <h2>⏰ LFD watch — pick up before storage starts</h2>

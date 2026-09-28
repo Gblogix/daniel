@@ -9,6 +9,7 @@
       <% Object.entries(STAGES).forEach(([k, label]) => { %><a class="<%= stage === k && !bill ? 'on' : '' %>" href="?stage=<%= k %>"><%= label %></a><% }) %>
       <a href="/history">History (closed)</a>
     </div>
+    <label class="check small" style="margin:0"><input type="checkbox" name="mine" value="1" <%= mine ? 'checked' : '' %> onchange="this.form.submit()"> My files only</label>
     <input type="hidden" name="stage" value="<%= stage %>">
   <% } %>
   <input name="q" value="<%= q %>" placeholder="Search shipper, container, MBL, HBL, customer, file no…">
@@ -32,7 +33,7 @@
   <% if (!rows.length) { %><tr><td colspan="14" class="muted">No shipments found.</td></tr><% } %>
   <% rows.forEach((s) => { const b = canAccounting ? S.billingState(s) : null; %>
     <tr>
-      <td><a href="/shipments/<%= s.id %>"><b><%= S.fileName(s) %></b></a><br><span class="muted small mono"><%= s.ref_no %></span></td>
+      <td><a href="/shipments/<%= s.id %>"><b><%= S.fileName(s) %></b></a><br><span class="muted small mono"><%= s.ref_no %></span><% if (s.owner_name) { %> <span class="muted small">· <%= s.owner_name %></span><% } %></td>
       <td class="nowrap"><%= S.MODES[s.mode].icon %> <%= s.mode %></td>
       <td><%= s.customer_name || '—' %></td>
       <td class="mono small"><%= s.mbl_no || '—' %><br><%= s.hbl_no || '—' %></td>

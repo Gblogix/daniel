@@ -1,0 +1,20 @@
+<%# locals: i (follow-up item), back, showFile %>
+<% const ico = { critical: '●', high: '●', normal: '○' }[i.severity]; %>
+<div class="fu fu-<%= i.severity %> <%= i.hidden ? 'fu-hidden' : '' %>">
+  <span class="fu-dot" title="<%= i.severity %>"><%= ico %></span>
+  <div class="fu-body">
+    <div class="fu-title"><b><%= i.title %></b><% if (locals.showFile !== false && i.s) { %> · <a href="/shipments/<%= i.s.id %>"><%= S.fileName(i.s) %></a><% } %>
+      <span class="fu-tag"><%= i.area === 'acct' ? 'Accounting' : 'Ops' %></span><% if (i.s && i.s.owner_name) { %><span class="fu-tag">PIC <%= i.s.owner_name %></span><% } %></div>
+    <div class="fu-detail"><%= i.detail %><% if (i.due) { %> · <span class="<%= i.due < new Date().toISOString().slice(0, 10) ? 'late' : '' %>">due <%= i.due %></span><% } %></div>
+  </div>
+  <div class="fu-actions">
+    <% if (i.action && i.action.post) { %><form method="post" action="<%= i.action.post %>"><input type="hidden" name="_csrf" value="<%= csrf %>"><input type="hidden" name="back" value="<%= back %>"><button class="btn small"><%= i.action.label %></button></form>
+    <% } else if (i.action) { %><a class="btn small" href="<%= i.action.href %>"><%= i.action.label %></a><% } %>
+    <% if (i.hidden) { %>
+      <form method="post" action="/followups/reopen"><input type="hidden" name="_csrf" value="<%= csrf %>"><input type="hidden" name="key" value="<%= i.key %>"><input type="hidden" name="back" value="<%= back %>"><button class="btn secondary small">↺ Bring back</button></form>
+    <% } else { %>
+      <form method="post" action="/followups/snooze"><input type="hidden" name="_csrf" value="<%= csrf %>"><input type="hidden" name="key" value="<%= i.key %>"><input type="hidden" name="days" value="1"><input type="hidden" name="back" value="<%= back %>"><button class="btn secondary small" title="Hide until tomorrow">Snooze 1d</button></form>
+      <form method="post" action="/followups/done"><input type="hidden" name="_csrf" value="<%= csrf %>"><input type="hidden" name="key" value="<%= i.key %>"><input type="hidden" name="back" value="<%= back %>"><button class="btn secondary small" title="Handled outside the system">✔ Done</button></form>
+    <% } %>
+  </div>
+</div>
