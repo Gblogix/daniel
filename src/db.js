@@ -32,7 +32,7 @@ CREATE TABLE IF NOT EXISTS users (
 CREATE TABLE IF NOT EXISTS shipments (
   id INTEGER PRIMARY KEY,
   ref_no TEXT NOT NULL UNIQUE,
-  mode TEXT NOT NULL DEFAULT 'FCL',          -- AIR | FCL | LCL | TRUCK
+  mode TEXT NOT NULL DEFAULT 'FCL',          -- AIR | FCL | LCL | TRUCK | OTHER (non-shipment invoices)
   origin_country TEXT,                        -- KR | CN | ...
   status TEXT NOT NULL DEFAULT 'BOOKED',
   customer_id INTEGER REFERENCES companies(id),
@@ -295,6 +295,7 @@ CREATE TABLE IF NOT EXISTS sessions (
 // Columns added after the first release; applied to existing databases on startup.
 const MIGRATIONS = {
   shipments: {
+    title: 'TEXT', // name of an "Other" (non-shipment) file
     scac: 'TEXT', direct_shipment: 'INTEGER NOT NULL DEFAULT 0', isf_no: 'TEXT', telex_release: 'INTEGER NOT NULL DEFAULT 0',
     firms_code: 'TEXT', entry_no: 'TEXT', css_no: 'TEXT', holds: 'TEXT', cargo_value: 'REAL', ci_invoice_no: 'TEXT',
     freight_paid: 'INTEGER NOT NULL DEFAULT 0', carrier_released: 'INTEGER NOT NULL DEFAULT 0', storage_start: 'TEXT',

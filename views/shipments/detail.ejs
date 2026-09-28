@@ -6,8 +6,8 @@
     <div class="chips">
       <% if (s.closed_at) { %><span class="badge closed">Closed <%= fmtDate(s.closed_at) %> · in history</span><% } %>
       <% if (billing && !s.closed_at) { %><span class="badge bill-<%= billing.level %>"><%= billing.label %></span><% } %>
-      <span class="badge <%= s.status %>"><%= S.statusLabel(s.status) %></span>
-      <span class="badge <%= s.customs_status %>">Customs: <%= s.customs_status %></span>
+      <% if (!S.isMisc(s)) { %><span class="badge <%= s.status %>"><%= S.statusLabel(s.status) %></span>
+      <span class="badge <%= s.customs_status %>">Customs: <%= s.customs_status %></span><% } %>
       <% if (s.an_sent_at) { %><span class="badge SENT">A/N sent <%= fmtDate(s.an_sent_at) %></span><% } %>
       <% if (s.do_sent_at) { %><span class="badge SENT">D/O sent <%= fmtDate(s.do_sent_at) %></span><% } %>
       <% if (s.holds) { %><span class="badge EXAM">Hold: <%= s.holds %></span><% } %>
@@ -15,7 +15,7 @@
     </div>
   </div>
   <div class="actions">
-    <a class="btn secondary" href="/shipments/<%= s.id %>?view=customer">View as customer</a>
+    <% if (!S.isMisc(s)) { %><a class="btn secondary" href="/shipments/<%= s.id %>?view=customer">View as customer</a><% } %>
   </div>
 </div>
 
@@ -25,6 +25,7 @@
   <% nextActions.forEach((i) => { %><%- include('../partials/fu-item', { i, back: `/shipments/${s.id}`, showFile: false }) %><% }) %>
 </div>
 
+<% const misc = S.isMisc(s); if (misc) { %><div class="card small muted">📁 <b>Other file</b> — holds invoices that belong to no shipment. Add A/R, A/P, D/N and C/N below; the file shows their profit and appears in P/L, SOA and aging like any file. Close it from the file list when you no longer use it.</div><% } else { %>
 <div class="card">
   <%- include('../partials/trackbar', { s, tr, big: true }) %>
   <%- include('../partials/steps', { tr }) %>
@@ -53,7 +54,8 @@
   <% } %>
 </div>
 
-<% if (can('send_notices')) { %><div class="card">
+<% } %>
+<% if (can('send_notices') && !misc) { %><div class="card">
   <h2>Notices</h2>
   <div class="actions">
     <form method="post" action="/shipments/<%= s.id %>/actions/send-an"><input type="hidden" name="_csrf" value="<%= csrf %>">
@@ -182,7 +184,7 @@
   </form>
 
   <div>
-    <div class="card"><h2>Clearance & release</h2><%- include('../partials/checklist', { s }) %></div>
+    <% if (!misc) { %><div class="card"><h2>Clearance & release</h2><%- include('../partials/checklist', { s }) %></div><% } %>
     <div class="card" id="docs">
       <h2>Documents</h2>
       <% if (!docs.length) { %><p class="muted small">No documents yet.</p><% } %>

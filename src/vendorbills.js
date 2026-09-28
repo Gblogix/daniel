@@ -94,7 +94,7 @@ function get(docId, db = store.db) {
 
 /** Waiting to be booked (newest first). */
 function pending(db = store.db) {
-  return db.all(`SELECT d.*, c.name AS vendor_name, s.ref_no, s.shipper_name, s.hbl_no, s.mbl_no, s.mode,
+  return db.all(`SELECT d.*, c.name AS vendor_name, s.ref_no, s.shipper_name, s.hbl_no, s.mbl_no, s.mode, s.title,
       (SELECT k.container_no FROM containers k WHERE k.shipment_id = s.id ORDER BY k.id LIMIT 1) AS first_ctn,
       (SELECT COUNT(*) FROM containers k WHERE k.shipment_id = s.id) AS ctn_count
     FROM documents d LEFT JOIN companies c ON c.id = d.company_id LEFT JOIN shipments s ON s.id = d.shipment_id

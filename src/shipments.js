@@ -5,7 +5,10 @@ const MODES = {
   FCL: { label: 'Ocean (FCL)', icon: '🚢' },
   LCL: { label: 'Ocean (LCL)', icon: '🚢' },
   TRUCK: { label: 'Inland Trucking (CFS→CFS)', icon: '🚚' },
+  // Not a shipment: a file to hold invoices / bills that belong to no shipment, so their A/R, A/P and profit sit together.
+  OTHER: { label: 'Other (non-shipment invoices)', icon: '📁', misc: true },
 };
+const isMisc = (s) => s?.mode === 'OTHER';
 
 // Ordered milestones. Index is used for progress display.
 const STATUSES = [
@@ -28,7 +31,7 @@ const HOLD_TYPES = ['1H (exam)', 'CBP hold', 'Freight/BL hold', 'Lien', 'USDA', 
 
 // Fields a staff member can edit on the shipment form / an intake can populate.
 const EDITABLE_FIELDS = [
-  'mode', 'origin_country', 'status', 'customer_id', 'agent_id', 'broker_id', 'trucker_id', 'delivery_company_id',
+  'mode', 'title', 'origin_country', 'status', 'customer_id', 'agent_id', 'broker_id', 'trucker_id', 'delivery_company_id',
   'shipper_name', 'shipper_address', 'consignee_name', 'notify_party', 'mbl_no', 'hbl_no', 'carrier', 'vessel',
   'voyage', 'flight_no', 'pol', 'pod', 'place_of_delivery', 'cfs_location', 'etd', 'eta', 'atd', 'ata',
   'packages', 'package_unit', 'weight_kg', 'cbm', 'chargeable_weight', 'commodity', 'delivery_address',
@@ -66,7 +69,7 @@ function normalizeInput(input) {
 function nextRefNo(db, mode = 'FCL') {
   const company = require('./company');
   if (mode === 'AIR') return `AI-${company.nextNumber('AI', db)}`;
-  if (mode === 'TRUCK') return `OTH${String(company.nextNumber('OTH', db)).padStart(7, '0')}`;
+  if (mode === 'TRUCK' || mode === 'OTHER') return `OTH${String(company.nextNumber('OTH', db)).padStart(7, '0')}`;
   return `OI-${company.nextNumber('OI', db)}`;
 }
 
@@ -183,6 +186,7 @@ function list(user, { q, status, mode, active, stage, owner, db = store.db } = {
   if (owner) { where.push('s.owner_id = ?'); params.push(owner); }
   if (mode) { where.push('s.mode = ?'); params.push(mode); }
   if (active) stage = 'active';
+  if (active || user.role !== 'admin' && user.role !== 'staff') where.push("s.mode <> 'OTHER'");
   if (stage === 'active') where.push("s.status <> 'DELIVERED' AND s.closed_at IS NULL");
   if (stage === 'delivered') where.push("s.status = 'DELIVERED' AND s.closed_at IS NULL");
   if (stage === 'open') where.push('s.closed_at IS NULL');
@@ -406,6 +410,7 @@ function shortParty(name) {
  * Air / no container yet: shipper + HAWB / MAWB. Falls back to the file number (OI-11828) when nothing is known.
  */
 function fileName(s) {
+  if (isMisc(s)) return s.title || shortParty(s.customer_name) || s.ref_no;
   const shipper = shortParty(s.shipper_name);
   const ctn = s.first_ctn || s.containers?.[0]?.container_no;
   const count = s.ctn_count ?? s.containers?.length ?? 0;
@@ -501,7 +506,7 @@ function setClosed(id, closed, { db = store.db, userId = null } = {}) {
 }
 
 module.exports = {
-  MODES, STATUSES, STATUS_INDEX, CUSTOMS_STATUSES, HOLD_TYPES, EDITABLE_FIELDS, checklist, lfdInfo,
+  MODES, isMisc, STATUSES, STATUS_INDEX, CUSTOMS_STATUSES, HOLD_TYPES, EDITABLE_FIELDS, checklist, lfdInfo,
   statusLabel, normalizeInput, saveLines, nextRefNo, create, update, addEvent, list, find, scopeFor, tracking,
   inferStatus, shortParty, fileName, billingState, stage, refreshClosed, setClosed, RECEIVABLE, timeline, costState, customerStep,
 };

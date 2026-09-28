@@ -483,3 +483,4 @@ form[data-drop].busy { opacity: .6; pointer-events: none; }
 .drop-hint input[type=file] { position: absolute; width: 1px; height: 1px; opacity: 0; pointer-events: none; }
 [data-drop-files]:empty { display: none; }
 [data-drop-files] { font-size: 12px; color: #334155; }
+[hidden] { display: none !important; }

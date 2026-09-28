@@ -335,7 +335,7 @@ function profitReport({ db = store.db, from, to, customerId, stage } = {}) {
   if (customerId) { where.push('s.customer_id = ?'); p.push(customerId); }
   if (stage === 'closed') where.push('s.closed_at IS NOT NULL');
   if (stage === 'open') where.push('s.closed_at IS NULL');
-  const rows = db.all(`SELECT s.id, s.ref_no, s.mode, s.status, s.eta, s.shipper_name, s.hbl_no, s.mbl_no, s.closed_at, c.name AS customer_name,
+  const rows = db.all(`SELECT s.id, s.ref_no, s.mode, s.title, s.status, s.eta, s.shipper_name, s.hbl_no, s.mbl_no, s.closed_at, c.name AS customer_name,
       (SELECT k.container_no FROM containers k WHERE k.shipment_id = s.id ORDER BY k.id LIMIT 1) AS first_ctn,
       (SELECT COUNT(*) FROM containers k WHERE k.shipment_id = s.id) AS ctn_count
     FROM shipments s LEFT JOIN companies c ON c.id = s.customer_id WHERE ${where.join(' AND ')}
@@ -349,7 +349,7 @@ function profitReport({ db = store.db, from, to, customerId, stage } = {}) {
 
 /** Open items with a party, both ways, with their lines — for the checkbox settlement screen. */
 function openItems(companyId, db = store.db) {
-  const items = db.all(`SELECT i.*, s.ref_no, s.hbl_no, s.mbl_no, s.shipper_name, s.mode,
+  const items = db.all(`SELECT i.*, s.ref_no, s.hbl_no, s.mbl_no, s.shipper_name, s.mode, s.title,
       (SELECT k.container_no FROM containers k WHERE k.shipment_id = s.id ORDER BY k.id LIMIT 1) AS first_ctn,
       (SELECT COUNT(*) FROM containers k WHERE k.shipment_id = s.id) AS ctn_count,
       ROUND(ABS(i.total) - i.paid_amount, 2) AS balance
@@ -408,7 +408,7 @@ function partyStatement(companyId, { db = store.db, basis = 'invoice', from = ''
   if (status === 'open') where.push("i.status = 'OPEN'");
   if (from) { where.push(`${col} >= ?`); p.push(from); }
   if (to) { where.push(`${col} <= ?`); p.push(to); }
-  const rows = db.all(`SELECT i.*, ${col} AS basis_date, s.ref_no, s.hbl_no, s.mbl_no, s.eta, s.etd, s.shipper_name, s.mode, s.agent_ref AS ship_agent_ref,
+  const rows = db.all(`SELECT i.*, ${col} AS basis_date, s.ref_no, s.hbl_no, s.mbl_no, s.eta, s.etd, s.shipper_name, s.mode, s.title, s.agent_ref AS ship_agent_ref,
       (SELECT k.container_no FROM containers k WHERE k.shipment_id = s.id ORDER BY k.id LIMIT 1) AS first_ctn,
       (SELECT COUNT(*) FROM containers k WHERE k.shipment_id = s.id) AS ctn_count
     FROM invoices i LEFT JOIN shipments s ON s.id = i.shipment_id WHERE ${where.join(' AND ')} ORDER BY basis_date, i.id`, ...p);

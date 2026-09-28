@@ -13,6 +13,8 @@ const MENU = [
       { id: 'ship-list', label: 'Shipment list (open)', href: '/shipments' },
       { id: 'ship-mine', label: 'My files', href: '/shipments?mine=1' },
       { id: 'ship-new', label: 'New shipment', href: '/shipments/new', perm: 'shipments_edit' },
+      { id: 'misc-new', label: 'New other file (non-shipment invoices)', href: '/shipments/new?mode=OTHER', perm: 'shipments_edit' },
+      { id: 'misc-list', label: 'Other files (non-shipment)', href: '/shipments?mode=OTHER' },
       { id: 'ship-active', label: 'Active — before delivery', href: '/shipments?stage=active' },
       { id: 'ship-delivered', label: 'Delivered — billing open', href: '/shipments?stage=delivered' },
       { id: 'history', label: 'Shipment history (closed)', href: '/history' },

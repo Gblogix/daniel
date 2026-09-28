@@ -229,7 +229,7 @@ router.get('/billing/parties/:id', auth.requireAccounting, (req, res) => {
   const party = store.db.get('SELECT * FROM companies WHERE id = ?', Number(req.params.id));
   if (!party) return res.status(404).render('error', { title: 'Not found', message: 'Party not found.' });
   const items = A.openItems(party.id);
-  const paid = store.db.all(`SELECT i.*, s.ref_no, s.shipper_name, s.hbl_no, s.mbl_no, s.mode,
+  const paid = store.db.all(`SELECT i.*, s.ref_no, s.shipper_name, s.hbl_no, s.mbl_no, s.mode, s.title,
       (SELECT k.container_no FROM containers k WHERE k.shipment_id = s.id ORDER BY k.id LIMIT 1) AS first_ctn,
       (SELECT COUNT(*) FROM containers k WHERE k.shipment_id = s.id) AS ctn_count
     FROM invoices i LEFT JOIN shipments s ON s.id = i.shipment_id WHERE i.company_id = ? AND i.status = 'PAID' ORDER BY i.paid_at DESC, i.id DESC LIMIT 50`, party.id);

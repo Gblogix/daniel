@@ -151,3 +151,14 @@ if (document.documentElement.classList.contains('embedded')) {
     });
   }
 })();
+
+// Mode "Other" (non-shipment invoices): only the file name, customer, PIC and notes apply.
+document.querySelectorAll('select[name="mode"]').forEach((sel) => {
+  const form = sel.form;
+  const apply = () => {
+    const misc = sel.value === 'OTHER';
+    form.querySelectorAll('[data-ship-only]').forEach((el) => { el.hidden = misc; });
+    form.querySelectorAll('[data-misc-only]').forEach((el) => { el.hidden = !misc; });
+  };
+  sel.addEventListener('change', apply);
+});

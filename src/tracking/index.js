@@ -158,7 +158,7 @@ async function positionUpdate(db, s) {
 }
 
 async function refreshAll({ db = store.db } = {}) {
-  const rows = db.all(`SELECT id FROM shipments WHERE tracking_enabled = 1 AND mbl_no IS NOT NULL AND mbl_no <> ''
+  const rows = db.all(`SELECT id FROM shipments WHERE tracking_enabled = 1 AND mode <> 'OTHER' AND mbl_no IS NOT NULL AND mbl_no <> ''
     AND status <> 'DELIVERED' AND (empty_returned_at IS NULL OR mode <> 'FCL') ORDER BY COALESCE(eta, created_at)`);
   const out = { checked: 0, updated: 0, errors: 0 };
   for (const { id } of rows) {

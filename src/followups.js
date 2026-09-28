@@ -32,6 +32,7 @@ function shipmentItems(s, { now = new Date(), docs = new Set() } = {}) {
   const arrived = idx >= S.STATUS_INDEX.ARRIVED || (s.ata && d(s.ata) <= T);
   const delivered = s.status === 'DELIVERED';
   const file = `/shipments/${s.id}`;
+  if (S.isMisc(s)) return out; // "Other" files hold invoices only — accounting follow-ups still apply
 
   if (!s.owner_id) add('pic', 'normal', 'Assign a person in charge', 'No PIC — nobody gets this file\'s heads-up', null, { label: 'Assign', href: `${file}#pic` });
   if (delivered) {

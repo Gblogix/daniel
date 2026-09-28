@@ -83,7 +83,8 @@ router.get('/history', auth.requireInternal, (req, res) => {
 });
 
 router.get('/shipments/new', auth.requirePerm('shipments_edit'), (req, res) => {
-  res.render('shipments/form', { title: 'New shipment', s: { mode: 'FCL', status: 'BOOKED', customs_status: 'PENDING', containers: [], items: [] }, ...partyLists() });
+  const mode = S.MODES[req.query.mode] ? req.query.mode : 'FCL';
+  res.render('shipments/form', { title: mode === 'OTHER' ? 'New other file' : 'New shipment', s: { mode, status: 'BOOKED', customs_status: 'PENDING', containers: [], items: [] }, ...partyLists() });
 });
 
 /** Non-accounting staff cannot set prices / invoice / paid fields. */
@@ -95,7 +96,7 @@ function stripAccounting(req) {
 router.post('/shipments', auth.requirePerm('shipments_edit'), (req, res) => {
   const id = S.create(stripAccounting(req), { userId: req.user.id });
   S.saveLines(id, req.body);
-  flash(req, 'ok', 'Shipment created');
+  flash(req, 'ok', req.body.mode === 'OTHER' ? 'Other file created — add its invoices / vendor bills below' : 'Shipment created');
   res.redirect(`/shipments/${id}`);
 });
 
