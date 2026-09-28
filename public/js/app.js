@@ -98,3 +98,56 @@ if (document.documentElement.classList.contains('embedded')) {
   });
   if (window.top.gbRefreshBell) window.top.gbRefreshBell();
 }
+
+// Drag & drop upload: drop a PDF / image — or the whole Outlook email (.msg / .eml) — onto any upload form marked
+// data-drop. data-autosubmit sends it right away; data-drop-page also catches drops and Ctrl+V paste anywhere on the page.
+(() => {
+  const zones = [...document.querySelectorAll('form[data-drop]')];
+  if (!zones.length) return;
+  const hasFiles = (e) => [...(e.dataTransfer?.types || [])].includes('Files');
+  const put = (form, list) => {
+    const input = form.querySelector('input[type=file]');
+    if (!list || !list.length || !input) return;
+    const dt = new DataTransfer();
+    [...list].forEach((f) => dt.items.add(f));
+    input.files = dt.files;
+    const note = form.querySelector('[data-drop-files]');
+    if (note) note.textContent = [...dt.files].map((f) => f.name).join(', ');
+    if (form.dataset.autosubmit !== undefined) {
+      form.classList.add('busy');
+      if (note) note.textContent = `Reading ${dt.files.length} file(s)… ${note.textContent}`;
+      form.submit();
+    }
+  };
+  const pageZone = zones.find((f) => f.dataset.dropPage !== undefined);
+  zones.forEach((form) => {
+    const input = form.querySelector('input[type=file]');
+    input?.addEventListener('change', () => {
+      const note = form.querySelector('[data-drop-files]');
+      if (note) note.textContent = [...input.files].map((f) => f.name).join(', ');
+      if (form.dataset.autosubmit !== undefined && input.files.length) { form.classList.add('busy'); form.submit(); }
+    });
+    form.addEventListener('dragover', (e) => { if (!hasFiles(e)) return; e.preventDefault(); e.stopPropagation(); form.classList.add('over'); });
+    form.addEventListener('dragleave', (e) => { if (!form.contains(e.relatedTarget)) form.classList.remove('over'); });
+    form.addEventListener('drop', (e) => { if (!hasFiles(e)) return; e.preventDefault(); e.stopPropagation(); form.classList.remove('over'); put(form, e.dataTransfer.files); });
+  });
+  // Never let a missed drop open the PDF in place of the page.
+  document.addEventListener('dragover', (e) => {
+    if (!hasFiles(e)) return;
+    e.preventDefault();
+    if (pageZone) { pageZone.classList.add('over'); e.dataTransfer.dropEffect = 'copy'; } else e.dataTransfer.dropEffect = 'none';
+  });
+  document.addEventListener('dragleave', (e) => { if (pageZone && !e.relatedTarget) pageZone.classList.remove('over'); });
+  document.addEventListener('drop', (e) => {
+    if (!hasFiles(e)) return;
+    e.preventDefault();
+    if (pageZone) { pageZone.classList.remove('over'); put(pageZone, e.dataTransfer.files); }
+  });
+  if (pageZone) {
+    document.addEventListener('paste', (e) => {
+      if (e.target.closest?.('input:not([type=file]), textarea')) return;
+      const files = e.clipboardData?.files;
+      if (files && files.length) { e.preventDefault(); put(pageZone, files); }
+    });
+  }
+})();

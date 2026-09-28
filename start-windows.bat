@@ -1,6 +1,6 @@
 @echo off
 REM GlobalBridge Logistics - Windows test launcher (double-click).
-REM Installs packages the first time, loads demo data once, starts the app and opens the browser.
+REM Installs packages the first time (and again when package.json changes), starts the app and opens the browser.
 cd /d "%~dp0"
 title GlobalBridge Logistics
 
@@ -12,17 +12,23 @@ if errorlevel 1 (
 )
 
 if not exist node_modules (
-  echo [1/3] Installing packages - first time only, takes a few minutes...
+  echo [1/2] Installing packages - first time only, takes a few minutes...
   call npm.cmd install
   if errorlevel 1 ( echo npm install failed. & pause & exit /b 1 )
-  echo [2/3] Installing Chromium for PDF documents...
+  echo [2/2] Installing Chromium for PDF documents...
   call npx.cmd playwright install chromium
+  copy /y package.json node_modules\.gb-package.json >nul
 )
 
-if not exist data\gblogix.db (
-  echo [3/3] Loading demo data...
-  call npm.cmd run seed -- --demo
+REM After an update: install any new packages when package.json changed.
+fc /b package.json node_modules\.gb-package.json >nul 2>nul
+if errorlevel 1 (
+  echo Updating packages...
+  call npm.cmd install
+  if errorlevel 1 ( echo npm install failed. & pause & exit /b 1 )
+  copy /y package.json node_modules\.gb-package.json >nul
 )
+
 
 echo.
 echo Opening http://localhost:3000  (keep this window open; close it to stop the app)

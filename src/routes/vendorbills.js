@@ -6,6 +6,8 @@ const auth = require('../auth');
 const S = require('../shipments');
 const A = require('../accounting');
 const V = require('../vendorbills');
+const { expandMailFiles } = require('../extract/mailfile');
+const { vendorForSender } = require('../mailin');
 
 const router = express.Router();
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 25 * 1024 * 1024, files: 20 } });
@@ -26,13 +28,20 @@ router.get('/vendor-bills', auth.requireAccounting, (req, res) => {
 });
 
 router.post('/vendor-bills/upload', canUpload, upload.array('files', 20), auth.checkCsrf, async (req, res) => {
-  const files = req.files || [];
   const back = safeBack(req.body.back) || '/vendor-bills';
-  if (!files.length) { flash(req, 'err', 'Attach the vendor invoice (PDF, JPG or PNG)'); return res.redirect(back); }
+  // A dragged Outlook email (.msg / .eml) is replaced by its PDF / image attachments.
+  const { files, mails } = await expandMailFiles((req.files || []).map((f) => ({ buffer: f.buffer, filename: f.originalname, mime: f.mimetype })),
+    { accept: ['.pdf', '.jpg', '.jpeg', '.png'] });
+  if (!files.length) {
+    flash(req, 'err', mails[0]?.error ? `${mails[0].subject}: could not open this email file — save the invoice PDF and drag that instead`
+      : mails.length ? `No PDF / image invoice attached to the email "${mails[0].subject}" — drag the attachment itself` : 'Attach the vendor invoice (PDF, JPG or PNG)');
+    return res.redirect(back);
+  }
   const ids = [];
   for (const f of files) {
-    ids.push(await V.receive({ buffer: f.buffer, filename: f.originalname, mime: f.mimetype, shipmentId: Number(req.body.shipment_id) || null,
-      companyId: Number(req.body.company_id) || null, userId: req.user.id }));
+    const sender = f.mail?.from && !req.body.company_id ? vendorForSender(f.mail.from) : null;
+    ids.push(await V.receive({ buffer: f.buffer, filename: f.filename, mime: f.mime, shipmentId: Number(req.body.shipment_id) || null,
+      companyId: Number(req.body.company_id) || sender?.id || null, userId: req.user.id }));
   }
   if (!auth.canAccounting(req.user)) {
     flash(req, 'ok', `${ids.length} vendor invoice(s) sent to accounting to book — thank you`);

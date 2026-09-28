@@ -77,6 +77,8 @@ function createApp() {
 if (require.main === module) {
   if (config.sessionSecret === 'dev-only-change-me') console.warn('WARNING: set SESSION_SECRET before using this in production');
   bootstrap();
+  const fresh = require('./reset').freshStartOnce();
+  if (fresh) console.log(`Fresh start: removed ${fresh.shipments} test shipments, ${fresh.invoices} invoices, ${fresh.documents} files — new files come from email from now on`);
   createApp().listen(config.port, () => console.log(`GlobalBridge Logistics running at ${config.baseUrl}`));
   console.log(`Email: ${config.mailTransport}${config.graph.enabled && config.graph.intake ? ' · Outlook intake on' : ''}`);
   require('./mailin').start();

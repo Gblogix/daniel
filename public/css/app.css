@@ -471,3 +471,15 @@ table.aging td { vertical-align: middle; }
 .cstep-big { display: flex; gap: 14px; align-items: center; font-size: 17px; border-left: 4px solid var(--blue); }
 .cstep-big .ico { font-size: 30px; }
 .reqbox { margin-top: 14px; padding: 12px; border: 1px dashed #9ec1ff; border-radius: 8px; background: #fbfdff; }
+
+/* Drag & drop upload */
+form[data-drop] { position: relative; transition: background .15s, border-color .15s, box-shadow .15s; }
+form[data-drop].over { border: 2px dashed var(--primary, #2563eb) !important; background: #eef4ff !important; box-shadow: 0 0 0 4px rgba(37,99,235,.12); }
+form[data-drop].busy { opacity: .6; pointer-events: none; }
+.drop-hint { display: flex; align-items: center; gap: 12px; padding: 14px 16px; border-radius: 8px; color: #1e3a8a; }
+.drop-hint .ico { font-size: 28px; line-height: 1; }
+.drop-hint b { font-size: 15px; }
+.drop-hint .pick { color: var(--primary, #2563eb); text-decoration: underline; cursor: pointer; }
+.drop-hint input[type=file] { position: absolute; width: 1px; height: 1px; opacity: 0; pointer-events: none; }
+[data-drop-files]:empty { display: none; }
+[data-drop-files] { font-size: 12px; color: #334155; }

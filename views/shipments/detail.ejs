@@ -105,11 +105,12 @@
   <% } else { %><p class="muted small">No invoices or vendor bills on this file yet — add them below.</p><% } %>
 
   <div class="vendor-drop">
-    <form method="post" action="/vendor-bills/upload?_csrf=<%= csrf %>" enctype="multipart/form-data" class="actions" style="align-items:center">
+    <form method="post" action="/vendor-bills/upload?_csrf=<%= csrf %>" enctype="multipart/form-data" data-drop data-autosubmit>
       <input type="hidden" name="shipment_id" value="<%= s.id %>"><input type="hidden" name="back" value="/shipments/<%= s.id %>#accounting">
-      <b>📎 Vendor / CFS invoice</b><input type="file" name="files" multiple accept=".pdf,.jpg,.jpeg,.png" required style="width:auto;flex:1;min-width:220px">
-      <button class="btn secondary small">Upload &amp; auto-read</button>
-      <span class="muted small">Invoice no., date, terms and charge lines are filled in for you.</span>
+      <label class="drop-hint" style="padding:6px 4px"><span class="ico">📎</span>
+        <span><b>Vendor / CFS invoice</b> — drag the PDF or the Outlook email here, or <span class="pick">choose file</span><br>
+          <span class="muted small">Invoice no., date, terms and charge lines are filled in for you.</span> <span data-drop-files></span></span>
+        <input type="file" name="files" multiple accept=".pdf,.jpg,.jpeg,.png,.msg,.eml"></label>
     </form>
     <% if (vendorPending.length) { %><div class="pending-list"><% vendorPending.forEach((d) => { const ex = d.ex || {}; %>
       <a class="pending" href="/vendor-bills/<%= d.id %>">⏳ <b><%= d.vendor_name || 'Vendor ?' %></b> <%= ex.number ? `#${ex.number}` : '' %> <%= ex.total != null ? `USD ${fmtNum(ex.total, 2)}` : '' %> — review &amp; book →</a>
@@ -197,12 +198,13 @@
           </tr>
         <% }) %>
       </table>
-<% if (can('shipments_edit')) { %>      <form method="post" action="/shipments/<%= s.id %>/documents?_csrf=<%= csrf %>" enctype="multipart/form-data" style="margin-top:12px">
+<% if (can('shipments_edit')) { %>      <form method="post" action="/shipments/<%= s.id %>/documents?_csrf=<%= csrf %>" enctype="multipart/form-data" style="margin-top:12px" class="dropzone" data-drop>
         <div class="grid g2" style="gap:8px">
           <select name="doc_type"><% ['MBL','HBL','PL','CI','ISF','AWB','AN','DO','ATME','OTHER'].forEach((t) => { %><option><%= t %></option><% }) %><option value="VINV">Vendor / CFS invoice → accounting (auto-read)</option></select>
           <label class="check"><input type="checkbox" name="customer_visible" value="1"> Visible to customer</label>
         </div>
         <input type="file" name="files" multiple style="margin:8px 0">
+        <div class="muted small" style="margin-bottom:6px">…or drag files / the Outlook email here. <span data-drop-files></span></div>
         <button class="btn secondary small">Upload</button>
       </form><% } %>
     </div>

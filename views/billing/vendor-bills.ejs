@@ -2,12 +2,15 @@
 <% const m = (v) => (v == null ? '' : fmtNum(v, 2)); %>
 <div class="pagehead"><div><h1 style="margin-bottom:4px">Vendor invoices</h1>
   <p class="muted small" style="margin:0">Upload CFS / warehouse / trucker / broker / carrier invoices — number, date, terms, charge lines and total are read automatically and the file is matched from the container / B/L. Check and book.</p></div></div>
-<form class="card dropzone" method="post" action="/vendor-bills/upload?_csrf=<%= csrf %>" enctype="multipart/form-data">
-  <div class="grid g3" style="align-items:end">
-    <div class="field" style="margin:0"><label>Invoice file(s) — PDF, JPG, PNG</label><input type="file" name="files" multiple accept=".pdf,.jpg,.jpeg,.png" required></div>
+<form class="card dropzone" method="post" action="/vendor-bills/upload?_csrf=<%= csrf %>" enctype="multipart/form-data" data-drop data-drop-page data-autosubmit>
+  <div class="grid g2" style="align-items:center;grid-template-columns:minmax(0,2fr) minmax(220px,1fr)">
+    <label class="drop-hint"><span class="ico">📥</span>
+      <span><b>Drag the invoice here</b> — the PDF / image from the email, or the whole Outlook email<br>
+        <span class="small muted">or <span class="pick">choose file(s)</span> · Ctrl+V to paste · it is read and opened for booking right away</span><br>
+        <span data-drop-files></span></span>
+      <input type="file" name="files" multiple accept=".pdf,.jpg,.jpeg,.png,.msg,.eml"></label>
     <div class="field" style="margin:0"><label>File (optional — matched automatically)</label>
       <select name="shipment_id"><option value="">Auto-match from container / B/L</option><% openFiles.forEach((s) => { %><option value="<%= s.id %>"><%= S.fileName(s) %> (<%= s.ref_no %>)</option><% }) %></select></div>
-    <div><button class="btn">⬆ Upload &amp; read</button></div>
   </div>
 </form>
 <div class="card flush">

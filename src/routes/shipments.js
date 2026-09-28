@@ -1,5 +1,6 @@
 const fs = require('node:fs');
 const path = require('node:path');
+const crypto = require('node:crypto');
 const express = require('express');
 const multer = require('multer');
 const config = require('../config');
@@ -7,6 +8,7 @@ const store = require('../db');
 const auth = require('../auth');
 const S = require('../shipments');
 const notify = require('../notify');
+const { expandMailFiles } = require('../extract/mailfile');
 
 const router = express.Router();
 const upload = multer({ dest: path.join(config.uploadDir, 'shipments'), limits: { fileSize: 25 * 1024 * 1024, files: 10 } });
@@ -235,21 +237,29 @@ router.post('/shipments/:id/issue/:type', auth.requirePerm('send_notices'), asyn
 // ---------- documents ----------
 router.post('/shipments/:id/documents', auth.requirePerm('shipments_edit'), upload.array('files', 10), auth.checkCsrf, async (req, res) => {
   const id = Number(req.params.id);
+  // A dragged Outlook email (.msg / .eml) is stored as its attachments.
+  const { files } = await expandMailFiles((req.files || []).map((f) => ({ buffer: fs.readFileSync(f.path), filename: f.originalname, mime: f.mimetype, path: f.path })));
+  for (const f of req.files || []) if (!files.some((x) => x.path === f.path)) fs.rmSync(f.path, { force: true });
   if (req.body.doc_type === 'VINV') {
     const V = require('../vendorbills');
-    for (const f of req.files || []) {
-      await V.receive({ buffer: fs.readFileSync(f.path), filename: f.originalname, mime: f.mimetype, shipmentId: id, userId: req.user.id });
-      fs.rmSync(f.path, { force: true });
+    for (const f of files) {
+      await V.receive({ buffer: f.buffer, filename: f.filename, mime: f.mime, shipmentId: id, userId: req.user.id });
+      if (f.path) fs.rmSync(f.path, { force: true });
     }
-    flash(req, 'ok', `${(req.files || []).length} vendor invoice(s) read and sent to accounting to book`);
+    flash(req, 'ok', `${files.length} vendor invoice(s) read and sent to accounting to book`);
     return res.redirect(`/shipments/${id}#docs`);
   }
-  for (const f of req.files || []) {
+  for (const f of files) {
+    let stored = f.path;
+    if (!stored) {
+      stored = path.join(config.uploadDir, 'shipments', `${crypto.randomBytes(12).toString('hex')}${path.extname(f.filename).toLowerCase()}`);
+      fs.writeFileSync(stored, f.buffer);
+    }
     store.db.run(`INSERT INTO documents (shipment_id, doc_type, filename, stored_path, mime, size, customer_visible, uploaded_by)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?)`, id, req.body.doc_type || 'OTHER', f.originalname, f.path, f.mimetype, f.size,
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?)`, id, req.body.doc_type || 'OTHER', f.filename, stored, f.mime, f.buffer.length,
     req.body.customer_visible ? 1 : 0, req.user.id);
   }
-  flash(req, 'ok', `${(req.files || []).length} file(s) uploaded`);
+  flash(req, 'ok', `${files.length} file(s) uploaded`);
   res.redirect(`/shipments/${id}#docs`);
 });
 

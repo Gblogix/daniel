@@ -19,7 +19,7 @@ function clearData({ db = store.db, keepUserId = null } = {}) {
   db.tx(() => {
     db.run('UPDATE mail_imports SET intake_id = NULL');
     for (const t of ['payment_allocations', 'payments', 'invoice_lines', 'invoices', 'smartsheet_files', 'smartsheet_rows',
-      'emails', 'tracking_events', 'events', 'charges', 'cargo_items', 'containers', 'documents', 'intakes', 'shipments']) db.run(`DELETE FROM ${t}`);
+      'emails', 'tracking_events', 'events', 'followup_state', 'charges', 'cargo_items', 'containers', 'documents', 'intakes', 'shipments']) db.run(`DELETE FROM ${t}`);
     const demo = db.all("SELECT id FROM users WHERE (email LIKE '%.example' OR name LIKE '%(demo)%') AND role <> 'admin' AND id IS NOT ?", keepUserId);
     counts.users = demo.length;
     for (const u of demo) db.run('DELETE FROM users WHERE id = ?', u.id);
@@ -33,4 +33,18 @@ function clearData({ db = store.db, keepUserId = null } = {}) {
   return counts;
 }
 
-module.exports = { clearData };
+/**
+ * One-time go-live clean-up (Sep 2026): the first start after this update removes every test / demo shipment so the team
+ * starts from what arrives by email. Smartsheet pull is switched off too (turn it back on in Automation). Runs once.
+ */
+const FRESH_START_KEY = 'fresh_start_2026_09';
+function freshStartOnce({ db = store.db } = {}) {
+  if (db.setting(FRESH_START_KEY)) return null;
+  const hadData = db.get('SELECT COUNT(*) AS n FROM shipments').n + db.get('SELECT COUNT(*) AS n FROM intakes').n > 0;
+  const r = hadData ? clearData({ db }) : null;
+  if (hadData) db.setSetting('smartsheet_sync', '0');
+  db.setSetting(FRESH_START_KEY, new Date().toISOString());
+  return r;
+}
+
+module.exports = { clearData, freshStartOnce };
