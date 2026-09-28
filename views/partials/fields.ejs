@@ -175,11 +175,24 @@
 </fieldset>
 
 <fieldset data-ship-only <%= misc ? "hidden" : "" %> class="fieldset"><legend>Packing list (P/L detail)</legend>
+  <% const items = s.items && s.items.length ? s.items : [{}];
+     const groups = {};
+     items.filter((i) => i.description).forEach((i) => { const g = groups[i.buyer || '—'] = groups[i.buyer || '—'] || { invoices: new Set(), lines: 0, pkgs: 0, kg: 0, cbm: 0 };
+       if (i.invoice_no) g.invoices.add(i.invoice_no); g.lines++; g.pkgs += Number(i.packages) || 0; g.kg += Number(i.weight_kg) || 0; g.cbm += Number(i.cbm) || 0; });
+     const buyers = Object.keys(groups); %>
+  <% if (buyers.length > 1 || (buyers.length === 1 && buyers[0] !== '—')) { %>
+  <div class="buyer-sum" data-buyer-filter>
+    <button type="button" class="buyer-chip on" data-buyer="">All <span class="muted">(<%= items.filter((i) => i.description).length %>)</span></button>
+    <% buyers.forEach((b) => { const g = groups[b]; %><button type="button" class="buyer-chip" data-buyer="<%= b === '—' ? '' : b %>" data-only="<%= b %>">
+      <b><%= b === '—' ? 'No buyer' : b %></b> <span class="muted small"><%= [...g.invoices].join(', ') || 'no invoice' %> · <%= g.lines %> line<%= g.lines === 1 ? "" : "s" %> · <%= g.pkgs || '—' %> pkgs · <%= g.kg ? fmtNum(g.kg, 1) : '—' %> kg · <%= g.cbm ? fmtNum(g.cbm, 3) : '—' %> cbm</span></button><% }) %>
+  </div><% } %>
   <div class="tablewrap"><table class="t lines" data-lines="item">
-    <thead><tr><th>PO</th><th style="min-width:220px">Description</th><th>HS code</th><th>Qty</th><th>Unit</th><th>Pkgs</th><th>KG</th><th>CBM</th><th>Unit price</th><th>Amount</th><th></th></tr></thead>
+    <thead><tr><th>Final buyer</th><th>Invoice no.</th><th>PO</th><th style="min-width:220px">Description</th><th>HS code</th><th>Qty</th><th>Unit</th><th>Pkgs</th><th>KG</th><th>CBM</th><th></th></tr></thead>
     <tbody>
-    <% const items = s.items && s.items.length ? s.items : [{}]; items.forEach((i) => { %>
-      <tr>
+    <% items.forEach((i) => { %>
+      <tr data-buyer-row="<%= i.buyer || '—' %>">
+        <td><input name="item_buyer" value="<%= i.buyer || '' %>" list="buyer-list" placeholder="Target…" style="min-width:90px"></td>
+        <td><input name="item_inv" value="<%= i.invoice_no || '' %>" style="min-width:110px"></td>
         <td><input name="item_po" value="<%= i.po_no || '' %>"></td>
         <td><input name="item_desc" value="<%= i.description || '' %>"></td>
         <td><input name="item_hs" value="<%= i.hs_code || '' %>"></td>
@@ -188,12 +201,13 @@
         <td><input name="item_pkgs" value="<%= i.packages ?? '' %>"></td>
         <td><input name="item_kg" value="<%= i.weight_kg ?? '' %>"></td>
         <td><input name="item_cbm" value="<%= i.cbm ?? '' %>"></td>
-        <td><input name="item_price" value="<%= i.unit_price ?? '' %>"></td>
-        <td><input name="item_amount" value="<%= i.amount ?? '' %>"></td>
-        <td><button type="button" class="btn secondary small" data-remove-row>✕</button></td>
+        <td><input type="hidden" name="item_price" value="<%= i.unit_price ?? '' %>"><input type="hidden" name="item_amount" value="<%= i.amount ?? '' %>">
+          <button type="button" class="btn secondary small" data-remove-row>✕</button></td>
       </tr>
     <% }) %>
     </tbody>
   </table></div>
+  <datalist id="buyer-list"><% ['Target', 'Nordstrom', 'Nordstrom Rack', 'Ulta', 'Walmart', 'Costco', 'Sephora', 'Amazon', 'TJ Maxx', "Macy's", 'CVS', 'Ipsy', ...buyers.filter((b) => b !== '—')].filter((v, k, a) => a.indexOf(v) === k).forEach((b) => { %><option value="<%= b %>"><% }) %></datalist>
   <button type="button" class="btn secondary small" data-add-row="item" style="margin-top:8px">+ Line</button>
+  <span class="muted small">Lines are sorted by final buyer, then invoice, when saved.</span>
 </fieldset>

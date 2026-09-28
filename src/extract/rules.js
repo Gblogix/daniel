@@ -335,8 +335,11 @@ function extractRules(text, { filename = '', rows = null } = {}) {
   out.freight_location = labelValue(lines, /(?:FREIGHT|CARGO)\s+LOCATION|DISCHARGE\s+TERMINAL|\bTERMINAL\s*(?:NAME)?\s*:|CFS\s+LOCATION|AVAILABLE\s+AT/i);
   out.last_free_day = toISODate(firstMatch(T, [new RegExp(String.raw`(?:LAST\s+FREE\s+DAY|\bLFD)\s*[:.-]?\s*${DATE_RE}`, 'i')]));
   // "INVOICE NO: X", or the Korean-style box "9. No & Date of Invoice" with "#BSBUS26091601 / 2026.09.16" under it.
-  out.ci_invoice_no = invoiceNoBelow(rows) || firstMatch(U, [/NO\.?\s*(?:&|AND)\s*DATE\s+OF\s+INVOICE[^\n]*\n(?:[^\n]*?#\s*|\s*)([A-Z0-9][A-Z0-9_-]{3,24})/,
-    /INVOICE\s*(?:NO\.?|#|NUMBER)\s*[:.]?\s*#?\s*([A-Z0-9][A-Z0-9_-]{3,24})/]);
+  out.ci_invoice_no = invoiceNoBelow(rows) || [
+    /NO\.?\s*(?:&|AND)\s*DATE\s+OF\s+INVOICE\s*[:.]?\s*#?\s*([A-Z0-9][A-Z0-9_-]{3,24})/g,
+    /NO\.?\s*(?:&|AND)\s*DATE\s+OF\s+INVOICE[^\n]*\n(?:[^\n]*?#\s*|\s*)([A-Z0-9][A-Z0-9_-]{3,24})/g,
+    /INVOICE\s*(?:NO\.?|#|NUMBER)\s*[:.]?\s*#?\s*([A-Z0-9][A-Z0-9_-]{3,24})/g,
+  ].map((re) => [...U.matchAll(re)].map((x) => x[1]).find((v) => /\d/.test(v))).find(Boolean) || null;
   out.isf_no = firstMatch(U, [/ISF\s*(?:NO\.?|#|TRANSACTION\s*(?:NO\.?)?)\s*[:.]?\s*([A-Z0-9-]{6,25})/]);
   out.telex_release = /TELEX\s+RELEASE|SURRENDERED|SEA\s*WAYBILL|EXPRESS\s+RELEASE|电放/.test(U) || null;
 
@@ -370,6 +373,9 @@ function extractRules(text, { filename = '', rows = null } = {}) {
     if (out.containers.every((c) => c.cbm != null) && (!out.cbm || out.cbm < sum('cbm'))) out.cbm = sum('cbm');
     if (out.containers.every((c) => c.packages != null) && (!out.packages || out.packages < sum('packages'))) out.packages = sum('packages');
   }
+  // Each cargo line remembers its invoice and final buyer (a consolidated box can hold Target and Nordstrom goods).
+  out.buyer = ['PL', 'CI', 'OTHER'].includes(docType) || out.items.length ? finalBuyer(U, raw, { invoiceNo: out.ci_invoice_no, consignee: out.consignee_name }) : null;
+  for (const it of out.items) { it.invoice_no = it.invoice_no || out.ci_invoice_no || null; it.buyer = it.buyer || out.buyer || null; }
   for (const k of Object.keys(out)) if (out[k] === undefined) out[k] = null;
   return out;
 }
@@ -380,8 +386,9 @@ function invoiceNoBelow(rows) {
   for (let r = 0; r < rows.length; r += 1) {
     const c = rows[r].findIndex((v) => /NO\.?\s*(?:&|AND)\s*DATE\s+OF\s+INVOICE|^\s*INVOICE\s*(?:NO\.?|#|NUMBER)\s*[:.]?\s*$/i.test(String(v)));
     if (c < 0) continue;
-    for (let k = r + 1; k <= r + 3 && k < rows.length; k += 1) {
-      const m = /^\s*#?\s*([A-Z0-9][A-Z0-9-]{3,24})\b/i.exec(String(rows[k][c] || ''));
+    const cand = [rows[r][c + 1], ...rows.slice(r + 1, r + 4).map((row) => row[c])];
+    for (const v of cand) {
+      const m = /^\s*#?\s*([A-Z0-9][A-Z0-9_-]{3,24})/i.exec(String(v || ''));
       if (m && /\d/.test(m[1])) return m[1].toUpperCase();
     }
   }
@@ -446,6 +453,9 @@ function itemsFromRows(rows) {
   if (header < 0) return { items: [], totals: null };
   const items = [];
   let totals = null;
+  // The table ends at its TOTAL row, or where the next form section / document starts ("PACKING LIST",
+  // "3. NOTIFY PARTY:", "SAY: …", a repeated header): nothing after it is a cargo line.
+  const SECTION = /^(PACKING\s+LIST|COMMERCIAL\s+INVOICE|\d{1,2}\.\s*[A-Z][A-Z /&]+:?$|SAY\b|TOTAL\s+(?:PACKAGES|AMOUNT)\s*:|SHIPPER\b|CONSIGNEE\b|NOTIFY\b|SIGNED\b|SIGNATURE\b|REMARKS?\b|MARKS\s*&)/i;
   for (const row of rows.slice(header + 1)) {
     const cells = row.map((c) => String(c ?? '').trim());
     const pick = (k) => (k in map ? cells[map[k]] || '' : '');
@@ -454,9 +464,12 @@ function itemsFromRows(rows) {
     const isTotal = cells.some((c) => /^(TOTAL|SUB\s*-?TOTAL|G(RAND)?\.?\s*TOTAL|합계)\b/i.test(c));
     if (isTotal) {
       totals = { packages: n('packages'), weight_kg: n('weight_kg'), cbm: n('cbm'), quantity: n('quantity'), amount: n('amount') };
+      if (items.length) break;
       continue;
     }
-    if (!desc) continue;
+    const first = cells.find((c) => c) || '';
+    if (items.length && (SECTION.test(first) || SECTION.test(desc))) break;
+    if (!desc || SECTION.test(desc) || COLS.description.test(desc) && !numIn(pick('quantity'))) continue;
     // "12,000 PCS" in the quantity cell carries the unit
     const qtyUnit = /[\d.,]+\s*([A-Z]{2,6})\b/i.exec(pick('quantity'));
     items.push({
@@ -468,6 +481,26 @@ function itemsFromRows(rows) {
   return { items, totals };
 }
 
+// Final buyers (the retailer the goods are for) seen on P/L / C/I: named in the text, or coded in the invoice no.
+const RETAILERS = [['TARGET', 'Target'], ['NORDSTROM RACK', 'Nordstrom Rack'], ['NORDSTROM', 'Nordstrom'], ['ULTA', 'Ulta'], ['WALMART', 'Walmart'],
+  ['COSTCO', 'Costco'], ['SEPHORA', 'Sephora'], ['AMAZON', 'Amazon'], ['TJ ?MAXX', 'TJ Maxx'], ['TJX', 'TJX'], ['MARSHALLS', 'Marshalls'],
+  ['HOME ?GOODS', 'HomeGoods'], ['ROSS STORES', 'Ross'], ["MACY'?S", "Macy's"], ['CVS', 'CVS'], ['WALGREENS', 'Walgreens'], ["KOHL'?S", "Kohl's"],
+  ['KROGER', 'Kroger'], ['WHOLE FOODS', 'Whole Foods'], ["TRADER JOE'?S", "Trader Joe's"], ['BEST BUY', 'Best Buy'], ["BLOOMINGDALE'?S", "Bloomingdale's"],
+  ['SAKS', 'Saks'], ['NEIMAN MARCUS', 'Neiman Marcus'], ['URBAN OUTFITTERS', 'Urban Outfitters'], ['BURLINGTON', 'Burlington'], ['DOLLAR TREE', 'Dollar Tree'],
+  ['DOLLAR GENERAL', 'Dollar General'], ['FIVE BELOW', 'Five Below'], ['IPSY', 'Ipsy'], ['BOXYCHARM', 'BoxyCharm'], ['MEIJER', 'Meijer'],
+  ['ALBERTSONS', 'Albertsons'], ['SAFEWAY', 'Safeway'], ['PUBLIX', 'Publix'], ['H ?MART', 'H Mart'], ['OLIVE YOUNG', 'Olive Young'], ['REVOLVE', 'Revolve'],
+  ["DILLARD'?S", "Dillard's"], ['JCPENNEY|JC PENNEY', 'JCPenney']];
+const BUYER_CODES = { TGT: 'Target', NDS: 'Nordstrom', NORD: 'Nordstrom', WMT: 'Walmart', ULTA: 'Ulta', CSTCO: 'Costco', COSTCO: 'Costco', AMZ: 'Amazon', SEP: 'Sephora', CVS: 'CVS' };
+/** The final buyer of a P/L / C/I: a retailer named on it, one coded in the invoice no. (EZVC_TGT_26-09 → Target), or the
+ *  FINAL BUYER / SOLD TO / SHIP TO / DELIVERY ADDRESS party when it is not the consignee. */
+function finalBuyer(U, lines, { invoiceNo, consignee } = {}) {
+  for (const [re, name] of RETAILERS) if (new RegExp(`(^|[^A-Z])(?:${re})([^A-Z]|$)`).test(U)) return name;
+  for (const tok of String(invoiceNo || '').toUpperCase().split(/[^A-Z]+/)) if (BUYER_CODES[tok]) return BUYER_CODES[tok];
+  const p = partyName(lines, /^(?:\d{1,2}\.\s*)?(?:FINAL\s+BUYER|ULTIMATE\s+CONSIGNEE|SOLD\s+TO|SHIP\s+TO|DELIVERY\s+ADDRESS|DELIVER\s+TO)\b/i);
+  if (p && !/^SAME\s+AS/i.test(p) && (!consignee || p.toUpperCase() !== String(consignee).toUpperCase())) return p;
+  return null;
+}
+
 /** First number in a cell ("USD 25,200.00" -> 25200, "980 CTNS" -> 980). */
 function numIn(s) {
   const m = /-?[\d,]*\.?\d+/.exec(String(s || '').replace(/\s/g, ''));
@@ -476,4 +509,4 @@ function numIn(s) {
   return Number.isFinite(v) ? v : null;
 }
 
-module.exports = { extractRules, detectDocType, isValidContainer, containerCheckDigit, toISODate, itemsFromRows };
+module.exports = { finalBuyer, extractRules, detectDocType, isValidContainer, containerCheckDigit, toISODate, itemsFromRows };

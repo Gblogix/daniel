@@ -227,3 +227,15 @@ document.querySelectorAll('[data-party-reader]').forEach((zone) => {
   zone.addEventListener('dragleave', (e) => { if (!zone.contains(e.relatedTarget)) zone.classList.remove('over'); });
   zone.addEventListener('drop', (e) => { e.preventDefault(); e.stopPropagation(); zone.classList.remove('over'); read(e.dataTransfer.files); });
 });
+
+// P/L: show one final buyer's lines (Target / Nordstrom …) or all.
+document.querySelectorAll('[data-buyer-filter]').forEach((bar) => {
+  const table = bar.parentNode.querySelector('table[data-lines="item"]');
+  bar.addEventListener('click', (e) => {
+    const chip = e.target.closest('.buyer-chip');
+    if (!chip) return;
+    bar.querySelectorAll('.buyer-chip').forEach((c) => c.classList.toggle('on', c === chip));
+    const only = chip.dataset.only;
+    table.querySelectorAll('tbody tr').forEach((tr) => { tr.hidden = Boolean(only) && tr.dataset.buyerRow !== only; });
+  });
+});

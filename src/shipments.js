@@ -210,7 +210,8 @@ function find(id, user, { db = store.db } = {}) {
   const s = db.get(`${BASE_SELECT} WHERE s.id = ? AND ${scope.where}`, id, ...scope.params);
   if (!s) return null;
   s.containers = db.all('SELECT * FROM containers WHERE shipment_id = ? ORDER BY id', id);
-  s.items = db.all('SELECT * FROM cargo_items WHERE shipment_id = ? ORDER BY id', id);
+  // Sorted by final buyer, then invoice (Target lines together, Nordstrom lines together…).
+  s.items = db.all("SELECT * FROM cargo_items WHERE shipment_id = ? ORDER BY COALESCE(buyer, 'zzz') COLLATE NOCASE, COALESCE(invoice_no, ''), id", id);
   s.charges = db.all('SELECT * FROM charges WHERE shipment_id = ? ORDER BY id', id);
   return s;
 }
@@ -243,9 +244,10 @@ function saveLines(id, body, { db = store.db } = {}) {
       db.run('DELETE FROM cargo_items WHERE shipment_id = ?', id);
       arr(body.item_desc).forEach((d, i) => {
         if (!String(d).trim()) return;
-        db.run('INSERT INTO cargo_items (shipment_id, po_no, description, hs_code, quantity, unit, packages, weight_kg, cbm, unit_price, amount) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
-          id, arr(body.item_po)[i] || null, String(d).trim(), arr(body.item_hs)[i] || null, n(arr(body.item_qty)[i]),
-          arr(body.item_unit)[i] || null, n(arr(body.item_pkgs)[i]), n(arr(body.item_kg)[i]), n(arr(body.item_cbm)[i]),
+        const t = (k) => String(arr(body[k])[i] ?? '').trim() || null;
+        db.run('INSERT INTO cargo_items (shipment_id, buyer, invoice_no, po_no, description, hs_code, quantity, unit, packages, weight_kg, cbm, unit_price, amount) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+          id, t('item_buyer'), t('item_inv'), t('item_po'), String(d).trim(), t('item_hs'), n(arr(body.item_qty)[i]),
+          t('item_unit'), n(arr(body.item_pkgs)[i]), n(arr(body.item_kg)[i]), n(arr(body.item_cbm)[i]),
           n(arr(body.item_price)[i]), n(arr(body.item_amount)[i]));
       });
     });

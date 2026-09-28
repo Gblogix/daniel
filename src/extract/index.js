@@ -121,15 +121,22 @@ function mergeExtractions(docs) {
     }
   }
   draft.containers = [...byNo.values()];
-  const itemDoc = docs.filter((d) => d.items?.length).sort((a, b) => rank('items', a.doc_type) - rank('items', b.doc_type))[0];
-  draft.items = itemDoc ? itemDoc.items.map((i) => ({ ...i })) : [];
-  // P/L lines carry cartons/weight; C/I lines carry price/value — join them by PO + description.
-  const ciItems = docs.filter((d) => d.doc_type === 'CI' && d !== itemDoc).flatMap((d) => d.items || []);
-  const key = (i) => `${(i.po_no || '').toUpperCase()}|${(i.description || '').toUpperCase().replace(/\s+/g, ' ')}`;
+  // Cargo lines: every P/L (a consolidated shipment has one per invoice / buyer), plus the C/I lines of any invoice
+  // that has no P/L. C/I prices / HS codes fill in the matching P/L line of the same invoice.
+  const plDocs = docs.filter((d) => d.items?.length && d.doc_type === 'PL');
+  const ciDocs = docs.filter((d) => d.items?.length && d.doc_type === 'CI');
+  const invOf = (d) => (d.ci_invoice_no || '').toUpperCase();
+  const plInvoices = new Set(plDocs.map(invOf));
+  const itemDocs = plDocs.length
+    ? [...plDocs, ...ciDocs.filter((d) => invOf(d) && !plInvoices.has(invOf(d)))]
+    : docs.filter((d) => d.items?.length).sort((a, b) => rank('items', a.doc_type) - rank('items', b.doc_type)).slice(0, 1);
+  draft.items = itemDocs.flatMap((d) => d.items.map((i) => ({ ...i })));
+  const key = (i) => `${(i.invoice_no || '').toUpperCase()}|${(i.po_no || '').toUpperCase()}|${(i.description || '').toUpperCase().replace(/\s+/g, ' ')}`;
+  const ciItems = ciDocs.filter((d) => !itemDocs.includes(d)).flatMap((d) => d.items);
   for (const it of draft.items) {
-    const ci = ciItems.find((c) => key(c) === key(it));
+    const ci = ciItems.find((c) => key(c) === key(it)) || ciItems.find((c) => key({ ...c, invoice_no: '' }) === key({ ...it, invoice_no: '' }));
     if (!ci) continue;
-    for (const k of ['unit_price', 'amount', 'hs_code', 'quantity', 'unit']) if (it[k] == null && ci[k] != null) it[k] = ci[k];
+    for (const k of ['unit_price', 'amount', 'hs_code', 'quantity', 'unit', 'buyer']) if (it[k] == null && ci[k] != null) it[k] = ci[k];
   }
   // HBL on the AWB side
   if (!draft.mbl_no && draft.mawb_no) draft.mbl_no = draft.mawb_no;

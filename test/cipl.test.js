@@ -63,3 +63,29 @@ test('merged C/I + P/L PDF is split by page title', async () => {
   const parts = await extractFile({ buffer: buf, filename: 'CI_PL_HC-2410-07.pdf', mime: 'application/pdf', docTypeHint: 'AUTO' });
   assert.deepEqual(parts.map((p) => p.doc_type), ['CI', 'PL']);
 });
+
+test('P/L table ends at TOTAL / the next form section — no "PACKING LIST" or "3. NOTIFY PARTY" lines', () => {
+  const { itemsFromRows } = require('../src/extract/rules');
+  const rows = [
+    ['DESCRIPTION', 'QTY', 'UNIT PRICE', 'AMOUNT'],
+    ['Shampoo', '1883', '5300', '9979900'],
+    ['Hair rinse / Conditioner', '1152', '5300', '6105600'],
+    ['PACKING LIST', '', '', ''],
+    ['3. NOTIFY PARTY:', '11', '11', '11'],
+    ['4. DELIVERY ADDRESS', '', '', ''],
+    ['6. FINAL DESTINATION', '12', '12', '12'],
+    ['LOS ANGELES, CA USA', '', '', ''],
+  ];
+  assert.deepEqual(itemsFromRows(rows).items.map((i) => i.description), ['Shampoo', 'Hair rinse / Conditioner']);
+  const withTotal = [['DESCRIPTION', 'QTY', 'CTNS'], ['Serum', '100', '5'], ['TOTAL', '100', '5'], ['Shampoo', '1', '1']];
+  assert.deepEqual(itemsFromRows(withTotal).items.map((i) => i.description), ['Serum']);
+});
+
+test('two P/Ls in one shipment keep their own invoice no. and final buyer (Target / Nordstrom)', async () => {
+  const pl = (inv, buyer, item) => [['', 'PACKING LIST'], ['9. No & Date of Invoice', `#${inv}`], ['SHIP TO:', buyer], ['DESCRIPTION', 'QTY', 'CTNS', 'G.W (KG)', 'CBM'], [item, 100, 10, 200, 1.5], ['TOTAL', 100, 10, 200, 1.5]];
+  const mk = async (rows) => { const wb = new ExcelJS.Workbook(); const ws = wb.addWorksheet('PL'); rows.forEach((r) => ws.addRow(r)); return Buffer.from(await wb.xlsx.writeBuffer()); };
+  const a = await extractFile({ buffer: await mk(pl('EZVC_TGT_26-09', 'BRIGHT TRADE INC', 'Facial serum')), filename: 'pl1.xlsx', docTypeHint: 'PL' });
+  const b = await extractFile({ buffer: await mk(pl('BSBUS26091601', 'NORDSTROM RACK DC 0572', 'Shampoo')), filename: 'pl2.xlsx', docTypeHint: 'PL' });
+  const d = mergeExtractions([...a, ...b]);
+  assert.deepEqual(d.items.map((i) => [i.buyer, i.invoice_no, i.description]), [['Target', 'EZVC_TGT_26-09', 'Facial serum'], ['Nordstrom Rack', 'BSBUS26091601', 'Shampoo']]);
+});

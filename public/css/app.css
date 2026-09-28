@@ -491,3 +491,10 @@ form[data-drop].busy { opacity: .6; pointer-events: none; }
 .party-reader.busy { opacity: .6; }
 .party-results { display: grid; gap: 6px; margin-top: 8px; }
 .party-cand { display: flex; justify-content: space-between; align-items: center; gap: 10px; padding: 8px 10px; border: 1px solid #dbe4f3; border-radius: 8px; background: #fff; }
+.buyer-sum { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 8px; }
+.buyer-chip { border: 1px solid #c7d4ea; background: #fff; border-radius: 999px; padding: 4px 12px; cursor: pointer; font-size: 13px; color: #1e3a8a; }
+.buyer-chip.on { background: #1e3a8a; color: #fff; border-color: #1e3a8a; }
+.buyer-chip.on .muted { color: #dbe4f3; }
+table[data-lines="item"] input[name=item_qty], table[data-lines="item"] input[name=item_kg], table[data-lines="item"] input[name=item_cbm] { min-width: 64px; }
+table[data-lines="item"] input[name=item_pkgs], table[data-lines="item"] input[name=item_unit] { min-width: 48px; }
+table[data-lines="item"] input[name=item_inv] { min-width: 130px; }
