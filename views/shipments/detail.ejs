@@ -98,6 +98,32 @@
   </table></div>
   <% } else { %><p class="muted small">No invoices or vendor bills on this file yet — add them below.</p><% } %>
 
+  <% if (outgoing.length) { const ready = outgoing.filter((i) => i.reviewed_at && !i.sent_at && i.status === 'OPEN').length; %>
+  <form method="post" action="/shipments/<%= s.id %>/invoices/review" class="review-box">
+    <input type="hidden" name="_csrf" value="<%= csrf %>">
+    <div class="review-head"><h3>Review &amp; send to parties</h3>
+      <span class="muted small">Tick <b>Reviewed</b> once an invoice / D/N / C/N is checked. Only reviewed items are emailed<%= autoSend ? ' — automatic sending is ON (Automation)' : '' %>.</span></div>
+    <table class="t small">
+      <thead><tr><th class="c" style="width:80px">Reviewed</th><th>Document</th><th>To</th><th class="right">Amount</th><th>State</th></tr></thead>
+      <% outgoing.forEach((i) => { const label = i.kind === 'AR' ? 'Invoice' : i.total < 0 ? 'Credit note' : 'Debit note'; %>
+        <tr class="<%= i.reviewed_at ? 'is-reviewed' : '' %>">
+          <td class="c"><input type="checkbox" class="big" name="reviewed" value="<%= i.id %>" <%= i.reviewed_at ? 'checked' : '' %> <%= i.sent_at ? 'disabled' : '' %> aria-label="Reviewed <%= i.number %>"></td>
+          <td><a href="/invoices/<%= i.id %>"><b><%= i.number %></b></a> <span class="muted"><%= label %></span> · <a href="/invoices/<%= i.id %>/preview" target="_blank">preview</a></td>
+          <td><%= i.company_name || '' %><br><span class="<%= i.to.length ? 'muted' : 'late' %> small"><%= i.to.length ? i.to.join(', ') : 'no billing email — add on Parties' %></span></td>
+          <td class="right nowrap"><%= m(Math.abs(i.total)) %></td>
+          <td class="nowrap"><% if (i.sent_at) { %><span class="state sent">✉ Sent <%= fmtDate(i.sent_at) %></span>
+            <% } else if (i.reviewed_at) { %><span class="state ready">✔ Ready to send</span>
+            <% } else { %><span class="state draft">Draft — review</span><% } %></td>
+        </tr>
+      <% }) %>
+    </table>
+    <div class="actions" style="margin-top:10px">
+      <button class="btn secondary" name="send" value="0">Save review</button>
+      <button class="btn" name="send" value="1" data-confirm="Save the review and email every reviewed, unsent item to its party?">✉ Save &amp; send reviewed to parties<%= ready ? ` (${ready} ready)` : '' %></button>
+    </div>
+  </form>
+  <% } %>
+
   <details <%= plLines.length ? '' : 'open' %> style="margin-top:12px"><summary><b>+ Add invoice / vendor bill to this file</b></summary>
   <form method="post" action="/shipments/<%= s.id %>/accounting" style="margin-top:10px">
     <input type="hidden" name="_csrf" value="<%= csrf %>">

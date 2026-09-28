@@ -105,10 +105,15 @@ router.get('/shipments/:id', auth.requireLogin, (req, res) => {
   const invoices = internal && acct ? A.listInvoices({ shipmentId: s.id }) : [];
   const profit = internal && acct ? A.shipmentProfit(s.id) : null;
   const plLines = internal && acct ? A.shipmentLines(s.id) : [];
+  // Review & send: AR to the customer, D/N or C/N to the agent — with the address each one goes to.
+  const outgoing = invoices.filter((i) => i.kind !== 'AP' && i.status !== 'VOID').map((i) => {
+    const c = db.get('SELECT emails, billing_emails FROM companies WHERE id = ?', i.company_id) || {};
+    return { ...i, to: require('../invoicing').emailsOf(c) };
+  });
   const acctParties = internal && acct ? db.all('SELECT id, name, type FROM companies ORDER BY type, name') : [];
   const trackEvents = db.all("SELECT * FROM tracking_events WHERE shipment_id = ? AND classifier IN ('ACT', '') ORDER BY event_time DESC LIMIT 30", s.id);
   const view = internal ? 'shipments/detail' : 'customer/detail';
-  res.render(view, { title: S.fileName(s), s, tr: S.tracking(s), docs, events, emails, trackEvents, invoices, profit, plLines, acctParties,
+  res.render(view, { title: S.fileName(s), s, tr: S.tracking(s), docs, events, emails, trackEvents, invoices, profit, plLines, acctParties, outgoing, autoSend: db.setting('auto_send_reviewed') === '1',
     codes: A.CHARGE_CODES, billing: acct ? S.billingState(s) : null, trackingStatus: require('../tracking').status(), ...(internal ? partyLists() : {}) });
 });
 

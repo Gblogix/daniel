@@ -42,7 +42,8 @@ const MENU = [
       { id: 'soa', label: 'Agent statement (SOA)', href: '/billing#agents' },
     ] },
     { head: 'Report', items: [
-      { id: 'aging', label: 'AR aging', href: '/billing#aging' },
+      { id: 'aging', label: 'Aging report (A/R · A/P · D/N · C/N)', href: '/billing/aging' },
+      { id: 'soa-party', label: 'Statement of account (any party)', href: '/billing/aging?side=all' },
       { id: 'pl', label: 'P&L by file', href: '/billing/profit' },
       { id: 'not-invoiced', label: 'Delivered — not invoiced', href: '/shipments?stage=delivered&bill=not_invoiced' },
       { id: 'not-paid', label: 'Invoiced — not paid', href: '/shipments?stage=delivered&bill=unpaid' },

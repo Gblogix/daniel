@@ -107,6 +107,7 @@ const SETTINGS = [
   ['auto_tracking', 'Carrier / GPS tracking: update ETD, ETA, vessel, LFD and terminal status automatically'],
   ['lfd_alerts', 'Daily 7am LFD / pickup digest email to staff'],
   ['smartsheet_sync', 'Smartsheet: import shipments, P/L and documents from the shared sheets every 30 min'],
+  ['auto_send_reviewed', 'Accounting: email an invoice / D/N / C/N to its party as soon as it is marked reviewed (otherwise use "Send reviewed")'],
   ['smartsheet_push', 'Smartsheet: write ETA / ETD back to the shared sheets ("old > new" style) — changes the customer\'s sheet'],
 ];
 router.get('/admin/settings', auth.requirePerm('settings'), (req, res) => {

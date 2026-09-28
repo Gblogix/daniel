@@ -5,14 +5,17 @@
   <div><h1 style="margin-bottom:4px"><%= isNew ? `New ${title}` : `${title} ${inv.number}` %></h1>
     <% if (!isNew) { %><div class="chips"><span class="badge <%= inv.status === 'PAID' ? 'paid' : inv.status === 'VOID' ? 'FAILED' : 'unpaid' %>"><%= inv.status %></span>
       <span class="badge">Total <%= m(inv.total) %></span><span class="badge">Paid <%= m(inv.paid_amount) %></span>
-      <% if (inv.sent_at) { %><span class="badge SENT">sent <%= fmtDate(inv.sent_at) %></span><% } %></div><% } %></div>
+      <% if (inv.sent_at) { %><span class="badge SENT">sent <%= fmtDate(inv.sent_at) %></span><% } %>
+      <% if (k !== 'AP') { %><span class="badge <%= inv.reviewed_at ? 'paid' : 'unpaid' %>"><%= inv.reviewed_at ? `✔ reviewed ${fmtDate(inv.reviewed_at)}` : 'not reviewed' %></span><% } %></div><% } %></div>
   <div class="actions">
     <% if (s) { %><a class="btn secondary" href="/shipments/<%= s.id %>#accounting">← <%= S.fileName(s) %></a><% } %>
     <% if (!isNew && k !== 'AP') { %>
       <a class="btn secondary" href="/invoices/<%= inv.id %>/preview" target="_blank">Preview</a>
       <form method="post" action="/invoices/<%= inv.id %>/issue"><input type="hidden" name="_csrf" value="<%= csrf %>"><button class="btn secondary">Issue PDF</button></form>
+      <form method="post" action="/invoices/<%= inv.id %>/review"><input type="hidden" name="_csrf" value="<%= csrf %>"><input type="hidden" name="on" value="<%= inv.reviewed_at ? '0' : '1' %>">
+        <button class="btn <%= inv.reviewed_at ? 'secondary' : '' %>"><%= inv.reviewed_at ? '↺ Undo review' : '✔ Mark reviewed' %></button></form>
       <form method="post" action="/invoices/<%= inv.id %>/send"><input type="hidden" name="_csrf" value="<%= csrf %>"><input type="hidden" name="back" value="/invoices/<%= inv.id %>">
-        <button class="btn" data-confirm="Email <%= inv.number %> to <%= inv.company_name %>?">✉ Email to <%= k === 'AR' ? 'customer' : 'agent' %></button></form>
+        <button class="btn" data-confirm="Email <%= inv.number %> to <%= inv.company_name %>?" <%= inv.reviewed_at ? '' : 'disabled title="Mark reviewed first"' %>>✉ Email to <%= k === 'AR' ? 'customer' : 'agent' %></button></form>
     <% } %>
     <% if (!isNew && inv.document_id) { %><a class="btn secondary" href="/documents/<%= inv.document_id %>" target="_blank">📄 PDF</a><% } %>
   </div>

@@ -70,7 +70,7 @@ function saveInvoice(data, { db = store.db, userId = null, id = null } = {}) {
       const cols = Object.keys(row);
       db.run(`UPDATE invoices SET ${cols.map((c) => `${c} = ?`).join(', ')} WHERE id = ?`, ...Object.values(row), id);
       if (kind === 'AP' && data.number) db.run('UPDATE invoices SET number = ? WHERE id = ?', data.number, id);
-      db.run('UPDATE invoices SET document_id = NULL WHERE id = ?', id); // re-issue the PDF on next send
+      db.run('UPDATE invoices SET document_id = NULL, reviewed_at = NULL, reviewed_by = NULL WHERE id = ?', id); // changed: re-issue the PDF and review again
       db.run('DELETE FROM invoice_lines WHERE invoice_id = ?', id);
     } else {
       const number = kind === 'AR' ? `INV-${company.nextNumber('INV', db)}`
@@ -388,8 +388,108 @@ function settleSelected({ company_id, items, paid_on, method, reference, memo },
   return { direction, amount, netted: 0 };
 }
 
+// ---------- statements & aging for any party (customer, agent, vendor) ----------
+const isReceivable = (i) => i.kind === 'AR' || (i.kind === 'DN' && i.total > 0);
+const KIND_LABEL = (i) => (i.kind === 'AR' ? 'Invoice' : i.kind === 'AP' ? 'Vendor bill' : i.total < 0 ? 'Credit note' : 'Debit note');
+const BASIS_COL = { invoice: 'i.invoice_date', eta: "COALESCE(s.eta, i.invoice_date)", due: 'COALESCE(i.due_date, i.invoice_date)' };
+
+function bucketOf(days) {
+  return days <= 0 ? 'current' : days <= 30 ? 'd30' : days <= 60 ? 'd60' : days <= 90 ? 'd90' : 'd90p';
+}
+const BUCKETS = ['current', 'd30', 'd60', 'd90', 'd90p'];
+
+/**
+ * Statement of account for one party, as OPUS prints it: every invoice / debit / credit note / vendor bill in the
+ * period, by invoice date or by ETA, with debit (+ due to us) and credit (− due to them), open balance and running total.
+ */
+function partyStatement(companyId, { db = store.db, basis = 'invoice', from = '', to = '', status = 'open', asOf = today() } = {}) {
+  const col = BASIS_COL[basis] || BASIS_COL.invoice;
+  const where = ['i.company_id = ?', "i.status <> 'VOID'"]; const p = [companyId];
+  if (status === 'open') where.push("i.status = 'OPEN'");
+  if (from) { where.push(`${col} >= ?`); p.push(from); }
+  if (to) { where.push(`${col} <= ?`); p.push(to); }
+  const rows = db.all(`SELECT i.*, ${col} AS basis_date, s.ref_no, s.hbl_no, s.mbl_no, s.eta, s.etd, s.shipper_name, s.mode, s.agent_ref AS ship_agent_ref,
+      (SELECT k.container_no FROM containers k WHERE k.shipment_id = s.id ORDER BY k.id LIMIT 1) AS first_ctn,
+      (SELECT COUNT(*) FROM containers k WHERE k.shipment_id = s.id) AS ctn_count
+    FROM invoices i LEFT JOIN shipments s ON s.id = i.shipment_id WHERE ${where.join(' AND ')} ORDER BY basis_date, i.id`, ...p);
+  let running = 0;
+  const totals = { debit: 0, credit: 0, paid: 0, open: 0 };
+  const aging = Object.fromEntries(BUCKETS.map((b) => [b, 0]));
+  const items = rows.map((i) => {
+    const recv = isReceivable(i);
+    const amount = round(Math.abs(i.total));
+    const open = round((recv ? 1 : -1) * (amount - i.paid_amount));
+    running = round(running + open);
+    totals.debit = round(totals.debit + (recv ? amount : 0));
+    totals.credit = round(totals.credit + (recv ? 0 : amount));
+    totals.paid = round(totals.paid + i.paid_amount);
+    totals.open = round(totals.open + open);
+    const days = Math.floor((Date.parse(asOf) - Date.parse(i.due_date || i.invoice_date)) / 86400000);
+    if (i.status === 'OPEN') aging[bucketOf(days)] = round(aging[bucketOf(days)] + open);
+    return { ...i, type: KIND_LABEL(i), debit: recv ? amount : 0, credit: recv ? 0 : amount, open, running, days_past_due: days };
+  });
+  return { items, totals, aging, basis, from, to, status, asOf };
+}
+
+/**
+ * Aging summary for every party with open items: A/R, Debit, Credit, A/P side by side, net (+ due to us), money on
+ * account, and the net split into current / 1-30 / 31-60 / 61-90 / 90+ days past due (or since invoice date / ETA).
+ */
+function agingSummary({ db = store.db, asOf = today(), basis = 'due', side = 'all' } = {}) {
+  const col = BASIS_COL[basis] || BASIS_COL.due;
+  const rows = db.all(`SELECT i.*, ${col} AS basis_date, c.name AS company_name, c.type AS company_type
+    FROM invoices i JOIN companies c ON c.id = i.company_id LEFT JOIN shipments s ON s.id = i.shipment_id
+    WHERE i.status = 'OPEN' ORDER BY c.name, basis_date`);
+  const by = new Map();
+  for (const i of rows) {
+    if (!by.has(i.company_id)) {
+      by.set(i.company_id, { company_id: i.company_id, name: i.company_name, type: i.company_type, ar: 0, debit: 0, credit: 0, ap: 0, count: 0,
+        ...Object.fromEntries(BUCKETS.map((b) => [b, 0])), oldest: null });
+    }
+    const g = by.get(i.company_id);
+    const bal = round(Math.abs(i.total) - i.paid_amount);
+    const key = i.kind === 'AR' ? 'ar' : i.kind === 'AP' ? 'ap' : i.total < 0 ? 'credit' : 'debit';
+    g[key] = round(g[key] + bal);
+    const signed = isReceivable(i) ? bal : -bal;
+    const days = Math.floor((Date.parse(asOf) - Date.parse(i.basis_date)) / 86400000);
+    const b = bucketOf(days);
+    g[b] = round(g[b] + signed);
+    g.count += 1;
+    if (!g.oldest || i.basis_date < g.oldest) g.oldest = i.basis_date;
+  }
+  for (const p of unappliedByParty(db)) {
+    if (!by.has(p.company_id)) continue;
+    by.get(p.company_id).onAccount = p.net; // + = we paid ahead (reduces what we owe), − = they paid ahead
+  }
+  let parties = [...by.values()].map((g) => ({ ...g, onAccount: g.onAccount || 0, net: round(g.ar + g.debit - g.credit - g.ap + (g.onAccount || 0)) }));
+  if (side === 'ar') parties = parties.filter((g) => g.ar + g.debit > 0);
+  if (side === 'ap') parties = parties.filter((g) => g.ap + g.credit > 0);
+  parties.sort((a, b) => Math.abs(b.net) - Math.abs(a.net));
+  const total = { ar: 0, debit: 0, credit: 0, ap: 0, onAccount: 0, net: 0, ...Object.fromEntries(BUCKETS.map((b) => [b, 0])) };
+  for (const g of parties) for (const k of Object.keys(total)) total[k] = round(total[k] + g[k]);
+  return { parties, total, asOf, basis, side };
+}
+
+function unappliedByParty(db) {
+  const rows = db.all(`SELECT p.company_id, p.direction, p.amount - COALESCE((SELECT SUM(a.amount) FROM payment_allocations a WHERE a.payment_id = p.id), 0) AS left
+    FROM payments p WHERE p.method <> 'NETTING'`);
+  const m = new Map();
+  for (const r of rows) {
+    if (r.left <= 0.004) continue;
+    m.set(r.company_id, round((m.get(r.company_id) || 0) + (r.direction === 'OUT' ? r.left : -r.left)));
+  }
+  return [...m.entries()].map(([company_id, net]) => ({ company_id, net }));
+}
+
+// ---------- review before sending ----------
+/** Mark an invoice / debit / credit note reviewed (or undo). Only reviewed items are emailed to the party. */
+function setReviewed(id, on, { db = store.db, userId = null } = {}) {
+  db.run(`UPDATE invoices SET reviewed_at = ${on ? "datetime('now')" : 'NULL'}, reviewed_by = ? WHERE id = ?`, on ? userId : null, id);
+}
+
 module.exports = {
   CHARGE_CODES, saveInvoice, getInvoice, listInvoices, voidInvoice, recordPayment, settleNetting,
   agentStatement, arAging, shipmentProfit, refreshStatus, addDays, payOnAccount, applyUnapplied, unappliedPayments,
   shipmentLines, profitReport, openItems, settleSelected,
+  partyStatement, agingSummary, setReviewed, KIND_LABEL, BUCKETS,
 };

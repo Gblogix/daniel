@@ -5,7 +5,8 @@ const S = require('../shipments');
 const A = require('../accounting');
 const notify = require('../notify');
 const company = require('../company');
-const { INVOICE_GENERATORS, invoiceFileName, esc } = require('../docs/templates');
+const I = require('../invoicing');
+const { INVOICE_GENERATORS, esc } = require('../docs/templates');
 
 const router = express.Router();
 const flash = (req, type, msg) => { req.session.flash = { type, msg }; };
@@ -84,90 +85,136 @@ router.post('/invoices/:id/void', auth.requireAccounting, (req, res) => {
   res.redirect(`/invoices/${req.params.id}`);
 });
 
-function renderInvoice(inv, userId) {
-  const s = inv.shipment_id ? S.find(inv.shipment_id, null) : null;
-  const user = userId ? store.db.get('SELECT name FROM users WHERE id = ?', userId) : null;
-  const prepared = inv.prepared_by ? store.db.get('SELECT name FROM users WHERE id = ?', inv.prepared_by) : null;
-  return INVOICE_GENERATORS[inv.kind](inv, { company: company.get(), shipment: s, preparedBy: prepared?.name || user?.name || '' });
-}
-
 router.get('/invoices/:id/preview', auth.requireAccounting, (req, res) => {
   const inv = A.getInvoice(Number(req.params.id));
   if (!inv || !INVOICE_GENERATORS[inv.kind]) return res.status(404).render('error', { title: 'Not found', message: 'No printable document.' });
   res.set('Content-Security-Policy', "default-src 'none'; style-src 'unsafe-inline'; img-src data:");
-  res.type('html').send(renderInvoice(inv, req.user.id));
+  res.type('html').send(I.renderInvoice(inv, req.user.id));
 });
 
-/** Issue the PDF (AR_INV12214_Unlockt.pdf / DC_DCN11664-NSC.pdf) and link it to the invoice. Reuses the current PDF unless `force`. */
-async function issue(inv, userId, { force = false } = {}) {
-  if (!force && inv.document_id) {
-    const d = store.db.get('SELECT * FROM documents WHERE id = ?', inv.document_id);
-    if (d) return d;
-  }
-  const html = renderInvoice(inv, userId);
-  const d = await notify.storeGenerated(store.db, {
-    shipmentId: inv.shipment_id, type: inv.kind, base: invoiceFileName(inv), html, visible: false, userId, refNo: inv.number,
-  });
-  store.db.run('UPDATE invoices SET document_id = ? WHERE id = ?', d.id, inv.id);
-  return d;
-}
 router.post('/invoices/:id/issue', auth.requireAccounting, async (req, res) => {
   const inv = A.getInvoice(Number(req.params.id));
-  const d = await issue(inv, req.user.id, { force: true });
+  const d = await I.issue(inv, req.user.id, { force: true });
   flash(req, 'ok', `${d.filename} issued`);
   res.redirect(`/invoices/${inv.id}`);
 });
 
-const billingTo = (inv) => (inv.billing_emails || inv.company_emails || '').split(/[,;\s]+/).filter((e) => /.+@.+\..+/.test(e));
-
-/** Email one D/N to the agent, or one AR invoice to the customer. */
-router.post('/invoices/:id/send', auth.requireAccounting, async (req, res) => {
+/** Mark reviewed / not reviewed. With "auto send reviewed" on, a reviewed item goes to its party right away. */
+router.post('/invoices/:id/review', auth.requireAccounting, async (req, res) => {
   const inv = A.getInvoice(Number(req.params.id));
-  const to = billingTo(inv);
-  if (!to.length) { flash(req, 'err', `No billing email for ${inv.company_name} — add it on the Parties page`); return res.redirect(`/invoices/${inv.id}`); }
-  if (inv.kind === 'AR') return sendArBatch(req, res, inv.company_id, [inv.id]);
-  const d = await issue(inv, req.user.id);
-  const refs = [...new Set([inv.agent_ref, inv.hbl_no, inv.mbl_no].filter(Boolean))].join(' // ');
-  await notify.queueEmail({
-    shipmentId: inv.shipment_id, kind: 'DEBIT_NOTE', to,
-    subject: `[GLOBALBRIDGE/NSC] ${inv.total < 0 ? 'C/N' : 'D/N'} ${inv.number}${refs ? ` // ${refs}` : ''}`,
-    html: `<p>Dear ${esc(inv.company_name)},</p><p>동 건 ${inv.total < 0 ? 'C/N' : 'D/N'} 전달 드립니다. / Please find attached our ${inv.total < 0 ? 'credit' : 'debit'} note <b>${esc(inv.number)}</b>
-      (USD ${Math.abs(inv.total).toLocaleString('en-US', { minimumFractionDigits: 2 })}${inv.total < 0 ? ', due to you' : ''}).</p>`,
-    documents: [d],
-  });
-  store.db.run("UPDATE invoices SET sent_at = datetime('now') WHERE id = ?", inv.id);
-  flash(req, 'ok', `${inv.number} emailed to ${to.join(', ')}`);
-  res.redirect(`/invoices/${inv.id}`);
+  if (!inv) return res.status(404).end();
+  const on = req.body.on === '1';
+  A.setReviewed(inv.id, on, { userId: req.user.id });
+  let msg = on ? `${inv.number} marked reviewed` : `${inv.number} review removed`;
+  if (on && inv.kind !== 'AP' && !inv.sent_at && store.db.setting('auto_send_reviewed') === '1') msg += ` — ${I.summarize(await I.send([inv.id], { userId: req.user.id }))}`;
+  flash(req, 'ok', msg);
+  res.redirect(safeBack(req.body.back) || `/invoices/${inv.id}`);
+});
+
+/** Email one reviewed invoice / D/N / C/N to its party. */
+router.post('/invoices/:id/send', auth.requireAccounting, async (req, res) => {
+  const r = await I.send([Number(req.params.id)], { userId: req.user.id });
+  flash(req, r.sent.length ? 'ok' : 'err', I.summarize(r));
+  res.redirect(safeBack(req.body.back) || `/invoices/${req.params.id}`);
+});
+
+/** AR batch from the aging list: one email per customer; only reviewed items go out. */
+router.post('/billing/send-batch', auth.requireAccounting, async (req, res) => {
+  const r = await I.send(arr(req.body.invoice_ids), { userId: req.user.id });
+  flash(req, r.sent.length ? 'ok' : 'err', I.summarize(r));
+  res.redirect(safeBack(req.body.back) || '/billing');
 });
 
 /**
- * AR batch as the accounting team sends it: one email per customer, subject "Invoice - <Customer>", one line per
- * invoice "INV-12285 : <memo> // HBL# … // CTN# …", PDFs attached.
+ * File-level review: tick "Reviewed" on each invoice / D/N / C/N of the shipment, then (optionally) email every
+ * reviewed, unsent item to the file's parties — AR to the customer, D/N or C/N to the agent.
  */
-async function sendArBatch(req, res, companyId, ids) {
-  const invs = ids.map((id) => A.getInvoice(Number(id))).filter((i) => i && i.kind === 'AR' && i.company_id === Number(companyId));
-  if (!invs.length) { flash(req, 'err', 'Nothing to send'); return res.redirect('/billing'); }
-  const to = billingTo(invs[0]);
-  if (!to.length) { flash(req, 'err', `No billing email for ${invs[0].company_name}`); return res.redirect('/billing'); }
-  const docs = [];
-  const lines = [];
-  for (const inv of invs) {
-    docs.push(await issue(inv, req.user.id));
-    const s = inv.shipment_id ? S.find(inv.shipment_id, null) : null;
-    const refs = [s?.ci_invoice_no && `CI# ${s.ci_invoice_no}`, s?.hbl_no && `HBL# ${s.hbl_no}`, s?.containers?.length && `CTN# ${s.containers.map((c) => c.container_no).join(', ')}`].filter(Boolean);
-    lines.push(`<li><b>${esc(inv.number)}</b> : ${esc(inv.memo || s?.commodity || '')}${refs.length ? ` // ${esc(refs.join(' // '))}` : ''} — USD ${inv.total.toLocaleString('en-US', { minimumFractionDigits: 2 })}, due ${esc(inv.due_date)}</li>`);
+router.post('/shipments/:id/invoices/review', auth.requireAccounting, async (req, res) => {
+  const sid = Number(req.params.id);
+  const checked = new Set(arr(req.body.reviewed).map(Number));
+  const items = store.db.all("SELECT id, reviewed_at, sent_at FROM invoices WHERE shipment_id = ? AND kind IN ('AR', 'DN') AND status <> 'VOID'", sid);
+  let changed = 0;
+  for (const i of items) {
+    if (i.sent_at) continue; // already sent: leave as is
+    const on = checked.has(i.id);
+    if (on !== Boolean(i.reviewed_at)) { A.setReviewed(i.id, on, { userId: req.user.id }); changed += 1; }
   }
-  await notify.queueEmail({
-    kind: 'AR_INVOICE', to, subject: `Invoice - ${invs[0].company_name}`,
-    html: `<p>Hello,</p><p>배송 완료된 인보이스 건 전달 드립니다. / Please find attached the invoice(s) below.</p><ul>${lines.join('')}</ul>
-      <p>Total USD ${invs.reduce((a, i) => a + i.balance, 0).toLocaleString('en-US', { minimumFractionDigits: 2 })}</p>`,
-    documents: docs,
-  });
-  for (const inv of invs) store.db.run("UPDATE invoices SET sent_at = datetime('now') WHERE id = ?", inv.id);
-  flash(req, 'ok', `${invs.length} invoice(s) emailed to ${to.join(', ')}`);
-  return res.redirect(req.body.back || '/billing');
+  let msg = `Review saved (${changed} changed)`;
+  if (req.body.send === '1' || store.db.setting('auto_send_reviewed') === '1') {
+    const ready = store.db.all("SELECT id FROM invoices WHERE shipment_id = ? AND kind IN ('AR', 'DN') AND status = 'OPEN' AND reviewed_at IS NOT NULL AND sent_at IS NULL", sid).map((x) => x.id);
+    msg += ready.length ? ` — ${I.summarize(await I.send(ready, { userId: req.user.id }))}` : ' — nothing reviewed and unsent';
+  }
+  flash(req, 'ok', msg);
+  res.redirect(`/shipments/${sid}#accounting`);
+});
+
+const safeBack = (v) => (typeof v === 'string' && /^\/(?!\/)/.test(v) ? v : null);
+
+// ---------- aging summary: every party, A/R · Debit · Credit · A/P ----------
+router.get('/billing/aging', auth.requireAccounting, async (req, res) => {
+  const basis = ['due', 'invoice', 'eta'].includes(req.query.basis) ? req.query.basis : 'due';
+  const side = ['all', 'ar', 'ap'].includes(req.query.side) ? req.query.side : 'all';
+  const asOf = /^\d{4}-\d{2}-\d{2}$/.test(req.query.as_of || '') ? req.query.as_of : new Date().toISOString().slice(0, 10);
+  const r = A.agingSummary({ basis, side, asOf });
+  if (req.query.format === 'xlsx') {
+    const ExcelJS = require('exceljs');
+    const wb = new ExcelJS.Workbook();
+    const ws = wb.addWorksheet('Aging');
+    ws.addRow([`${company.get().name} — Aging summary as of ${asOf} (by ${I.BASIS_LABEL[basis]})`]).font = { bold: true };
+    ws.addRow([]);
+    ws.addRow(['Party', 'Type', 'A/R', 'Debit', 'Credit', 'A/P', 'On account', 'Net (+ due to us)', 'Current', '1-30', '31-60', '61-90', '90+', 'Items', 'Oldest']).font = { bold: true };
+    for (const g of r.parties) ws.addRow([g.name, g.type, g.ar, g.debit, g.credit, g.ap, g.onAccount, g.net, g.current, g.d30, g.d60, g.d90, g.d90p, g.count, g.oldest]);
+    const t = r.total;
+    ws.addRow(['Total', '', t.ar, t.debit, t.credit, t.ap, t.onAccount, t.net, t.current, t.d30, t.d60, t.d90, t.d90p]).font = { bold: true };
+    ws.getColumn(1).width = 34;
+    for (let c = 3; c <= 13; c += 1) { ws.getColumn(c).numFmt = '#,##0.00;[Red]-#,##0.00'; ws.getColumn(c).width = 13; }
+    res.set('Content-Disposition', `attachment; filename="Aging_${asOf}.xlsx"`);
+    return res.type('application/vnd.openxmlformats-officedocument.spreadsheetml.sheet').send(Buffer.from(await wb.xlsx.writeBuffer()));
+  }
+  res.render('billing/aging', { title: 'Aging report', r, basis, side, asOf, BASIS_LABEL: I.BASIS_LABEL });
+});
+
+// ---------- statement of account for any party (by invoice date or ETA) ----------
+function statementFor(req) {
+  const party = store.db.get('SELECT * FROM companies WHERE id = ?', Number(req.params.id));
+  if (!party) return {};
+  const q = { ...req.query, ...req.body };
+  const opts = {
+    basis: ['invoice', 'eta', 'due'].includes(q.basis) ? q.basis : 'invoice',
+    from: /^\d{4}-\d{2}-\d{2}$/.test(q.from || '') ? q.from : '',
+    to: /^\d{4}-\d{2}-\d{2}$/.test(q.to || '') ? q.to : '',
+    status: q.status === 'all' ? 'all' : 'open',
+  };
+  return { party, opts, st: A.partyStatement(party.id, opts) };
 }
-router.post('/billing/send-batch', auth.requireAccounting, (req, res) => sendArBatch(req, res, Number(req.body.company_id), arr(req.body.invoice_ids)));
+router.get('/billing/parties/:id/statement', auth.requireAccounting, async (req, res) => {
+  const { party, opts, st } = statementFor(req);
+  if (!party) return res.status(404).render('error', { title: 'Not found', message: 'Party not found.' });
+  const base = `SOA_${String(party.short_name || party.name).replace(/[^A-Za-z0-9]+/g, '_')}_${st.asOf}`;
+  if (req.query.format === 'print') {
+    res.set('Content-Security-Policy', "default-src 'none'; style-src 'unsafe-inline'; img-src data:");
+    return res.type('html').send(I.statementHtml(party, st));
+  }
+  if (req.query.format === 'pdf') {
+    const pdf = await require('../docs/pdf').htmlToPdf(I.statementHtml(party, st));
+    if (!pdf) return res.status(503).render('error', { title: 'PDF unavailable', message: 'Chromium is not installed — use Print instead.' });
+    res.set('Content-Disposition', `attachment; filename="${base}.pdf"`);
+    return res.type('application/pdf').send(pdf);
+  }
+  if (req.query.format === 'xlsx') {
+    res.set('Content-Disposition', `attachment; filename="${base}.xlsx"`);
+    return res.type('application/vnd.openxmlformats-officedocument.spreadsheetml.sheet').send(await I.statementWorkbook(party, st));
+  }
+  res.render('billing/statement', { title: `Statement — ${party.name}`, party, st, opts, emails: I.emailsOf(party), BASIS_LABEL: I.BASIS_LABEL });
+});
+router.post('/billing/parties/:id/statement/send', auth.requireAccounting, async (req, res) => {
+  const { party, opts, st } = statementFor(req);
+  if (!party) return res.status(404).end();
+  const to = String(req.body.to || '').split(/[,;\s]+/).filter((e) => /.+@.+\..+/.test(e));
+  const sent = await I.sendStatement(party, st, { userId: req.user.id, to });
+  flash(req, 'ok', `Statement (${st.items.length} items) emailed to ${sent.join(', ')}`);
+  res.redirect(`/billing/parties/${party.id}/statement?${new URLSearchParams(opts)}`);
+});
 
 // ---------- payments ----------
 router.post('/billing/payments', auth.requireAccounting, (req, res) => {

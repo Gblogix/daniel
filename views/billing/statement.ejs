@@ -1,0 +1,56 @@
+<%- include('../partials/head') %>
+<% const m = (v) => fmtNum(v, 2); const t = st.totals; const qs = (extra) => new URLSearchParams({ ...opts, ...extra }).toString(); %>
+<div class="pagehead"><div><h1 style="margin-bottom:4px">Statement of account</h1>
+  <div class="muted"><a href="/billing/parties/<%= party.id %>"><b><%= party.name %></b></a> · <%= party.type %></div></div>
+  <div class="actions">
+    <a class="btn secondary" href="?<%= qs({ format: 'print' }) %>" target="_blank">🖨 Print view</a>
+    <a class="btn secondary" href="?<%= qs({ format: 'pdf' }) %>">⬇ PDF</a>
+    <a class="btn secondary" href="?<%= qs({ format: 'xlsx' }) %>">⬇ Excel</a>
+  </div>
+</div>
+<form class="filters" method="get">
+  <div class="seg"><% [['invoice', 'By invoice date'], ['eta', 'By ETA'], ['due', 'By due date']].forEach(([k, l]) => { %><a class="<%= opts.basis === k ? 'on' : '' %>" href="?<%= qs({ basis: k }) %>"><%= l %></a><% }) %></div>
+  <label class="small">From <input type="date" name="from" value="<%= opts.from %>"></label>
+  <label class="small">To <input type="date" name="to" value="<%= opts.to %>"></label>
+  <select name="status"><option value="open" <%= opts.status === 'open' ? 'selected' : '' %>>Open items</option><option value="all" <%= opts.status === 'all' ? 'selected' : '' %>>All (incl. settled)</option></select>
+  <input type="hidden" name="basis" value="<%= opts.basis %>">
+  <button class="btn secondary">Show</button>
+</form>
+<div class="stat-row">
+  <div class="stat"><span>Debit (+ due to us)</span><b><%= m(t.debit) %></b></div>
+  <div class="stat"><span>Credit (− due to them)</span><b><%= m(t.credit) %></b></div>
+  <div class="stat"><span>Paid</span><b><%= m(t.paid) %></b></div>
+  <div class="stat strong"><span>Balance</span><b class="<%= t.open < 0 ? 'neg' : 'pos' %>"><%= m(Math.abs(t.open)) %></b><em><%= t.open >= 0 ? 'due to us' : `due to ${party.name}` %></em></div>
+</div>
+<div class="card flush">
+  <div class="tablewrap"><table class="t num">
+    <thead><tr><th><%= BASIS_LABEL[opts.basis] %></th><th>Doc no.</th><th>Type</th><th>File (Shipper · Container)</th><th>ETA</th><th>Due</th>
+      <th class="right">Debit</th><th class="right">Credit</th><th class="right">Paid</th><th class="right">Open</th><th class="right">Balance</th><th>Sent</th></tr></thead>
+    <tbody>
+    <% if (!st.items.length) { %><tr><td colspan="12" class="muted">No items for this period.</td></tr><% } %>
+    <% st.items.forEach((i) => { %><tr>
+      <td class="nowrap"><%= i.basis_date %></td><td class="nowrap"><a href="/invoices/<%= i.id %>"><%= i.number %></a></td><td class="small"><%= i.type %></td>
+      <td><% if (i.shipment_id) { %><a href="/shipments/<%= i.shipment_id %>"><%= S.fileName(i) %></a><br><span class="muted small mono"><%= i.ref_no %><%= i.hbl_no ? ` · ${i.hbl_no}` : '' %></span><% } %></td>
+      <td class="nowrap"><%= i.eta || '' %></td><td class="nowrap <%= i.status === 'OPEN' && i.days_past_due > 0 ? 'late' : '' %>"><%= i.due_date || '' %></td>
+      <td class="right"><%= i.debit ? m(i.debit) : '' %></td><td class="right"><%= i.credit ? m(i.credit) : '' %></td><td class="right"><%= i.paid_amount ? m(i.paid_amount) : '' %></td>
+      <td class="right"><b class="<%= i.open < 0 ? 'neg' : '' %>"><%= m(i.open) %></b></td><td class="right"><%= m(i.running) %></td>
+      <td class="small"><%= i.kind === 'AP' ? '' : i.sent_at ? fmtDate(i.sent_at) : '—' %></td></tr><% }) %>
+    </tbody>
+    <tfoot><tr><td colspan="6"><b>Total</b></td><td class="right"><b><%= m(t.debit) %></b></td><td class="right"><b><%= m(t.credit) %></b></td><td class="right"><b><%= m(t.paid) %></b></td><td class="right"><b><%= m(t.open) %></b></td><td colspan="2"></td></tr></tfoot>
+  </table></div>
+</div>
+<div class="card">
+  <h2>Aging of this statement</h2>
+  <div class="stat-row compact">
+    <% [['current', 'Current'], ['d30', '1–30 days'], ['d60', '31–60 days'], ['d90', '61–90 days'], ['d90p', 'Over 90 days']].forEach(([k, l]) => { %><div class="stat"><span><%= l %></span><b class="<%= k === 'd90p' && st.aging[k] ? 'late' : '' %>"><%= m(st.aging[k]) %></b></div><% }) %>
+  </div>
+</div>
+<form class="card" method="post" action="/billing/parties/<%= party.id %>/statement/send">
+  <input type="hidden" name="_csrf" value="<%= csrf %>">
+  <% Object.entries(opts).forEach(([k, v]) => { %><input type="hidden" name="<%= k %>" value="<%= v %>"><% }) %>
+  <h2>Email this statement</h2>
+  <div class="actions"><input name="to" value="<%= emails.join(', ') %>" placeholder="billing email(s)" style="flex:1;min-width:260px">
+    <button class="btn" data-confirm="Email this statement (PDF + Excel) to <%= party.name %>?" <%= st.items.length ? '' : 'disabled' %>>✉ Send SOA (PDF + Excel)</button></div>
+  <p class="muted small">Recipients default to the party's billing emails (Parties page). The PDF and Excel are saved with the email in the Outbox.</p>
+</form>
+<%- include('../partials/foot') %>

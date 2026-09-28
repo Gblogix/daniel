@@ -1,7 +1,7 @@
 <%- include('../partials/head') %>
 <% const m = (v) => fmtNum(v, 2); %>
 <div class="pagehead"><h1>Billing</h1>
-  <div class="actions"><a class="btn secondary" href="/billing/profit">📊 P&amp;L by file</a><a class="btn" href="/invoices/new?kind=AR">+ AR invoice</a><a class="btn secondary" href="/invoices/new?kind=DN">+ D/N to agent</a><a class="btn secondary" href="/invoices/new?kind=AP">+ Vendor bill (AP)</a></div>
+  <div class="actions"><a class="btn secondary" href="/billing/aging">📋 Aging report</a><a class="btn secondary" href="/billing/profit">📊 P&amp;L by file</a><a class="btn" href="/invoices/new?kind=AR">+ AR invoice</a><a class="btn secondary" href="/invoices/new?kind=DN">+ D/N to agent</a><a class="btn secondary" href="/invoices/new?kind=AP">+ Vendor bill (AP)</a></div>
 </div>
 
 <div class="card" id="aging">
@@ -12,9 +12,9 @@
     <% aging.forEach((g) => { %>
       <tr><td><details><summary><b><%= g.company_name %></b> <a class="small" href="/billing/parties/<%= g.company_id %>">check &amp; settle →</a> <span class="muted small">(<%= g.invoices.length %>)</span></summary>
         <form method="post" action="/billing/send-batch" style="margin-top:6px"><input type="hidden" name="_csrf" value="<%= csrf %>"><input type="hidden" name="company_id" value="<%= g.company_id %>">
-        <table class="t small"><% g.invoices.forEach((i) => { %><tr><td><input type="checkbox" name="invoice_ids" value="<%= i.id %>" <%= i.sent_at ? '' : 'checked' %>></td>
+        <table class="t small"><% g.invoices.forEach((i) => { %><tr><td><input type="checkbox" name="invoice_ids" value="<%= i.id %>" <%= !i.sent_at && i.reviewed_at ? 'checked' : '' %>></td>
           <td><a href="/invoices/<%= i.id %>"><%= i.number %></a></td><td><%= i.hbl_no || i.ref_no || '' %></td><td>due <%= i.due_date %></td>
-          <td class="right"><%= m(i.balance) %></td><td><%= i.days_past_due > 0 ? `${i.days_past_due}d late` : '' %></td><td><%= i.sent_at ? 'sent' : '' %></td></tr><% }) %></table>
+          <td class="right"><%= m(i.balance) %></td><td><%= i.days_past_due > 0 ? `${i.days_past_due}d late` : '' %></td><td><%= i.sent_at ? 'sent' : i.reviewed_at ? '✔ reviewed' : 'not reviewed' %></td></tr><% }) %></table>
         <button class="btn small" style="margin-top:6px">✉ Email selected as "Invoice - <%= g.company_name %>"</button></form></details></td>
         <td class="right"><%= m(g.current) %></td><td class="right"><%= m(g.d30) %></td><td class="right"><%= m(g.d60) %></td><td class="right"><%= m(g.d90) %></td>
         <td class="right" style="<%= g.d90p ? 'color:var(--red)' : '' %>"><%= m(g.d90p) %></td><td class="right"><b><%= m(g.total) %></b></td></tr>

@@ -1,0 +1,45 @@
+<%- include('../partials/head') %>
+<% const m = (v) => (v ? fmtNum(v, 2) : '<span class="zero">–</span>'); const t = r.total; %>
+<div class="pagehead"><div><h1 style="margin-bottom:4px">Aging report</h1>
+  <p class="muted small" style="margin:0">Every open A/R, debit note, credit note and A/P by party. Net: + = they owe us, − = we owe them.</p></div>
+  <div class="actions"><a class="btn secondary" href="?<%= new URLSearchParams({ basis, side, as_of: asOf, format: 'xlsx' }) %>">⬇ Excel</a></div>
+</div>
+<form class="filters" method="get">
+  <label class="small">As of <input type="date" name="as_of" value="<%= asOf %>"></label>
+  <div class="seg"><% [['due', 'By due date'], ['invoice', 'By invoice date'], ['eta', 'By ETA']].forEach(([k, l]) => { %><a class="<%= basis === k ? 'on' : '' %>" href="?<%= new URLSearchParams({ basis: k, side, as_of: asOf }) %>"><%= l %></a><% }) %></div>
+  <div class="seg"><% [['all', 'All'], ['ar', 'Receivable'], ['ap', 'Payable']].forEach(([k, l]) => { %><a class="<%= side === k ? 'on' : '' %>" href="?<%= new URLSearchParams({ basis, side: k, as_of: asOf }) %>"><%= l %></a><% }) %></div>
+  <input type="hidden" name="basis" value="<%= basis %>"><input type="hidden" name="side" value="<%= side %>">
+  <button class="btn secondary">Show</button>
+</form>
+<div class="stat-row">
+  <div class="stat"><span>A/R invoices</span><b><%- m(t.ar) %></b></div>
+  <div class="stat"><span>Debit notes</span><b><%- m(t.debit) %></b></div>
+  <div class="stat"><span>Credit notes</span><b><%- m(t.credit) %></b></div>
+  <div class="stat"><span>A/P vendor bills</span><b><%- m(t.ap) %></b></div>
+  <div class="stat strong"><span>Net position</span><b class="<%= t.net < 0 ? 'neg' : 'pos' %>"><%= fmtNum(Math.abs(t.net), 2) %></b><em><%= t.net >= 0 ? 'owed to us' : 'we owe' %></em></div>
+</div>
+<div class="card flush">
+  <div class="tablewrap"><table class="t num aging">
+    <thead><tr><th>Party</th><th class="right">A/R</th><th class="right">Debit</th><th class="right">Credit</th><th class="right">A/P</th><th class="right" title="Payments not yet applied">On acct.</th>
+      <th class="right sep">Net</th><th class="right sep">Current</th><th class="right">1–30</th><th class="right">31–60</th><th class="right">61–90</th><th class="right">90+</th><th></th></tr></thead>
+    <tbody>
+    <% if (!r.parties.length) { %><tr><td colspan="13" class="muted">No open items.</td></tr><% } %>
+    <% r.parties.forEach((g) => { %>
+      <tr>
+        <td><a href="/billing/parties/<%= g.company_id %>"><b><%= g.name %></b></a><br><span class="muted small"><%= g.type %> · <%= g.count %> item<%= g.count === 1 ? '' : 's' %> · oldest <%= g.oldest || '' %></span></td>
+        <td class="right"><%- m(g.ar) %></td><td class="right"><%- m(g.debit) %></td><td class="right"><%- m(-g.credit) %></td><td class="right"><%- m(-g.ap) %></td><td class="right"><%- m(g.onAccount) %></td>
+        <td class="right sep"><b class="<%= g.net < 0 ? 'neg' : 'pos' %>"><%= fmtNum(g.net, 2) %></b></td>
+        <td class="right sep"><%- m(g.current) %></td><td class="right"><%- m(g.d30) %></td><td class="right"><%- m(g.d60) %></td><td class="right"><%- m(g.d90) %></td>
+        <td class="right <%= g.d90p ? 'late' : '' %>"><%- m(g.d90p) %></td>
+        <td class="nowrap"><a class="btn secondary small" href="/billing/parties/<%= g.company_id %>/statement?basis=<%= basis === 'due' ? 'invoice' : basis %>">SOA</a>
+          <a class="btn secondary small" href="/billing/parties/<%= g.company_id %>">Settle</a></td>
+      </tr>
+    <% }) %>
+    </tbody>
+    <% if (r.parties.length) { %><tfoot><tr><td><b>Total</b></td><td class="right"><%- m(t.ar) %></td><td class="right"><%- m(t.debit) %></td><td class="right"><%- m(-t.credit) %></td><td class="right"><%- m(-t.ap) %></td>
+      <td class="right"><%- m(t.onAccount) %></td><td class="right sep"><b class="<%= t.net < 0 ? 'neg' : 'pos' %>"><%= fmtNum(t.net, 2) %></b></td>
+      <td class="right sep"><%- m(t.current) %></td><td class="right"><%- m(t.d30) %></td><td class="right"><%- m(t.d60) %></td><td class="right"><%- m(t.d90) %></td><td class="right"><%- m(t.d90p) %></td><td></td></tr></tfoot><% } %>
+  </table></div>
+</div>
+<p class="muted small">Buckets show the net per party, counted from the <%= BASIS_LABEL[basis].toLowerCase() %>. Credit notes and vendor bills are shown as negatives.</p>
+<%- include('../partials/foot') %>

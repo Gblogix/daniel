@@ -331,10 +331,43 @@ ${refBlock(s, inv, `<tr><td style="width:36%">OUR FILING NO.</td><td style="widt
   return doc(`${isCredit ? 'Credit' : 'Debit'} Note ${inv.number}`, '', body);
 }
 
+// ---------------------------------------------------------------------------------------------------------------
+// STATEMENT OF ACCOUNT (any party: customer, agent, vendor) — by invoice date or ETA
+function statementOfAccount({ company: co, party, st }) {
+  const S = require('../shipments');
+  const basis = { invoice: 'INVOICE DATE', eta: 'ETA', due: 'DUE DATE' }[st.basis] || 'INVOICE DATE';
+  const box = (k, v) => `<tr><td style="width:44%;font-weight:700;font-size:11px">${k}</td><td style="font-size:11px">${v || ''}</td></tr>`;
+  const t = st.totals;
+  const dueTo = t.open >= 0 ? co.name : party.name;
+  const rows = st.items.map((i) => `<tr>
+    <td>${us(i.basis_date)}</td><td>${esc(i.number)}</td><td>${esc(i.type)}</td>
+    <td>${up(i.shipment_id ? S.fileName(i) : i.memo || '')}<div style="color:#555">${esc([i.hbl_no && `HBL ${i.hbl_no}`, i.mbl_no && `MBL ${i.mbl_no}`, i.agent_ref && `REF ${i.agent_ref}`].filter(Boolean).join(' / '))}</div></td>
+    <td>${us(i.eta)}</td><td>${us(i.due_date)}</td>
+    <td class="r">${i.debit ? n(i.debit) : ''}</td><td class="r">${i.credit ? n(i.credit) : ''}</td><td class="r">${i.paid_amount ? n(i.paid_amount) : ''}</td>
+    <td class="r"><b>${n(i.open)}</b></td><td class="r">${n(i.running)}</td></tr>`).join('');
+  const ag = st.aging;
+  const body = `${invoiceHeader(co, 'STATEMENT OF ACCOUNT', 'AS OF', us(st.asOf))}
+<table style="margin-top:10px;table-layout:fixed;border-bottom:1px solid #000"><tr>
+  <td style="width:57%"><table class="nob"><tr><td style="width:14%">TO :</td><td style="font-size:11px">${nl(String([party.name, party.address].filter(Boolean).join('\n')).toUpperCase())}</td></tr></table></td>
+  <td><table class="b">${box('BASIS', basis)}${box('PERIOD', st.from || st.to ? `${us(st.from) || '…'} – ${us(st.to) || '…'}` : 'ALL')}
+    ${box('ITEMS', `${st.items.length} · ${st.status === 'open' ? 'OPEN ONLY' : 'ALL (INCL. SETTLED)'}`)}${box('CURRENCY', 'USD')}</table></td></tr></table>
+<table class="b soa" style="margin-top:10px"><tr><th>${basis}</th><th>DOC NO.</th><th>TYPE</th><th>FILE / B/L</th><th>ETA</th><th>DUE</th>
+  <th class="r">DEBIT(+)</th><th class="r">CREDIT(-)</th><th class="r">PAID</th><th class="r">OPEN</th><th class="r">BALANCE</th></tr>
+  ${rows || '<tr><td colspan="11" class="c">No items</td></tr>'}
+  <tr><td colspan="6" class="r"><b>TOTAL</b></td><td class="r"><b>${n(t.debit)}</b></td><td class="r"><b>${n(t.credit)}</b></td><td class="r"><b>${n(t.paid)}</b></td><td class="r"><b>${n(t.open)}</b></td><td></td></tr></table>
+<table style="margin-top:8px;border-top:1px solid #000;border-bottom:3px double #000"><tr><td style="font-size:12px"><b>BALANCE DUE TO &nbsp;${up(dueTo)}</b></td>
+  <td class="c" style="width:10%"><b>USD</b></td><td class="r" style="width:18%;font-size:13px"><b>${n(Math.abs(t.open))}</b></td></tr></table>
+<table class="b" style="margin-top:10px"><tr><th class="c">CURRENT</th><th class="c">1–30 DAYS</th><th class="c">31–60 DAYS</th><th class="c">61–90 DAYS</th><th class="c">OVER 90</th></tr>
+  <tr><td class="r">${n(ag.current)}</td><td class="r">${n(ag.d30)}</td><td class="r">${n(ag.d60)}</td><td class="r">${n(ag.d90)}</td><td class="r">${n(ag.d90p)}</td></tr></table>
+<table class="b" style="margin-top:10px"><tr><td class="c" style="width:12%;vertical-align:middle"><b>REMARK</b></td><td class="small" style="height:54px">${remitBlock(co)}<br>
+  + = amount due to ${esc(co.name)} · − = amount due to ${esc(party.name)}. Please advise of any discrepancy.</td></tr></table>`;
+  return doc(`Statement of Account ${party.name}`, '.soa td,.soa th{font-size:9.5px;padding:3px 4px}@page{size:letter landscape;margin:10mm}', body);
+}
+
 const GENERATORS = { AN: arrivalNotice, DO: deliveryOrder, ATME: authorityToMakeEntry };
 const INVOICE_GENERATORS = { AR: arInvoice, DN: debitNote };
 
 module.exports = {
   GENERATORS, INVOICE_GENERATORS, DOC_TITLES, FILE_PREFIX, esc, docRef, fileName, invoiceFileName,
-  arrivalNotice, deliveryOrder, authorityToMakeEntry, arInvoice, debitNote,
+  arrivalNotice, deliveryOrder, authorityToMakeEntry, arInvoice, debitNote, statementOfAccount,
 };

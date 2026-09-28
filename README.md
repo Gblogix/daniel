@@ -137,6 +137,13 @@ Staff sign in to **/app**: ☰ opens the menu (Main, Shipments, Documents, Accou
   and D/Ns line by line; revenue / cost / profit / margin per file. **Billing › P&L by file**: by month / customer, Excel export.
 * **Check & settle** (Billing › a vendor or customer): every open invoice with its lines, a checkbox per invoice, editable
   amount for partial payments; checking both sides with an agent nets them off.
+* **Review before sending**: every AR invoice / D/N / C/N has a *Reviewed* tick (file page › Review & send, or the
+  invoice page). **Save & send reviewed** emails the reviewed items to the file's parties — AR batched per customer,
+  D/N / C/N to the agent. Editing an item clears its review. Optional: Automation › send as soon as reviewed.
+* **Statement of account for any party** (customer, agent, vendor): by invoice date, ETA or due date, period, open / all;
+  print, PDF, Excel, or email (PDF + Excel) to the party's billing emails.
+* **Aging report**: every party with open items — A/R, Debit, Credit, A/P, on-account, net, and current / 1-30 /
+  31-60 / 61-90 / 90+ — by due date, invoice date or ETA; Excel export.
 * **Closing files**: once the delivered file's customer invoices (and agent D/Ns) are paid, it closes automatically and moves to
   **History**. A new invoice reopens it. Accounting staff can also close / reopen by hand.
   Delivered files that are *not invoiced*, *invoice not sent*, *awaiting payment* or *overdue* are flagged on the dashboard,

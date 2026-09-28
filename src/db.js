@@ -308,7 +308,7 @@ const MIGRATIONS = {
   },
   cargo_items: { unit_price: 'REAL', amount: 'REAL', source: 'TEXT' },
   companies: { billing_emails: 'TEXT', terms_days: 'INTEGER', short_name: 'TEXT' },
-  invoices: { document_id: 'INTEGER' },
+  invoices: { document_id: 'INTEGER', reviewed_at: 'TEXT', reviewed_by: 'INTEGER' },
   users: { can_accounting: 'INTEGER NOT NULL DEFAULT 0', favorites: 'TEXT', perms: 'TEXT' },
 };
 
@@ -327,6 +327,7 @@ const DEFAULT_SETTINGS = {
   lfd_alerts: '1',              // daily LFD / pickup digest to staff
   smartsheet_sync: '1',         // pull shared Smartsheet sheets (needs SMARTSHEET_TOKEN)
   smartsheet_push: '0',         // write ETA back into the customer-shared sheets (opt-in)
+  auto_send_reviewed: '0',      // email an invoice / D/N to its party as soon as it is marked reviewed
   // Next document numbers (continue from the current system; admin can change them)
   seq_OI: '11828', seq_AI: '10009', seq_OTH: '10582', seq_INV: '12215', seq_DCN: '11665',
   ar_terms_days: '25',
