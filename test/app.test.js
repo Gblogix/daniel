@@ -85,9 +85,9 @@ test('unchanged save reports no changes', () => {
 });
 
 test('ref numbers are sequential per month', () => {
-  assert.equal(S.nextRefNo(store.db, 'FCL'), 'OI-11831'); // 3 ocean demo files took 11828-11830
-  assert.equal(S.nextRefNo(store.db, 'AIR'), 'AI-10011');
-  assert.equal(S.nextRefNo(store.db, 'TRUCK'), 'OTH0010582');
+  assert.equal(S.nextRefNo(store.db, 'FCL'), 'GBL-OI10004'); // 3 ocean demo files took 10001-10003
+  assert.equal(S.nextRefNo(store.db, 'AIR'), 'GBL-AI10003');
+  assert.equal(S.nextRefNo(store.db, 'TRUCK'), 'GBL-OT10001');
 });
 
 test('air D/O goes out with the ATME; re-issued A/N is marked _Rev', async () => {

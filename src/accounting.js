@@ -73,8 +73,9 @@ function saveInvoice(data, { db = store.db, userId = null, id = null } = {}) {
       db.run('UPDATE invoices SET document_id = NULL, reviewed_at = NULL, reviewed_by = NULL WHERE id = ?', id); // changed: re-issue the PDF and review again
       db.run('DELETE FROM invoice_lines WHERE invoice_id = ?', id);
     } else {
-      const number = kind === 'AR' ? `INV-${company.nextNumber('INV', db)}`
-        : kind === 'DN' ? `DCN-${company.nextNumber('DCN', db)}`
+      // A/R GBL-INV10001, debit note GBL-DN10001, credit note (negative D/N) GBL-CN10001; vendor bills keep their own no.
+      const number = kind === 'AR' ? company.nextRef('INV', { db, table: 'invoices', column: 'number' })
+        : kind === 'DN' ? company.nextRef(total < 0 ? 'CN' : 'DN', { db, table: 'invoices', column: 'number' })
           : (data.number || `AP-${Date.now().toString(36).toUpperCase()}`);
       const cols = ['number', 'prepared_by', ...Object.keys(row)];
       id = Number(db.run(`INSERT INTO invoices (${cols.join(',')}) VALUES (${cols.map(() => '?').join(',')})`, number, userId, ...Object.values(row)).lastInsertRowid);

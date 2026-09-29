@@ -266,3 +266,10 @@ document.querySelectorAll('[data-check-dups]').forEach((b) => b.addEventListener
   b.form.querySelectorAll('[data-dup]').forEach((c) => { c.checked = true; });
   b.form.dispatchEvent(new Event('change', { bubbles: true }));
 }));
+
+// Copy a reference number (file ref, invoice no.) with one click.
+document.addEventListener('click', (e) => {
+  const b = e.target.closest('[data-copy]');
+  if (!b) return;
+  navigator.clipboard?.writeText(b.dataset.copy).then(() => { const t = b.textContent; b.textContent = '✔'; setTimeout(() => { b.textContent = t; }, 1200); }).catch(() => {});
+});

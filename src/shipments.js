@@ -65,12 +65,10 @@ function normalizeInput(input) {
   return out;
 }
 
-/** Filing number in the office format: OI-11828 (ocean import), AI-10009 (air import), OTH0010582 (trucking / other). */
+/** The file's unique system reference: GBL-OI10001 (ocean), GBL-AI10001 (air), GBL-OT10001 (trucking / other). */
 function nextRefNo(db, mode = 'FCL') {
-  const company = require('./company');
-  if (mode === 'AIR') return `AI-${company.nextNumber('AI', db)}`;
-  if (mode === 'TRUCK' || mode === 'OTHER') return `OTH${String(company.nextNumber('OTH', db)).padStart(7, '0')}`;
-  return `OI-${company.nextNumber('OI', db)}`;
+  const code = mode === 'AIR' ? 'AI' : mode === 'TRUCK' || mode === 'OTHER' ? 'OT' : 'OI';
+  return require('./company').nextRef(code, { db, table: 'shipments', column: 'ref_no' });
 }
 
 function create(input, { db = store.db, userId } = {}) {

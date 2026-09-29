@@ -29,7 +29,7 @@ test('AR invoice: numbering, terms -> due date, totals from rate x qty', () => {
   const id = A.saveInvoice({ kind: 'AR', shipment_id: s.id, company_id: ids.unlockt, invoice_date: '2026-09-11', terms_days: 25,
     lines: [{ description: 'Ocean freight', rate: '8,100', qty: 3 }, { description: 'THC', rate: 210, qty: 3 }, { description: 'Handling charge', amount: 65 }, { description: '' }] });
   const inv = A.getInvoice(id);
-  assert.equal(inv.number, 'INV-12215');
+  assert.equal(inv.number, 'GBL-INV10001');
   assert.equal(inv.due_date, '2026-10-06');
   assert.equal(inv.total, 24995);
   assert.equal(inv.lines.length, 3);
@@ -41,7 +41,7 @@ test('D/N: debit minus credit; negative balance is a credit note', () => {
   const dn = A.getInvoice(A.saveInvoice({ kind: 'DN', company_id: nsc, agent_ref: 'NSCLGB26080025', lines: [
     { description: 'Customs clearance fee', amount: 450 }, { description: 'Duties', amount: 31498.63 }, { description: 'Trucking charge', rate: 580, qty: 2 },
     { description: 'Ocean freight collected', amount: 1000, side: 'CREDIT' }] }));
-  assert.equal(dn.number, 'DCN-11665');
+  assert.equal(dn.number, 'GBL-DN10001');
   assert.equal(dn.total, 32108.63);
   assert.equal(dn.terms_days, 0);
   const cn = A.getInvoice(A.saveInvoice({ kind: 'DN', company_id: nsc, lines: [{ description: 'Profit share', amount: 120, side: 'CREDIT' }] }));
@@ -118,4 +118,15 @@ test('pay on account: offset D/Ns first, apply cash oldest-first, keep excess on
   soa = A.agentStatement(agent);
   assert.equal(soa.paidOnAccount, 0);
   assert.equal(soa.net, -200);
+});
+
+test('GBL numbering: A/R, debit and credit notes each run their own counter; a used number is skipped', () => {
+  const company = require('../src/company');
+  const db = require('../src/db').db;
+  const party = db.get("SELECT id FROM companies WHERE type = 'agent'").id;
+  const cn = A.getInvoice(A.saveInvoice({ kind: 'DN', company_id: party, lines: [{ description: 'PROFIT SHARE', amount: 100, side: 'CREDIT' }] }));
+  assert.match(cn.number, /^GBL-CN\d{5}$/);
+  const next = Number(db.setting('seq_G_INV'));
+  db.run("INSERT INTO invoices (number, kind, total, invoice_date) VALUES (?, 'AR', 1, '2026-09-29')", `GBL-INV${next}`);
+  assert.equal(company.nextRef('INV', { db, table: 'invoices', column: 'number' }), `GBL-INV${next + 1}`);
 });

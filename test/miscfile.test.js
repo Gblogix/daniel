@@ -17,10 +17,10 @@ const db = store.db;
 const co = (name) => db.get('SELECT id FROM companies WHERE name LIKE ?', `%${name}%`).id;
 const admin = db.get("SELECT * FROM users WHERE role = 'admin'");
 
-test('an Other file gets an OTH number, its own name, A/R + A/P + profit, and stays off the tracking boards', () => {
+test('an Other file gets a GBL-OT number, its own name, A/R + A/P + profit, and stays off the tracking boards', () => {
   const id = S.create({ mode: 'OTHER', title: 'Unlockt — warehouse storage', customer_id: co('UNLOCKT') }, { userId: admin.id });
   const s = S.find(id, null);
-  assert.match(s.ref_no, /^OTH\d{7}$/);
+  assert.match(s.ref_no, /^GBL-OT\d{5}$/);
   assert.equal(S.fileName(s), 'Unlockt — warehouse storage');
   assert.equal(S.fileName({ mode: 'OTHER', customer_name: 'UNLOCKT BRANDS, INC', ref_no: 'OTH1' }), 'UNLOCKT BRANDS');
 

@@ -346,6 +346,8 @@ const DEFAULT_SETTINGS = {
   customer_reports: '1',        // scheduled shipment reports to customers (per party: daily / weekly)
   // Next document numbers (continue from the current system; admin can change them)
   seq_OI: '11828', seq_AI: '10009', seq_OTH: '10582', seq_INV: '12215', seq_DCN: '11665',
+  // GBL numbering (new files / invoices from Sep 2026): GBL-OI10001, GBL-INV10001, GBL-DN10001 …
+  num_prefix: 'GBL-', seq_G_OI: '10001', seq_G_AI: '10001', seq_G_OT: '10001', seq_G_INV: '10001', seq_G_DN: '10001', seq_G_CN: '10001',
   ar_terms_days: '25',
 };
 

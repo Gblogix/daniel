@@ -40,4 +40,18 @@ function nextNumber(seq, db = store.db) {
   });
 }
 
-module.exports = { get, set, nextNumber, DEFAULTS, FIELDS };
+/**
+ * System reference numbers: prefix + code + running number — GBL-OI10001 (ocean file), GBL-AI10001 (air),
+ * GBL-OT10001 (trucking / other), GBL-INV10001 (A/R invoice), GBL-DN10001 (debit note), GBL-CN10001 (credit note).
+ * Each code has its own counter (Admin › Company); a number already used is skipped, so a ref is never repeated.
+ */
+const NUMBERING = [['OI', 'Ocean file'], ['AI', 'Air file'], ['OT', 'Trucking / other file'], ['INV', 'A/R invoice'], ['DN', 'Debit note'], ['CN', 'Credit note']];
+function nextRef(code, { db = store.db, table = null, column = null } = {}) {
+  const prefix = db.setting('num_prefix') ?? 'GBL-';
+  for (;;) {
+    const ref = `${prefix}${code}${nextNumber(`G_${code}`, db)}`;
+    if (!table || !db.get(`SELECT 1 FROM ${table} WHERE ${column} = ?`, ref)) return ref;
+  }
+}
+
+module.exports = { get, set, nextNumber, nextRef, NUMBERING, DEFAULTS, FIELDS };

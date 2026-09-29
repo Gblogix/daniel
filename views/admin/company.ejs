@@ -16,9 +16,11 @@
   </div>
   <div class="field"><label>Payment instructions (DOMESTIC/ACH + INTERNATIONAL/WIRE) — printed on A/N, invoices, debit notes</label>
     <textarea name="remit" rows="6" placeholder="DOMESTIC/ACH PAYMENT INFO (BANK NAME- …)&#10;BENEFICIARY: …&#10;ACCOUNT# : … // ROUTING# : …&#10;INTERNATIONAL/WIRE PAYMENT INFO&#10;SWIFT CODE : …"><%= co.remit %></textarea></div>
-  <h3>Next numbers</h3>
+  <h3>Reference numbers</h3>
+  <p class="muted small" style="margin-top:0">Every new file and every A/R invoice / debit note / credit note gets the next number automatically. Existing numbers are never re-used.</p>
   <div class="grid g3">
-    <% seqs.forEach((q) => { %><div class="field"><label><%= q.label %></label><input name="seq_<%= q.k %>" type="number" value="<%= q.v %>"></div><% }) %>
+    <div class="field"><label>Prefix</label><input name="num_prefix" value="<%= prefix %>" placeholder="GBL-"></div>
+    <% seqs.forEach((q) => { %><div class="field"><label><%= q.label %> <span class="muted mono small">(<%= q.sample %>)</span></label><input name="seq_<%= q.k %>" type="number" value="<%= q.v %>"></div><% }) %>
     <div class="field"><label>Default AR terms (days)</label><input name="ar_terms_days" type="number" value="<%= terms %>"></div>
   </div>
   <button class="btn">Save</button>

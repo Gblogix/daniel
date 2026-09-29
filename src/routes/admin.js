@@ -172,11 +172,11 @@ router.post('/admin/settings', auth.requirePerm('settings'), (req, res) => {
 });
 
 // ---------- company profile & numbering — admin only ----------
-const SEQS = [['OI', 'Ocean import filing no. (OI-#####)'], ['AI', 'Air import filing no. (AI-#####)'], ['OTH', 'Trucking / other filing no. (OTH#######)'],
-  ['INV', 'AR invoice no. (INV-#####)'], ['DCN', 'Debit / credit note no. (DCN-#####)']];
+const SEQS = require('../company').NUMBERING.map(([k, label]) => [`G_${k}`, `${label} — next no.`, k]);
 router.get('/admin/company', auth.requirePerm('settings'), (req, res) => {
   const company = require('../company');
-  res.render('admin/company', { title: 'Company profile', co: company.get(), seqs: SEQS.map(([k, label]) => ({ k, label, v: store.db.setting(`seq_${k}`) })), terms: store.db.setting('ar_terms_days') });
+  const prefix = store.db.setting('num_prefix') ?? 'GBL-';
+  res.render('admin/company', { title: 'Company profile', co: company.get(), prefix, seqs: SEQS.map(([k, label, code]) => ({ k, label, v: store.db.setting(`seq_${k}`), sample: `${prefix}${code}${store.db.setting(`seq_${k}`)}` })), terms: store.db.setting('ar_terms_days') });
 });
 router.post('/admin/company', auth.requirePerm('settings'), (req, res) => {
   require('../company').set(req.body);
@@ -184,6 +184,7 @@ router.post('/admin/company', auth.requirePerm('settings'), (req, res) => {
     const v = Number(req.body[`seq_${k}`]);
     if (Number.isInteger(v) && v > 0) store.db.setSetting(`seq_${k}`, v);
   }
+  if (typeof req.body.num_prefix === 'string') store.db.setSetting('num_prefix', req.body.num_prefix.trim().toUpperCase().replace(/[^A-Z0-9-]/g, ''));
   if (Number.isInteger(Number(req.body.ar_terms_days))) store.db.setSetting('ar_terms_days', Number(req.body.ar_terms_days));
   flash(req, 'ok', 'Company profile saved');
   res.redirect('/admin/company');
