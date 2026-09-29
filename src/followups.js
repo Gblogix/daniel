@@ -50,6 +50,12 @@ function shipmentItems(s, { now = new Date(), docs = new Set() } = {}) {
   if (ocean && !s.isf_filed && etd != null && days(etd) <= 3) {
     add('isf', days(etd) <= 1 ? 'critical' : 'high', 'ISF not filed', `ETD ${md(iso(etd))} — ISF is due 24h before loading`, iso(etd - DAY), { label: 'Open file', href: file });
   }
+  // The B/L names invoices with no P/L lines on the file yet (consolidated box: one C/I + P/L per buyer).
+  const have = new Set((s.items || []).map((i) => String(i.invoice_no || '').toUpperCase()).filter(Boolean));
+  const missingPl = String(s.bl_invoices || '').split(',').filter((v) => v && !have.has(v.toUpperCase()));
+  if (missingPl.length && (have.size || (s.items || []).length === 0)) {
+    add('plmissing', eta != null && days(eta) <= 5 ? 'high' : 'normal', `P/L missing for invoice ${missingPl.join(', ')}`, 'Named on the B/L — ask the shipper / agent for the C/I + P/L', eta != null ? iso(eta - 5 * DAY) : null, { label: 'Open documents', href: `${file}#docs` }, missingPl.join(''));
+  }
   if (etd != null && days(etd) < 0) {
     const need = s.mode === 'AIR' ? ['AWB'] : ['HBL', 'PL', 'CI'];
     const missing = need.filter((t) => !docs.has(t) && !(t === 'AWB' && (docs.has('HBL') || docs.has('MBL'))));

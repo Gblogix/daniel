@@ -104,3 +104,15 @@ test('NSC house B/L without printed labels + rider; ISF numbered boxes; merged d
   assert.equal(d.eta, '2026-10-12');
   assert.equal(d.containers.length, 2);
 });
+
+test('heads-up when the B/L names an invoice with no C/I / P/L uploaded', () => {
+  const h = { ...extractRules(HBL, { filename: 'BL.pdf' }), doc_type: 'HBL' };
+  assert.deepEqual(h.invoice_refs, ['UB005']);
+  const pl = { doc_type: 'PL', ci_invoice_no: 'EZVC_TGT_26-09', items: [{ description: 'x', invoice_no: 'EZVC_TGT_26-09' }], packages: 788, weight_kg: 3157.27, containers: [], warnings: [] };
+  const pl2 = { ...pl, ci_invoice_no: 'BSBUS26091601', items: [{ description: 'y', invoice_no: 'BSBUS26091601' }], packages: 136, weight_kg: 697.8 };
+  const d = mergeExtractions([h, pl, pl2]);
+  assert.deepEqual(d.missing_invoices, ['UB005']);
+  assert.equal(d.items.length, 2);
+  assert.ok(d.warnings.some((w) => /UB005/.test(w)));
+  assert.ok(!d.warnings.some((w) => /packages differs/.test(w)), 'a P/L total is not compared with the B/L total');
+});

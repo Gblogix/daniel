@@ -350,7 +350,10 @@ function extractRules(text, { filename = '', rows = null } = {}) {
     if (items.length) {
       // Table totals beat free-text matching: use the TOTAL row, else the sum of the lines.
       const sum = (k) => { const v = items.reduce((a, i) => a + (i[k] || 0), 0); return v ? Math.round(v * 1000) / 1000 : null; };
-      for (const k of ['packages', 'weight_kg', 'cbm']) out[k] = totals?.[k] ?? sum(k) ?? out[k];
+      // A TOTAL row shifted by a column (the piece total landing under BOX) is caught by comparing with the lines.
+      const shifted = (k) => totals?.[k] != null && sum(k) != null && totals[k] === sum('quantity') && Math.abs(totals[k] - sum(k)) > 1;
+      for (const k of ['packages', 'weight_kg', 'cbm']) out[k] = (shifted(k) ? sum(k) : totals?.[k]) ?? sum(k) ?? out[k];
+      if (totals) for (const k of ['packages', 'weight_kg', 'cbm']) if (shifted(k)) totals[k] = sum(k);
       if (totals) {
         for (const k of ['packages', 'weight_kg', 'cbm']) {
           const s = sum(k);
@@ -373,6 +376,14 @@ function extractRules(text, { filename = '', rows = null } = {}) {
     if (!out.weight_kg || out.weight_kg < sum('weight_kg')) out.weight_kg = sum('weight_kg');
     if (out.containers.every((c) => c.cbm != null) && (!out.cbm || out.cbm < sum('cbm'))) out.cbm = sum('cbm');
     if (out.containers.every((c) => c.packages != null) && (!out.packages || out.packages < sum('packages'))) out.packages = sum('packages');
+  }
+  // Every commercial invoice a B/L / ISF names ("*INVOICE NO. : UB005", "NO. & DATE OF INVOICE: X & SEP.16.2026").
+  if (['MBL', 'HBL', 'ISF', 'NOA', 'OTHER'].includes(docType)) {
+    const refs = new Set();
+    for (const re of [/INVOICE\s*NO\.?\s*[:.]?\s*#?\s*([A-Z0-9][A-Z0-9_-]{3,24})/g, /NO\.?\s*(?:&|AND)\s*DATE\s+OF\s+INVOICE\s*[:.]?\s*#?\s*([A-Z0-9][A-Z0-9_-]{3,24})/g]) {
+      for (const m of U.matchAll(re)) if (/\d/.test(m[1])) refs.add(m[1]);
+    }
+    out.invoice_refs = [...refs];
   }
   // Each cargo line remembers its invoice and final buyer (a consolidated box can hold Target and Nordstrom goods).
   out.buyer = ['PL', 'CI', 'OTHER'].includes(docType) || out.items.length ? finalBuyer(U, raw, { invoiceNo: out.ci_invoice_no, consignee: out.consignee_name }) : null;
@@ -439,36 +450,46 @@ function itemsFromRows(rows) {
     amount: /AMOUNT|TOTAL\s*VALUE|VALUE|금액/i,
     quantity: /^(Q'?TY|QUANTITY|PCS|수량)/i,
     unit: /^UNIT$/i,
-    packages: /CTNS?|CARTONS?|PKGS?|PACKAGES?|^C\/?T\b|박스/i,
+    packages: /CTNS?|CARTONS?|PKGS?|PACKAGES?|^C\/?T\b|\bBOX(ES)?\b|박스/i,
     // Gross weight only — "N. WEIGHT", "N.W", "NET" are net weight.
     weight_kg: /^(?!\s*N\.?\s*(W\b|WT|WEIGHT))(?!.*\bNET\b).*(G\.?\s?W|GROSS|WEIGHT|중량)/i,
     // CBM / measurement; a bare "VOLUME" column on cosmetics lists is the bottle size (35ml), not CBM.
     cbm: /CBM|MEAS|M3|^VOLUME\s*\(?\s*(CBM|M3)/i,
   };
-  let header = -1; let map = {};
+  let header = -1; let map = {}; let dataFrom = 0;
+  // A two-row header ("QUANTITY" over "PCS | BOX | PLT") is read as one: top text + sub text per column.
+  const isNum = (v) => /^-?[\d,]*\.?\d+$/.test(String(v ?? '').trim());
+  const subHeader = (row) => row && row.filter((c) => String(c ?? '').trim()).length >= 2 && !row.some(isNum) && !row.some((c) => /\d/.test(String(c ?? '')));
   for (let r = 0; r < Math.min(rows.length, 40); r++) {
     const m = {};
-    rows[r].forEach((cell, i) => {
+    const filled = (row) => row.filter((c) => String(c ?? '').trim()).length;
+    const two = filled(rows[r]) >= 3 && subHeader(rows[r + 1]) && filled(rows[r + 1]) < filled(rows[r]) + 3 && !rows[r + 1].some((c) => /DESCRIPTION|PRODUCT/i.test(String(c)));
+    const hdr = two ? rows[r].map((c, i) => `${String(c ?? '').trim()} ${String(rows[r + 1][i] ?? '').trim()}`.trim()) : rows[r];
+    if (two) for (let i = rows[r].length; i < rows[r + 1].length; i++) hdr[i] = String(rows[r + 1][i] ?? '').trim();
+    hdr.forEach((cell, i) => {
       const s = String(cell).trim();
       for (const [k, re] of Object.entries(COLS)) if (!(k in m) && re.test(s)) { m[k] = i; break; }
     });
-    if ('description' in m && Object.keys(m).length >= 2) { header = r; map = m; break; }
+    if ('description' in m && Object.keys(m).length >= 2) { header = r; map = m; dataFrom = two ? r + 2 : r + 1; rows = [...rows]; rows[r] = hdr; break; }
   }
   if (header < 0) return { items: [], totals: null };
   // "Q'TY(pcs)" / "Q'TY / (pcs)": the unit sits in the header.
-  const qh = 'quantity' in map ? /\(\s*([A-Z]{2,5})\s*\)/i.exec(String(rows[header][map.quantity])) : null;
-  const qtyHeaderUnit = qh ? qh[1].toUpperCase() : null;
+  const qh = 'quantity' in map ? /\(\s*([A-Z]{2,5})\s*\)|\b(PCS|EA|SETS?|UNITS?)\b/i.exec(String(rows[header][map.quantity])) : null;
+  const qtyHeaderUnit = qh ? (qh[1] || qh[2]).toUpperCase() : null;
   const items = [];
   let totals = null;
   // The table ends at its TOTAL row, or where the next form section / document starts ("PACKING LIST",
   // "3. NOTIFY PARTY:", "SAY: …", a repeated header): nothing after it is a cargo line.
   const SECTION = /^(PACKING\s+LIST|COMMERCIAL\s+INVOICE|\d{1,2}\.\s*[A-Z][A-Z /&]+:?$|SAY\b|TOTAL\s+(?:PACKAGES|AMOUNT)\s*:|SHIPPER\b|CONSIGNEE\b|NOTIFY\b|SIGNED\b|SIGNATURE\b|REMARKS?\b|MARKS\s*&)/i;
-  for (const row of rows.slice(header + 1)) {
+  for (const row of rows.slice(dataFrom)) {
     const cells = row.map((c) => String(c ?? '').trim());
     const pick = (k) => (k in map ? cells[map[k]] || '' : '');
     // Excel float noise (242.79999999999998) → 3 decimals.
     const n = (k) => { const v = numIn(pick(k)); return v == null ? null : Math.round(v * 1000) / 1000; };
-    const desc = pick('description');
+    // Some lists put the full product name in the SKU column and only a category ("Shampoo") under description.
+    const skuCell = pick('sku');
+    const skuIsName = /\s/.test(skuCell) && skuCell.length > 20 && skuCell.length > pick('description').length;
+    const desc = skuIsName ? skuCell : pick('description');
     const isTotal = cells.some((c) => /^(TOTAL|SUB\s*-?TOTAL|G(RAND)?\.?\s*TOTAL|합계)\b/i.test(c));
     if (isTotal) {
       totals = { packages: n('packages'), weight_kg: n('weight_kg'), cbm: n('cbm'), quantity: n('quantity'), amount: n('amount') };
@@ -481,9 +502,10 @@ function itemsFromRows(rows) {
     // "12,000 PCS" in the quantity cell carries the unit
     const qtyUnit = /[\d.,]+\s*([A-Z]{2,6})\b/i.exec(pick('quantity'));
     items.push({
-      po_no: pick('po_no') || pick('sku') || null, description: desc, hs_code: pick('hs_code') || null,
+      po_no: pick('po_no') || (skuIsName ? null : skuCell) || null, description: desc, hs_code: pick('hs_code') || null,
       quantity: n('quantity'), unit: pick('unit') || (qtyUnit ? qtyUnit[1].toUpperCase() : null) || qtyHeaderUnit,
-      packages: n('packages'), weight_kg: n('weight_kg'), cbm: n('cbm'), unit_price: n('unit_price'), amount: n('amount'),
+      // Box counts from a formula (1883 pcs / 12 = 156.917) are whole boxes.
+      packages: n('packages') == null ? null : Math.round(n('packages')), weight_kg: n('weight_kg'), cbm: n('cbm'), unit_price: n('unit_price'), amount: n('amount'),
     });
   }
   // Unit of the packages column: cartons (CT / CTNS / CARTON), pallets, or plain packages.

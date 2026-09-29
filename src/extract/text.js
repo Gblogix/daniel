@@ -119,6 +119,7 @@ function cellText(v) {
   if (v instanceof Date) return v.toISOString().slice(0, 10);
   if (typeof v === 'object') {
     if ('result' in v) return cellText(v.result);
+    if ('formula' in v || 'sharedFormula' in v) return ''; // formula never calculated / saved without a value
     if ('richText' in v) return v.richText.map((t) => t.text).join('');
     if ('text' in v) return String(v.text);
   }

@@ -132,3 +132,19 @@ test('heads-up digests to staff and scheduled reports to customers', async () =>
   assert.match(rep.body_html, /Where \/ next/);
   assert.doesNotMatch(rep.body_html, /USD|invoice/i);
 });
+
+test('a B/L invoice with no P/L lines stays on the file follow-ups until its P/L arrives', () => {
+  const S2 = require('../src/shipments');
+  const F2 = require('../src/followups');
+  const db2 = require('../src/db').db;
+  const id = S2.create({ mode: 'FCL', status: 'BOOKED', shipper_name: 'X CO' });
+  db2.run("UPDATE shipments SET bl_invoices = 'UB005,EZVC_TGT_26-09' WHERE id = ?", id);
+  S2.saveLines(id, { item_desc: ['Serum'], item_inv: ['EZVC_TGT_26-09'], item_buyer: ['Target'] });
+  const admin = db2.get("SELECT * FROM users WHERE role = 'admin'");
+  const it = F2.forUser(admin, { shipmentId: id }).find((i) => i.key.includes('plmissing'));
+  assert.ok(it, 'follow-up present');
+  assert.match(it.title, /UB005/);
+  assert.doesNotMatch(it.title, /EZVC/);
+  S2.saveLines(id, { item_desc: ['Serum', 'Mask'], item_inv: ['EZVC_TGT_26-09', 'ub005'], item_buyer: ['Target', 'Ulta'] });
+  assert.ok(!F2.forUser(admin, { shipmentId: id }).some((i) => i.key.includes('plmissing')), 'cleared once the P/L is in');
+});

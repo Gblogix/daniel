@@ -196,7 +196,7 @@ function list(user, { q, status, mode, active, stage, owner, db = store.db } = {
   if (ids.length) {
     const ph = ids.map(() => '?').join(',');
     const ctns = db.all(`SELECT * FROM containers WHERE shipment_id IN (${ph}) ORDER BY id`, ...ids);
-    const items = db.all(`SELECT shipment_id, description, quantity, unit, packages FROM cargo_items WHERE shipment_id IN (${ph}) ORDER BY id`, ...ids);
+    const items = db.all(`SELECT shipment_id, description, quantity, unit, packages, invoice_no, buyer FROM cargo_items WHERE shipment_id IN (${ph}) ORDER BY id`, ...ids);
     for (const r of rows) {
       r.containers = ctns.filter((c) => c.shipment_id === r.id);
       r.items = items.filter((i) => i.shipment_id === r.id);

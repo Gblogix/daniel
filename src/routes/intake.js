@@ -163,6 +163,12 @@ router.post('/intakes/:id/apply', auth.requirePerm('intake'), async (req, res) =
   }
   S.saveLines(id, req.body);
   db.run('UPDATE documents SET shipment_id = ? WHERE intake_id = ?', id, intake.id);
+  // Remember the invoices the B/L names, so a missing P/L stays on the file's follow-ups until it arrives.
+  const refs = JSON.parse(intake.extracted_json || '{}').draft?.invoice_refs || [];
+  if (refs.length) {
+    const cur = (db.get('SELECT bl_invoices FROM shipments WHERE id = ?', id)?.bl_invoices || '').split(',').filter(Boolean);
+    db.run('UPDATE shipments SET bl_invoices = ? WHERE id = ?', [...new Set([...cur, ...refs])].join(','), id);
+  }
   db.run("UPDATE intakes SET status = 'APPLIED', shipment_id = ?, reviewed_at = datetime('now'), reviewed_by = ? WHERE id = ?", id, req.user.id, intake.id);
   if (req.body.send_notices) await notify.onDocumentsApplied(id, { userId: req.user.id });
   else S.addEvent(id, 'DOCS_RECEIVED', 'Shipping documents received from origin agent', { userId: req.user.id });

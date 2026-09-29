@@ -296,6 +296,7 @@ CREATE TABLE IF NOT EXISTS sessions (
 const MIGRATIONS = {
   shipments: {
     title: 'TEXT', // name of an "Other" (non-shipment) file
+    bl_invoices: 'TEXT', // commercial invoice nos. the B/L names (UB005, EZVC_TGT_26-09…) — P/L expected for each
     scac: 'TEXT', direct_shipment: 'INTEGER NOT NULL DEFAULT 0', isf_no: 'TEXT', telex_release: 'INTEGER NOT NULL DEFAULT 0',
     firms_code: 'TEXT', entry_no: 'TEXT', css_no: 'TEXT', holds: 'TEXT', cargo_value: 'REAL', ci_invoice_no: 'TEXT',
     freight_paid: 'INTEGER NOT NULL DEFAULT 0', carrier_released: 'INTEGER NOT NULL DEFAULT 0', storage_start: 'TEXT',

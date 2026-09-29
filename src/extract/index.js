@@ -99,13 +99,16 @@ function mergeExtractions(docs) {
     return i < 0 ? 99 : i;
   };
   const draft = { containers: [], items: [], warnings: [], sources: {} };
+  const consolidated = new Set(docs.filter((d) => ['PL', 'CI'].includes(d.doc_type)).map((d) => d.ci_invoice_no || d.filename || Math.random())).size > 1;
   for (const field of SCALARS) {
     const candidates = docs.filter((d) => d[field] !== null && d[field] !== undefined && d[field] !== '')
       .sort((a, b) => rank(field, a.doc_type) - rank(field, b.doc_type));
     if (candidates.length) {
       draft[field] = candidates[0][field];
       draft.sources[field] = candidates[0].doc_type;
-      const distinct = [...new Set(candidates.map((c) => String(c[field])))];
+      // Consolidated box (several invoices): a P/L / C/I total is only part of it — compare B/L-type documents only.
+      const comparable = ['weight_kg', 'cbm', 'packages'].includes(field) && consolidated ? candidates.filter((c) => !['PL', 'CI'].includes(c.doc_type)) : candidates;
+      const distinct = [...new Set(comparable.map((c) => String(c[field])))];
       if (distinct.length > 1 && ['mbl_no', 'hbl_no', 'weight_kg', 'cbm', 'packages', 'eta', 'etd'].includes(field)) {
         draft.warnings.push(`${field} differs between documents: ${distinct.join(' vs ')} — using ${candidates[0].doc_type}`);
       }
@@ -145,6 +148,11 @@ function mergeExtractions(docs) {
   if (!draft.carrier && draft.scac) draft.carrier = require('../tracking/codes').CARRIERS[draft.scac] || null;
   draft.mode = types.has('AWB') || draft.mawb_no || draft.flight_no ? 'AIR' : draft.containers.length ? 'FCL' : 'LCL';
   for (const d of docs) for (const w of d.warnings || []) if (!draft.warnings.includes(w)) draft.warnings.push(w);
+  // Heads-up: an invoice the B/L names with no C/I or P/L uploaded for it.
+  draft.invoice_refs = [...new Set(docs.flatMap((d) => d.invoice_refs || []))];
+  const haveInv = new Set(docs.filter((d) => ['CI', 'PL'].includes(d.doc_type)).map((d) => String(d.ci_invoice_no || '').toUpperCase()).filter(Boolean));
+  draft.missing_invoices = draft.invoice_refs.filter((r) => !haveInv.has(r.toUpperCase()));
+  if (draft.missing_invoices.length && haveInv.size) draft.warnings.push(`B/L lists invoice ${draft.missing_invoices.join(', ')} — no C/I / P/L uploaded for it yet (ask the shipper / agent)`);
   draft.doc_types = [...types];
   return draft;
 }

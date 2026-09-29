@@ -53,7 +53,9 @@ test('provider choice: air -> ShipsGo, carrier with API -> DCSA, else Terminal49
 
 test('Terminal49: register B/L, resolve, map ETA/ATA + container LFD/holds, notify customer of ETA change', async () => {
   const s = S.list({ role: 'staff' }).find((x) => x.mbl_no === 'HDMUPUSA1234567');
-  const oldEta = s.eta;
+  // Demo ETAs are relative to today; pin one that differs from the carrier's so the change is always detected.
+  const oldEta = '2026-09-30';
+  store.db.run('UPDATE shipments SET eta = ? WHERE id = ?', oldEta, s.id);
   const f = mockFetch([
     ['POST', /\/v2\/tracking_requests$/, (url, o) => {
       const body = JSON.parse(o.body);
