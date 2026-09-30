@@ -32,7 +32,7 @@
       <div class="field"><label>File</label><select name="shipment_id"><option value="">— no file (overhead) —</option>
         <% files.forEach((s) => { %><option value="<%= s.id %>" <%= sid === s.id ? 'selected' : '' %>><%= matchedIds.includes(s.id) ? '★ ' : '' %><%= S.fileName(s) %> · <%= s.ref_no %></option><% }) %></select>
         <span class="small muted">★ = matched from the invoice (container / B/L)</span></div>
-      <div class="field"><label><%= note ? 'Note no. (kept as on the note)' : 'Vendor invoice no.' %></label><input name="number" value="<%= ex.number || '' %>" required class="mono"></div>
+      <div class="field"><label><%= note ? 'Note no. (kept as on the note)' : 'Vendor invoice no.' %></label><input name="number" value="<%= ex.number || '' %>" required class="mono" data-dup-check></div>
       <div class="field"><label><%= note ? 'Note date' : 'Invoice date' %></label><input type="date" name="invoice_date" value="<%= ex.invoice_date || '' %>"></div>
       <div class="field"><label>Terms (days)</label><input type="number" name="terms_days" value="<%= ex.terms_days ?? '' %>" placeholder="vendor default"></div>
       <div class="field"><label>Due date</label><input type="date" name="due_date" value="<%= ex.due_date || '' %>"></div>

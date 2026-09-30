@@ -130,3 +130,19 @@ test('GBL numbering: A/R, debit and credit notes each run their own counter; a u
   db.run("INSERT INTO invoices (number, kind, total, invoice_date) VALUES (?, 'AR', 1, '2026-09-29')", `GBL-INV${next}`);
   assert.equal(company.nextRef('INV', { db, table: 'invoices', column: 'number' }), `GBL-INV${next + 1}`);
 });
+
+test('duplicate vendor invoice: same party refused with the booked one; allowed as -2; another party gets its name added', () => {
+  const db = require('../src/db').db;
+  const ctc = db.get("SELECT id FROM companies WHERE name LIKE 'CTC%'").id;
+  const qt = db.get("SELECT id FROM companies WHERE name LIKE 'Q-Trans%'").id;
+  const first = A.getInvoice(A.saveInvoice({ kind: 'AP', company_id: ctc, number: 'CTC-9901', invoice_date: '2026-09-20', lines: [{ description: 'DRAYAGE', amount: 650 }] }));
+  const d = A.findDuplicates({ number: '#ctc 9901', companyId: ctc });
+  assert.deepEqual(d.same.map((x) => x.id), [first.id], 'typed differently, still found');
+  assert.throws(() => A.saveInvoice({ kind: 'AP', company_id: ctc, number: 'CTC 9901', lines: [{ description: 'DRAYAGE', amount: 650 }] }), (e) => e.code === 'DUPLICATE' && e.duplicates[0].id === first.id);
+  const again = A.getInvoice(A.saveInvoice({ kind: 'AP', company_id: ctc, number: 'CTC-9901', allow_duplicate: true, lines: [{ description: 'CHASSIS', amount: 90 }] }));
+  assert.equal(again.number, 'CTC-9901-2');
+  const other = A.getInvoice(A.saveInvoice({ kind: 'AP', company_id: qt, number: 'CTC-9901', lines: [{ description: 'X', amount: 10 }] }));
+  assert.match(other.number, /^CTC-9901 · Q-Trans/);
+  const sim = A.findDuplicates({ number: 'NEW-1', companyId: ctc, total: 650, date: '2026-09-25' });
+  assert.equal(sim.similar[0].id, first.id, 'same amount from the same party within 45 days');
+});

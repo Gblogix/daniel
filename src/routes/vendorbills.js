@@ -86,10 +86,10 @@ router.post('/vendor-bills/:id', auth.requireAccounting, (req, res) => {
   }
   let id;
   try {
-    id = V.book(d.id, { kind: isNote ? 'DN' : 'AP', shipment_id: Number(b.shipment_id) || null, company_id: b.company_id, number: String(b.number).trim(), invoice_date: b.invoice_date,
+    id = V.book(d.id, { allow_duplicate: b.allow_duplicate === '1', kind: isNote ? 'DN' : 'AP', shipment_id: Number(b.shipment_id) || null, company_id: b.company_id, number: String(b.number).trim(), invoice_date: b.invoice_date,
       terms_days: b.terms_days, due_date: b.due_date, memo: b.memo, agent_ref: b.agent_ref || null, lines }, { userId: req.user.id });
   } catch (e) {
-    flash(req, 'err', /UNIQUE/.test(e.message) ? `Invoice number ${b.number} is already used — add a suffix (e.g. ${b.number}-2) if it is really a different bill` : e.message);
+    flash(req, 'err', e.code === 'DUPLICATE' ? require('./billing').dupMessage(e) : e.message);
     return res.redirect(`/vendor-bills/${d.id}`);
   }
   const inv = A.getInvoice(id);

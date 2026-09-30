@@ -34,6 +34,13 @@ router.get('/billing', auth.requireAccounting, (req, res) => {
 });
 
 // ---------- invoice editor ----------
+/** Live duplicate check while typing an invoice / note number (and on save). */
+router.get('/invoices/duplicates.json', auth.requireAccounting, (req, res) => {
+  const q = req.query;
+  res.json(A.findDuplicates({ number: q.number, companyId: q.company_id || null, total: q.total === '' || q.total == null ? null : Number(q.total),
+    date: q.date || null, excludeId: q.exclude || null, kinds: q.kind === 'AR' ? ['AR'] : ['AP', 'DN'] }));
+});
+
 router.get('/invoices/new', auth.requireAccounting, (req, res) => {
   const kind = ['AR', 'DN', 'AP'].includes(req.query.kind) ? req.query.kind : 'AR';
   const s = req.query.shipment ? S.find(Number(req.query.shipment), null) : null;
@@ -74,7 +81,14 @@ function linesFromBody(b) {
 
 router.post('/invoices', auth.requireAccounting, (req, res) => {
   const added = require('../extract/party').fromForm(req.body, 'company_id', { type: { AR: 'customer', DN: 'agent', AP: 'vendor' }[req.body.kind] });
-  const id = A.saveInvoice({ ...req.body, lines: linesFromBody(req.body) }, { userId: req.user.id });
+  let id;
+  try {
+    id = A.saveInvoice({ ...req.body, allow_duplicate: req.body.allow_duplicate === '1', lines: linesFromBody(req.body) }, { userId: req.user.id });
+  } catch (e) {
+    if (e.code !== 'DUPLICATE') throw e;
+    flash(req, 'err', dupMessage(e));
+    return res.redirect(req.get('referer') || '/billing');
+  }
   flash(req, 'ok', `Saved${added ? ` · ${added} added to Parties` : ''}`);
   res.redirect(`/invoices/${id}`);
 });
@@ -350,5 +364,11 @@ router.post('/billing/agents/:id/send-soa', auth.requireAccounting, async (req, 
   flash(req, 'ok', `SOA emailed to ${to.join(', ')}`);
   res.redirect(`/billing/agents/${agent.id}`);
 });
+
+function dupMessage(e) {
+  const d = e.duplicates[0];
+  return `Not saved — ${d.number} from ${d.party} is already booked: USD ${Math.abs(d.total).toFixed(2)}, ${d.date || ''}${d.file_ref ? `, file ${d.file_ref}` : ''} (open it from the file or search ${d.number}). If it is a different bill, save again and choose "Book anyway".`;
+}
+router.dupMessage = dupMessage;
 
 module.exports = router;

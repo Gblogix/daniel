@@ -280,3 +280,71 @@ document.addEventListener('click', (e) => {
   if (!b) return;
   navigator.clipboard?.writeText(b.dataset.copy).then(() => { const t = b.textContent; b.textContent = '✔'; setTimeout(() => { b.textContent = t; }, 1200); }).catch(() => {});
 });
+
+// Duplicate vendor / agent invoice numbers: checked while typing (box under the field) and on save (pop-up with the
+// booked one, "Open it", "Cancel" or "Book anyway" for a genuinely different bill).
+document.querySelectorAll('input[data-dup-check]').forEach((inp) => {
+  const form = inp.form;
+  const box = document.createElement('div');
+  box.className = 'dup-box';
+  inp.insertAdjacentElement('afterend', box);
+  const esc = (v) => String(v ?? '').replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+  const money = (v) => Math.abs(Number(v) || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  const row = (d) => `<b class="mono">${esc(d.number)}</b> · ${esc(d.party)} · USD ${money(d.total)} · ${esc(d.date || '')}${d.file_ref ? ` · file <span class="mono">${esc(d.file_ref)}</span>${d.file_name ? ` (${esc(d.file_name)})` : ''}` : ''}${d.status === 'PAID' ? ' · paid' : ''} <a href="/invoices/${d.id}">Open ↗</a>`;
+  const total = () => {
+    let t = 0; let any = false;
+    form.querySelectorAll('input[name="l_amount"]').forEach((a) => {
+      const v = Number(String(a.value || '').replace(/,/g, ''));
+      if (!a.value || !Number.isFinite(v)) return;
+      const credit = a.closest('tr')?.querySelector('[name="l_side"]')?.value === 'CREDIT';
+      t += credit ? -v : v; any = true;
+    });
+    return any ? Math.round(t * 100) / 100 : '';
+  };
+  let last = { same: [], other: [], similar: [] };
+  let timer = null;
+  const isOurs = () => ['AR'].includes(form.querySelector('[name="kind"]')?.value); // our A/R numbers are automatic
+  const check = async () => {
+    if (isOurs()) { box.innerHTML = ''; last = { same: [], other: [], similar: [] }; return; }
+    const number = inp.value.trim();
+    const p = new URLSearchParams({ number, company_id: form.querySelector('[name="company_id"]')?.value || '', total: total(),
+      date: form.querySelector('[name="invoice_date"]')?.value || '', exclude: inp.dataset.exclude || '' });
+    if (!number && p.get('total') === '') { box.innerHTML = ''; last = { same: [], other: [], similar: [] }; return; }
+    try { last = await fetch(`/invoices/duplicates.json?${p}`).then((r) => r.json()); } catch { return; }
+    box.innerHTML = last.same.length ? `<div class="dup bad">⚠ Already booked from this party:<br>${last.same.map(row).join('<br>')}</div>`
+      : last.similar.length ? `<div class="dup warn">Same amount already booked from this party — check it is not the same bill re-sent:<br>${last.similar.map(row).join('<br>')}</div>`
+        : last.other.length ? `<div class="dup info">This number also exists for another party (${esc(last.other[0].party)}) — saved with the party name added.</div>` : '';
+  };
+  const soon = () => { clearTimeout(timer); timer = setTimeout(check, 350); };
+  inp.addEventListener('input', soon);
+  form.addEventListener('change', (e) => { if (e.target.matches('[name="company_id"], [name="invoice_date"], [name="l_amount"], [name="l_side"], [name="kind"]')) soon(); });
+  if (inp.value.trim()) setTimeout(check, 300);
+  form.addEventListener('submit', async (e) => {
+    if (form.dataset.dupOk) return;
+    e.preventDefault();
+    const submitter = e.submitter;
+    await check();
+    if (!last.same.length) { form.dataset.dupOk = '1'; return submitter ? form.requestSubmit(submitter) : form.submit(); }
+    const dlg = document.createElement('dialog');
+    dlg.className = 'dup-dialog';
+    dlg.innerHTML = `<h3>⚠ This invoice is already booked</h3>
+      <p>${last.same.map(row).join('<br>')}</p>
+      <p class="small muted">Booking it again would count the cost twice. If it really is a different bill with the same number, choose "Book anyway" — it is saved as <b class="mono">${esc(inp.value.trim())}-2</b>.</p>
+      <div class="actions"><a class="btn secondary" href="/invoices/${last.same[0].id}">Open the booked one</a>
+        <button type="button" class="btn secondary" data-x="cancel">Cancel</button>
+        <button type="button" class="btn danger" data-x="anyway">Book anyway</button></div>`;
+    document.body.appendChild(dlg);
+    dlg.showModal();
+    dlg.addEventListener('click', (ev) => {
+      const x = ev.target.closest('[data-x]')?.dataset.x;
+      if (ev.target.closest('a')) { dlg.close(); dlg.remove(); return; }
+      if (!x) return;
+      dlg.close(); dlg.remove();
+      if (x === 'anyway') {
+        const h = document.createElement('input'); h.type = 'hidden'; h.name = 'allow_duplicate'; h.value = '1'; form.appendChild(h);
+        form.dataset.dupOk = '1';
+        if (submitter) form.requestSubmit(submitter); else form.submit();
+      }
+    });
+  });
+});

@@ -31,7 +31,7 @@
           <input name="new_party_name" value="<%= inv.new_party.name %>"><textarea name="new_party_address" rows="2" placeholder="Address"><%= inv.new_party.address || '' %></textarea>
           <input name="new_party_email" placeholder="Billing email (invoices are sent here)"></div><% } %>
         <div class="small"><% if (inv.guessed_party) { %><span class="muted">★ picked from the file name — change if wrong · </span><% } %><a href="/companies" target="_blank">＋&nbsp;New&nbsp;party</a></div></div>
-      <% if (k === 'AP') { %><div class="field"><label>Vendor invoice no.</label><input name="number" value="<%= inv.number || '' %>" required></div><% } %>
+      <% if (k === 'AP') { %><div class="field"><label>Vendor invoice no.</label><input name="number" value="<%= inv.number || '' %>" required data-dup-check data-exclude="<%= inv.id || '' %>"></div><% } %>
       <div class="field"><label>Date</label><input type="date" name="invoice_date" value="<%= inv.invoice_date %>"></div>
       <div class="field"><label>Terms (days)</label><input type="number" name="terms_days" value="<%= inv.terms_days ?? '' %>" placeholder="customer default"></div>
       <div class="field"><label>Currency</label><input name="currency" value="<%= inv.currency || 'USD' %>"></div>

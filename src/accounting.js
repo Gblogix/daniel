@@ -46,6 +46,45 @@ function partyBlock(c) {
   return [c?.name, c?.address].filter(Boolean).join('\n');
 }
 
+/** Invoice numbers compared the way people type them: "#CTC-7781", "ctc 7781", "CTC7781" are the same. */
+const normNo = (v) => String(v || '').toUpperCase().replace(/^\s*(?:NO\.?|#)\s*/, '').replace(/[^A-Z0-9]/g, '');
+
+/**
+ * Invoices that may already be this one:
+ *   same    — same number from the same party (a real duplicate)
+ *   other   — same number, another party (different bill; stored with the party name added)
+ *   similar — same party, same amount, dated within 45 days, different number (a re-sent / re-numbered bill)
+ * Each row: id, number, kind, party, total, date, status, file ref / name.
+ */
+function findDuplicates({ number, companyId = null, total = null, date = null, excludeId = null, kinds = ['AP', 'DN'] }, db = store.db) {
+  const S = require('./shipments');
+  const n = normNo(number);
+  const cid = companyId ? Number(companyId) : null;
+  const rows = [];
+  if (n.length >= 3) {
+    const like = `%${n}%`;
+    const bare = "UPPER(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(i.number, '-', ''), ' ', ''), '#', ''), '/', ''), '.', ''), '_', ''))";
+    rows.push(...db.all(`SELECT i.id, i.number, i.kind, i.company_id, i.total, i.invoice_date, i.status, i.shipment_id FROM invoices i
+      WHERE i.status <> 'VOID' AND i.kind IN (${kinds.map(() => '?').join(',')}) AND ${bare} LIKE ? ${excludeId ? 'AND i.id <> ?' : ''} LIMIT 200`,
+    ...kinds, like, ...(excludeId ? [Number(excludeId)] : [])).filter((r) => normNo(r.number.replace(/\s*[·/]\s*[^·/]+$/, '')) === n || normNo(r.number) === n));
+  }
+  const similar = cid && total != null && Number(total) !== 0 ? db.all(`SELECT i.id, i.number, i.kind, i.company_id, i.total, i.invoice_date, i.status, i.shipment_id FROM invoices i
+    WHERE i.status <> 'VOID' AND i.company_id = ? AND ABS(ABS(i.total) - ?) < 0.01 ${excludeId ? 'AND i.id <> ?' : ''}
+      AND (? IS NULL OR ABS(julianday(i.invoice_date) - julianday(?)) <= 45) LIMIT 20`,
+  cid, Math.abs(Number(total)), ...(excludeId ? [Number(excludeId)] : []), date || null, date || null).filter((r) => normNo(r.number) !== n) : [];
+  const show = (r) => {
+    const s = r.shipment_id ? S.find(r.shipment_id, null, { db }) : null;
+    const c = db.get('SELECT name FROM companies WHERE id = ?', r.company_id);
+    return { id: r.id, number: r.number, kind: r.kind, party: c?.name || '', total: r.total, date: r.invoice_date, status: r.status,
+      file_ref: s?.ref_no || null, file_name: s ? S.fileName(s) : null, shipment_id: r.shipment_id };
+  };
+  return {
+    same: rows.filter((r) => cid && r.company_id === cid).map(show),
+    other: rows.filter((r) => !cid || r.company_id !== cid).map(show),
+    similar: similar.map(show),
+  };
+}
+
 /** Create or update an invoice (AR / DN / AP) with its lines. Returns the id. */
 function saveInvoice(data, { db = store.db, userId = null, id = null } = {}) {
   const kind = data.kind;
@@ -74,9 +113,10 @@ function saveInvoice(data, { db = store.db, userId = null, id = null } = {}) {
       db.run('DELETE FROM invoice_lines WHERE invoice_id = ?', id);
     } else {
       // A/R GBL-INV10001, debit note GBL-DN10001, credit note (negative D/N) GBL-CN10001; vendor bills keep their own no.
-      const number = kind === 'AR' ? company.nextRef('INV', { db, table: 'invoices', column: 'number' })
+      let number = kind === 'AR' ? company.nextRef('INV', { db, table: 'invoices', column: 'number' })
         : kind === 'DN' ? (data.keep_number ? String(data.number).trim() : company.nextRef(total < 0 ? 'CN' : 'DN', { db, table: 'invoices', column: 'number' }))
-          : (data.number || `AP-${Date.now().toString(36).toUpperCase()}`);
+          : (String(data.number || '').trim() || `AP-${Date.now().toString(36).toUpperCase()}`);
+      if (kind === 'AP' || (kind === 'DN' && data.keep_number)) number = uniqueNumber(number, row.company_id, data.allow_duplicate, db);
       const cols = ['number', 'prepared_by', ...Object.keys(row)];
       id = Number(db.run(`INSERT INTO invoices (${cols.join(',')}) VALUES (${cols.map(() => '?').join(',')})`, number, userId, ...Object.values(row)).lastInsertRowid);
     }
@@ -93,6 +133,25 @@ function saveInvoice(data, { db = store.db, userId = null, id = null } = {}) {
     if (row.company_id && (kind === 'AP' || kind === 'DN')) applyUnapplied(row.company_id, { db });
     return id;
   });
+}
+
+/**
+ * A vendor / agent number as stored: the same number already booked for the same party is refused (DUPLICATE,
+ * with the booked one attached) unless `allow` — then "-2", "-3" is added. The same number from another party is
+ * a different bill: stored as "1001 · CTC".
+ */
+function uniqueNumber(number, companyId, allow, db = store.db) {
+  const taken = (n) => db.get('SELECT id, company_id FROM invoices WHERE number = ?', n);
+  const t = taken(number);
+  const dup = findDuplicates({ number, companyId }, db).same.filter((r) => r.status !== 'VOID');
+  if (dup.length && !allow) throw Object.assign(new Error(`Invoice ${number} from this party is already booked (${dup[0].number}${dup[0].file_ref ? ` on ${dup[0].file_ref}` : ''})`), { code: 'DUPLICATE', duplicates: dup, status: 409, expose: true });
+  let n = number;
+  if (t && t.company_id !== Number(companyId) && !dup.length) {
+    const c = db.get('SELECT name, short_name FROM companies WHERE id = ?', Number(companyId));
+    n = `${number} · ${(c?.short_name || c?.name || 'party').slice(0, 20)}`;
+  }
+  for (let k = 2; taken(n); k++) n = `${number}-${k}`;
+  return n;
 }
 
 function getInvoice(id, db = store.db) {
@@ -493,7 +552,7 @@ function setReviewed(id, on, { db = store.db, userId = null } = {}) {
   db.run(`UPDATE invoices SET reviewed_at = ${on ? "datetime('now')" : 'NULL'}, reviewed_by = ? WHERE id = ?`, on ? userId : null, id);
 }
 
-module.exports = {
+module.exports = { findDuplicates, normNo,
   CHARGE_CODES, saveInvoice, getInvoice, listInvoices, voidInvoice, recordPayment, settleNetting,
   agentStatement, arAging, shipmentProfit, refreshStatus, addDays, payOnAccount, applyUnapplied, unappliedPayments,
   shipmentLines, profitReport, openItems, settleSelected,

@@ -24,6 +24,20 @@ function matchShipments(refs, db = store.db) {
     ORDER BY s.id DESC LIMIT 5`, ...Array(6).fill(keys).flat()).map((r) => r.id);
 }
 
+/** Already booked? Same number from the same party, or the same amount from them around the same date. */
+function dupNotice(r, db = store.db) {
+  if (!r.number && r.total == null) return;
+  const d = A.findDuplicates({ number: r.number, companyId: r.vendor?.id || null, total: r.total, date: r.invoice_date }, db);
+  const hit = d.same[0] || (!r.vendor && d.other[0]);
+  if (hit) {
+    r.duplicate = hit.id;
+    r.warnings.unshift(`Already booked: ${hit.number} · ${hit.party} · USD ${Math.abs(hit.total).toFixed(2)} · ${hit.date || ''}${hit.file_ref ? ` · file ${hit.file_ref}` : ''} — this is probably a duplicate`);
+  } else if (d.similar[0]) {
+    const s = d.similar[0];
+    r.warnings.unshift(`Same amount already booked from this party: ${s.number} (${s.date || ''}${s.file_ref ? `, file ${s.file_ref}` : ''}) — check it is not the same bill re-sent`);
+  }
+}
+
 async function extract({ buffer, filename, mime, db = store.db }) {
   const { readDocument } = require('./extract/text');
   const { segments } = await readDocument(buffer, filename, mime);
@@ -37,10 +51,7 @@ async function extract({ buffer, filename, mime, db = store.db }) {
     const r = { doc_kind: 'DN', note: { kind: n.kind, issuer: n.issuer }, number: n.number, invoice_date: n.date, agent_ref: n.agent_ref,
       lines: n.lines, total: n.total, refs: n.refs, vendor: n.party, warnings: n.warnings, source: 'rules', ocr: segments.some((s) => s.ocr) };
     r.shipments = matchShipments({ containers: n.refs.containers, tokens: [...n.refs.tokens, ...n.lines.map((l) => l.bl_no).filter(Boolean)] }, db);
-    if (r.vendor && r.number) {
-      const dup = db.get("SELECT id, number FROM invoices WHERE kind = 'DN' AND UPPER(number) = UPPER(?) AND status <> 'VOID'", r.number);
-      if (dup) { r.duplicate = dup.id; r.warnings.unshift(`Already booked: ${dup.number} — this may be a duplicate`); }
-    }
+    dupNotice(r, db);
     return r;
   }
   const r = parseVendorInvoice(text, { companies, ownName: own });
@@ -80,10 +91,7 @@ async function extract({ buffer, filename, mime, db = store.db }) {
       if (hit) { r.vendor = { id: hit.id, name: hit.name }; delete r.vendor_new; }
     }
   }
-  if (r.vendor && r.number) {
-    const dup = db.get("SELECT id, number FROM invoices WHERE kind = 'AP' AND company_id = ? AND UPPER(number) = UPPER(?) AND status <> 'VOID'", r.vendor.id, r.number);
-    if (dup) { r.duplicate = dup.id; r.warnings.unshift(`Already booked: ${dup.number} — this may be a duplicate`); }
-  }
+  dupNotice(r, db);
   return r;
 }
 
