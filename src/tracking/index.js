@@ -187,6 +187,18 @@ function start() {
   if (e.aisstream && globalThis.WebSocket) timers.push(require('./ais').startAisStream({ apiKey: e.aisstream }));
   return st;
 }
+/**
+ * Right after a file is created / saved / filled from documents: fetch ETD / ETA from the connected tracking source
+ * in the background (only when a source is connected, the file has a B/L and it is not delivered yet).
+ */
+function refreshSoon(id, { db = store.db, userId = null } = {}) {
+  if (!status().any || db.setting('auto_tracking') === '0') return false;
+  const s = db.get('SELECT id, mbl_no, status, tracking_enabled FROM shipments WHERE id = ?', id);
+  if (!s || !s.mbl_no || s.status === 'DELIVERED' || s.tracking_enabled === 0) return false;
+  setImmediate(() => refreshShipment(id, { db, userId }).catch((e) => console.error('Tracking:', e.message)));
+  return true;
+}
+
 function stop() { for (const t of timers) { if (t.stop) t.stop(); else clearInterval(t); } timers = []; }
 
 /** Terminal49 webhook: verify signature, find the shipment by B/L, refresh it. */
@@ -206,4 +218,4 @@ async function handleTerminal49Webhook(rawBody, signature, { db = store.db } = {
   return { status: 200, shipments: ids.length };
 }
 
-module.exports = { refreshShipment, refreshAll, start, stop, status, chooseProvider, applyResult, handleTerminal49Webhook, setFetch, providers };
+module.exports = { refreshShipment, refreshSoon, refreshAll, start, stop, status, chooseProvider, applyResult, handleTerminal49Webhook, setFetch, providers };

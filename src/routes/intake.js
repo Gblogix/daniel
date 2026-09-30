@@ -170,6 +170,7 @@ router.post('/intakes/:id/apply', auth.requirePerm('intake'), async (req, res) =
     db.run('UPDATE shipments SET bl_invoices = ? WHERE id = ?', [...new Set([...cur, ...refs])].join(','), id);
   }
   db.run("UPDATE intakes SET status = 'APPLIED', shipment_id = ?, reviewed_at = datetime('now'), reviewed_by = ? WHERE id = ?", id, req.user.id, intake.id);
+  require('../tracking').refreshSoon(id, { userId: req.user.id });
   if (req.body.send_notices) await notify.onDocumentsApplied(id, { userId: req.user.id });
   else S.addEvent(id, 'DOCS_RECEIVED', 'Shipping documents received from origin agent', { userId: req.user.id });
   req.session.flash = { type: 'ok', msg: `Documents applied to shipment${req.body.send_notices ? ' — notices sent' : ''}${added ? ` · ${added} added to Parties as a new customer` : ''}` };

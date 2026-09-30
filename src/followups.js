@@ -89,6 +89,10 @@ function shipmentItems(s, { now = new Date(), docs = new Set() } = {}) {
   if (s.delivery_date && d(s.delivery_date) < T) {
     add('pod', 'high', 'Delivery date passed — confirm POD', `Scheduled ${md(s.delivery_date)}; mark delivered when the POD arrives`, s.delivery_date, { label: 'Open file', href: `${file}#pickup` }, s.delivery_date);
   }
+  // No ETA at all once the B/L is in: nobody can plan the A/N, customs or delivery.
+  if (!s.eta && !s.ata && (s.mbl_no || s.hbl_no) && idx < S.STATUS_INDEX.ARRIVED) {
+    add('eta_missing', etd != null && days(etd) <= 0 ? 'high' : 'normal', 'ETA unknown', 'Not on the documents and no tracking update yet — check the carrier site or ask the agent', null, { label: 'Open file', href: `${file}#pic` });
+  }
   if (['error', 'failed'].includes(s.tracking_status)) add('tracking', 'normal', 'Tracking error', s.tracking_error || 'Carrier tracking failed', null, { label: 'Refresh tracking', post: `${file}/track` });
   return out;
 }

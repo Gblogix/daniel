@@ -148,3 +148,14 @@ test('a B/L invoice with no P/L lines stays on the file follow-ups until its P/L
   S2.saveLines(id, { item_desc: ['Serum', 'Mask'], item_inv: ['EZVC_TGT_26-09', 'ub005'], item_buyer: ['Target', 'Ulta'] });
   assert.ok(!F2.forUser(admin, { shipmentId: id }).some((i) => i.key.includes('plmissing')), 'cleared once the P/L is in');
 });
+
+test('ETA unknown once the B/L is in', () => {
+  const S2 = require('../src/shipments');
+  const F2 = require('../src/followups');
+  const db2 = require('../src/db').db;
+  const id = S2.create({ mode: 'FCL', status: 'BOOKED', mbl_no: 'MAEU999000111' });
+  const admin = db2.get("SELECT * FROM users WHERE role = 'admin'");
+  assert.ok(F2.forUser(admin, { shipmentId: id }).some((i) => i.key.endsWith(':eta_missing')));
+  S2.update(id, { eta: '2026-10-20' });
+  assert.ok(!F2.forUser(admin, { shipmentId: id }).some((i) => i.key.endsWith(':eta_missing')));
+});

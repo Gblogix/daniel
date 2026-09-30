@@ -97,7 +97,8 @@ router.post('/shipments', auth.requirePerm('shipments_edit'), (req, res) => {
   require('../extract/party').fromForm(req.body, 'customer_id');
   const id = S.create(stripAccounting(req), { userId: req.user.id });
   S.saveLines(id, req.body);
-  flash(req, 'ok', req.body.mode === 'OTHER' ? 'Other file created — add its invoices / vendor bills below' : 'Shipment created');
+  const tracking = req.body.mode !== 'OTHER' && require('../tracking').refreshSoon(id, { userId: req.user.id });
+  flash(req, 'ok', req.body.mode === 'OTHER' ? 'Other file created — add its invoices / vendor bills below' : `Shipment created${tracking ? ' — ETD / ETA are being fetched from tracking' : ''}`);
   res.redirect(`/shipments/${id}`);
 });
 
@@ -141,7 +142,8 @@ router.get('/shipments/:id', auth.requireLogin, (req, res) => {
     const P = require('../extract/party');
     if (!P.findParty(s.consignee_name)) newCustomer = { name: s.consignee_name, address: s.consignee_address };
   }
-  res.render(view, { title: S.fileName(s), s, newCustomer, nextActions, tr: S.tracking(s), docs, events, emails, trackEvents, invoices, profit, plLines, acctParties, outgoing, vendorPending, autoSend: db.setting('auto_send_reviewed') === '1',
+  const trackLink = internal ? require('../tracking/codes').trackUrl(s) : null;
+  res.render(view, { title: S.fileName(s), s, trackLink, newCustomer, nextActions, tr: S.tracking(s), docs, events, emails, trackEvents, invoices, profit, plLines, acctParties, outgoing, vendorPending, autoSend: db.setting('auto_send_reviewed') === '1',
     codes: A.CHARGE_CODES, billing: acct ? S.billingState(s) : null, trackingStatus: require('../tracking').status(), ...(internal ? partyLists() : {}) });
 });
 
@@ -166,6 +168,9 @@ router.post('/shipments/:id', auth.requirePerm('shipments_edit'), async (req, re
   const changes = S.update(id, stripAccounting(req));
   S.saveLines(id, req.body);
   await notify.onShipmentChanged(id, changes, { userId: req.user.id });
+  // New / changed B/L, or still no ETA: ask the tracking source now instead of waiting for the next round.
+  const cur = store.db.get('SELECT eta, tracking_checked_at FROM shipments WHERE id = ?', id);
+  if (changes.some((c) => c.field === 'mbl_no') || !cur?.eta || !cur?.tracking_checked_at) require('../tracking').refreshSoon(id, { userId: req.user.id });
   flash(req, 'ok', `${changes.length ? `Saved (${changes.length} field${changes.length > 1 ? 's' : ''} changed)` : 'Saved'}${addedCustomer ? ` · ${addedCustomer} added to Parties as a new customer` : ''}`);
   res.redirect(`/shipments/${id}`);
 });

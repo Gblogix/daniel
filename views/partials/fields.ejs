@@ -51,7 +51,12 @@
     <%- inp('place_of_delivery', 'Place of delivery') %>
     <%- inp('cfs_location', 'Freight location (pick-up: terminal / CFS / CES)') %>
     <%- inp('etd', 'ETD', 'date') %>
-    <%- inp('eta', 'ETA', 'date') %>
+    <div><%- inp('eta', 'ETA', 'date') %>
+      <% if (s.id && locals.trackingStatus) { %><div class="small eta-src" style="margin-top:-6px">
+        <% if (trackingStatus.any && s.tracking_checked_at) { %><span class="muted">Auto · <%= fmtDateTime(s.tracking_checked_at) %> UTC</span>
+        <% } else if (trackingStatus.any) { %><span class="muted">Auto after saving (needs MBL)</span>
+        <% } else { %><span class="muted" title="No tracking API connected — the ETA comes from the documents (ISF / arrival notice) or is typed in">Manual (no tracking link)</span><% } %>
+        <% if (locals.trackLink) { %><br><a href="<%= trackLink.url %>" target="_blank" rel="noopener">🔎 <%= trackLink.label %> ↗</a><% } %></div><% } %></div>
     <%- inp('atd', 'ATD (actual)', 'date') %>
     <%- inp('ata', 'ATA (actual)', 'date') %>
     <%- inp('last_free_day', 'Last free day', 'date') %>

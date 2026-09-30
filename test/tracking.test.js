@@ -174,3 +174,23 @@ test('Terminal49 webhook: rejects bad signature, refreshes matching shipment', a
   assert.equal(r.status, 200);
   assert.equal(r.shipments, 1);
 });
+
+test('carrier tracking link from the B/L (Maersk deep link; container search otherwise; none for air)', () => {
+  const codes = require('../src/tracking/codes');
+  assert.deepEqual(codes.trackUrl({ mbl_no: 'MAEU277099556', scac: 'MAEU' }), { url: 'https://www.maersk.com/tracking/277099556', label: 'Maersk tracking' });
+  assert.match(codes.trackUrl({ mbl_no: 'XYZ123', containers: [{ container_no: 'MNBU4117750' }] }).url, /searates\.com.*MNBU4117750/);
+  assert.equal(codes.trackUrl({ mode: 'AIR', mbl_no: '921-63150570' }), null);
+});
+
+test('refreshSoon: only with a connected source, a B/L and not delivered', () => {
+  const s = S.list({ role: 'staff' }).find((x) => x.mbl_no === 'HDMUPUSA1234567');
+  const keys = ['TERMINAL49_API_KEY', 'SHIPSGO_API_KEY', 'DCSA_CARRIERS'];
+  const saved = Object.fromEntries(keys.map((k) => [k, process.env[k]]));
+  for (const k of keys) delete process.env[k];
+  assert.equal(tracking.refreshSoon(s.id), false, 'nothing connected');
+  Object.assign(process.env, saved);
+  tracking.setFetch(async () => ({ ok: false, status: 500, json: async () => ({}), text: async () => '' }));
+  assert.equal(tracking.refreshSoon(s.id), true);
+  store.db.run("UPDATE shipments SET status = 'DELIVERED' WHERE id = ?", s.id);
+  assert.equal(tracking.refreshSoon(s.id), false, 'delivered files are not tracked');
+});

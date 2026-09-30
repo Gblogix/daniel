@@ -43,4 +43,26 @@ function detectScac(s) {
     || null;
 }
 
-module.exports = { scacFromBl, parseAwb, detectScac, CARRIERS, AIRLINES };
+/**
+ * The carrier's own public tracking page for this B/L (one click when no tracking API is connected). Falls back to a
+ * container search when the carrier has no deep link.
+ */
+function trackUrl(s) {
+  const scac = detectScac(s);
+  const bl = String(s.mbl_no || '').toUpperCase().replace(/\s+/g, '');
+  const bare = scac && bl.startsWith(scac) ? bl.slice(scac.length) : bl;
+  const ctn = (s.containers || [])[0]?.container_no || s.first_ctn || '';
+  const e = encodeURIComponent;
+  const pages = {
+    MAEU: bare && `https://www.maersk.com/tracking/${e(bare)}`,
+    MSCU: bl && `https://www.msc.com/en/track-a-shipment?agencyPath=msc&trackingNumber=${e(bare)}&trackingMode=0`,
+    CMDU: bl && `https://www.cma-cgm.com/ebusiness/tracking/search?SearchBy=BL&Reference=${e(bl)}`,
+    HLCU: bl && `https://www.hapag-lloyd.com/en/online-business/track/track-by-booking-solution.html?blno=${e(bare)}`,
+    ONEY: bl && `https://ecomm.one-line.com/one-ecom/manage-shipment/cargo-tracking?trakNoParam=${e(bare)}&trakNoTpCdParam=B`,
+  };
+  if (s.mode === 'AIR') return null;
+  const url = (scac && pages[scac]) || (ctn ? `https://www.searates.com/container/tracking/?number=${e(ctn)}` : null);
+  return url ? { url, label: scac && pages[scac] ? `${CARRIERS[scac] || scac} tracking` : 'Container tracking (SeaRates)' } : null;
+}
+
+module.exports = { scacFromBl, parseAwb, detectScac, trackUrl, CARRIERS, AIRLINES };
