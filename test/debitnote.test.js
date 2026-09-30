@@ -14,7 +14,7 @@ const V = require('../src/vendorbills');
 const A = require('../src/accounting');
 seedDemo(store.db);
 const db = store.db;
-const agents = [{ id: 9, name: 'NATIONAL SHIPPING CO., LTD (국민해운)', short_name: 'NSC' }];
+const agents = [{ id: 9, name: 'NATIONAL SHIPPING CO., LTD (국민해운)', short_name: 'NSC', type: 'agent' }, { id: 12, name: 'UNLOCKT BRANDS, INC', short_name: 'Unlockt', type: 'customer' }];
 const own = 'GLOBALBRIDGE LOGISTICS';
 
 const OURS = `GLOBALBRIDGE LOGISTICS  DEBIT NOTE
@@ -77,4 +77,36 @@ test('uploaded agent D/N → matched to the file by B/L → booked on the D/N ac
   const inv = A.getInvoice(V.book(id, { kind: 'DN', company_id: nsc, shipment_id: s.id, number: d.ex.number, invoice_date: d.ex.invoice_date, lines: d.ex.lines }));
   assert.deepEqual([inv.kind, inv.number, inv.total], ['DN', 'NSCDN2609-0012', -1970]);
   assert.deepEqual(inv.lines.map((l) => l.side), ['CREDIT', 'CREDIT', 'DEBIT']);
+});
+
+// National Shipping (NSC) D/N layout: Debit and Credit printed on every line, letter-spaced "T o t a l",
+// "Balance Amount USD x" owed to the issuer (numbers made up).
+const NSC = `NATIONAL SHIPPING. CO.,LTD
+W812,SK V1 CENTER, 11, DANGSAN-RO 41-GIL, YEONGDEUNGPO-GU,
+SEOUL, REPUBLIC OF KOREA
+DEBIT NOTE
+D/C Note No : SESP26099999
+P.I.C  :  SAMPLE
+Partner  : [GL003] GlobalBridge Logistics  :
+Address  : 1661 N.RAYMOND AVE., SUITE 140F, ANAHEIM, CA 92801  :
+House No  : NSCLGB26099999  E.T.D  : 2026-09-27  Inv. Date  : 2026-09-26
+Master No  : MAEU270000001  E.T.A  : 2026-10-09  Package  : 16 PACKAGES
+Shipper  : GLLUGA INC  Consignee : UNLOCKT BRANDS INC  Notify  : UNLOCKT BRANDS INC
+B/L NO  Description  Unit  QTY Currency  Unit Price  Debit  Credit
+NSCLGB26099999  OCEAN FREIGHT  40GP  1  USD  8,600.00  8,600.00  0.00
+NSCLGB26099999  INSURANCE FEE  B/L  1  USD  206.80  206.80  0.00
+NSCLGB26099999  PROFIT SHARE  B/L  1  USD  100.00  0.00  100.00
+T o t a l  8,806.80  100.00
+Balance Amount  USD  8,706.80
+Bank Information
+Beneficiary Name: NATIONAL SHIPPING CO LTD`;
+
+test('NSC debit note: both columns per line, their charges = we owe, their credit = they owe us', () => {
+  const r = parseNote(NSC, { companies: [...agents, { id: 1, name: 'GlobalBridge Logistics' }], ownName: own });
+  assert.deepEqual([r.issuer, r.number, r.date, r.agent_ref, r.party?.id, r.total], ['them', 'SESP26099999', '2026-09-26', 'NSCLGB26099999', 9, -8706.8]);
+  assert.deepEqual(r.lines.map((l) => [l.description, l.bl_no, l.qty, l.rate, l.amount, l.side]), [
+    ['OCEAN FREIGHT', 'NSCLGB26099999', 1, 8600, 8600, 'CREDIT'],
+    ['INSURANCE FEE', 'NSCLGB26099999', 1, 206.8, 206.8, 'CREDIT'],
+    ['PROFIT SHARE', 'NSCLGB26099999', 1, 100, 100, 'DEBIT']]);
+  assert.deepEqual(r.warnings, []);
 });

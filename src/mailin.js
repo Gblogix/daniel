@@ -62,7 +62,7 @@ async function pollOnce({ db = store.db, fetchImpl, now = new Date() } = {}) {
     const shipping = [];
     let notes = 0;
     for (const a of files) {
-      const maybeNote = /\.(pdf|jpe?g|png)$/i.test(a.filename) && /\b(D\s*[/_-]?\s*N|C\s*[/_-]?\s*N|DEBIT|CREDIT|DCN)\b/i.test(`${a.filename} ${m.subject}`.replace(/_/g, ' '));
+      const maybeNote = /\.(pdf|jpe?g|png)$/i.test(a.filename) && /\b(D\s*[/_-]?\s*[NC]|C\s*[/_-]?\s*N|DEBIT|CREDIT|DCN)\b/i.test(`${a.filename} ${m.subject}`.replace(/_/g, ' '));
       const ex = maybeNote ? await V.extract({ buffer: a.content, filename: a.filename, mime: a.mime || '', db }).catch(() => null) : null;
       if (ex?.doc_kind === 'DN') { await V.receive({ buffer: a.content, filename: a.filename, mime: a.mime || '', companyId: agent.id, via: 'email', ex, db }); notes++; } else shipping.push(a);
     }

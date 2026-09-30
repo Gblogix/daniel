@@ -36,6 +36,20 @@ function creditSubset(lines, target) {
   return best;
 }
 
+/**
+ * Cross-check the lines with the printed balance: "BALANCE DUE TO <party> USD x" (direction given), or a plain
+ * "Balance Amount USD x" (owed to the issuer).
+ */
+function balanceCheck(out, T, own, issuer) {
+  const net = out.total;
+  const dueTo = /BALANCE\s+DUE\s+TO\s+([A-Z][A-Z .,&()-]{2,60}?)\s+(?:USD\s*)?([\d,]+\.\d{2})/i.exec(T);
+  const plain = !dueTo && /BALANCE\s*(?:AMOUNT)?\s*[:.]?\s*(?:USD\s*)?([\d,]+\.\d{2})/i.exec(T);
+  let printed = null; let who = '';
+  if (dueTo) { const toUs = own && norm(dueTo[1]).includes(own.split(' ')[0]); printed = money(dueTo[2]) * (toUs ? 1 : -1); who = dueTo[1].trim(); }
+  else if (plain) { printed = money(plain[1]) * (issuer === 'us' ? 1 : -1) * (out.kind === 'CN' ? -1 : 1); who = issuer === 'us' ? 'us' : 'the agent'; }
+  if (printed != null && Math.abs(Math.abs(printed) - Math.abs(net)) > 0.01) out.warnings.push(`Lines give a balance of ${Math.abs(net).toFixed(2)} but the note says ${Math.abs(printed).toFixed(2)} (to ${who}) — check the lines`);
+}
+
 function parseNote(text, { companies = [], ownName = 'GLOBALBRIDGE' } = {}) {
   const T = String(text || '');
   const U = T.toUpperCase();
@@ -48,13 +62,56 @@ function parseNote(text, { companies = [], ownName = 'GLOBALBRIDGE' } = {}) {
   const issuer = own && norm(letter.join(' ')).includes(own.split(' ')[0]) ? 'us' : 'them';
   const kind = /CREDIT\s*NOTE/i.test(head) && !/DEBIT/i.test(head) ? 'CN' : 'DN';
   const out = { kind, issuer, warnings: [] };
-  out.number = labelled(lines, /D\s*\/\s*C\s*NO\.?|D\s*\/\s*N\s*NO\.?|C\s*\/\s*N\s*NO\.?|(?:DEBIT|CREDIT)\s*NOTE\s*(?:NO\.?|#)|NOTE\s*NO\.?|INVOICE\s*NO\.?|REF(?:ERENCE)?\s*NO\.?/i, NUMBER_OK);
-  out.date = labelDate(lines, /D\s*\/\s*C\s*DATE|(?:DEBIT|CREDIT)\s*NOTE\s*DATE|ISSUE\s*DATE|INVOICE\s*DATE|\bDATE\b/i);
-  const agentRef = /AGENT\s*(?:FILING|REF(?:ERENCE)?)\s*NO\.?\s*[:.]?\s*([A-Z0-9-]{6,})/i.exec(T);
+  out.number = labelled(lines, /D\s*\/\s*C\s*(?:NOTE\s*)?NO\.?|D\s*\/\s*N\s*NO\.?|C\s*\/\s*N\s*NO\.?|(?:DEBIT|CREDIT)\s*NOTE\s*(?:NO\.?|#)|NOTE\s*NO\.?|INVOICE\s*NO\.?|REF(?:ERENCE)?\s*NO\.?/i, NUMBER_OK);
+  out.date = labelDate(lines, /INV(?:OICE)?\.?\s*DATE|D\s*\/\s*C\s*DATE|(?:DEBIT|CREDIT)\s*NOTE\s*DATE|ISSUE\s*DATE|INVOICE\s*DATE|\bDATE\b/i);
+  const agentRef = /AGENT\s*(?:FILING|REF(?:ERENCE)?)\s*NO\.?\s*[:.]?\s*([A-Z0-9-]{6,})/i.exec(T)
+    || /HOUSE\s*(?:B\/L\s*)?NO\.?\s*[:.]?\s*(NSC[A-Z0-9]{6,})/i.exec(T) || /\b(NSC[A-Z]{2,5}\d{6,9})\b/.exec(U);
   out.agent_ref = agentRef ? agentRef[1] : null;
   out.refs = references(T);
   // Party: the agent named on it (never ourselves).
-  out.party = matchVendor(T, companies.filter((c) => norm(c.name) !== own), ownName);
+  // Party: the letterhead company ("NATIONAL SHIPPING. CO.,LTD" = "NATIONAL SHIPPING CO., LTD (국민해운)"), else an agent
+  // named in the text, else the e-mail domain printed on it; never ourselves, never the shipper / consignee.
+  const P = require('./party');
+  const others = companies.filter((c) => norm(c.name) !== own);
+  const top = letter.map((l) => P.norm(l)).filter((l) => l.length >= 4);
+  const byLetter = others.find((c) => top.includes(P.norm(c.name)) || (c.short_name && top.includes(P.norm(c.short_name))));
+  const byDomain = others.find((c) => String(`${c.emails || ''},${c.billing_emails || ''}`).toLowerCase().split(/[,;\s]+/)
+    .some((e) => e.includes('@') && !/example$/.test(e) && new RegExp(`@${e.split('@')[1].replace(/\./g, '\\.')}\\b`, 'i').test(T)));
+  out.party = (byLetter && { id: byLetter.id, name: byLetter.name })
+    || matchVendor(T, others.filter((c) => c.type === 'agent'), ownName)
+    || (byDomain && { id: byDomain.id, name: byDomain.name })
+    || (issuer === 'us' ? matchVendor(T, others, ownName) : null);
+
+  // Debit / Credit printed per line ("… USD 8,600.00  8,600.00  0.00"): read both columns directly.
+  const hdr = lines.findIndex((l) => /DESCRIPTION/i.test(l) && /DEBIT[^A-Z]*\s+CREDIT[^A-Z]*\s*$/i.test(l));
+  if (hdr >= 0) {
+    const AMT = /^\(?-?[\d,]*\d\.\d{2}\)?$/;
+    const two = [];
+    for (const l of lines.slice(hdr + 1)) {
+      const flat = l.replace(/\s+/g, '').toUpperCase();
+      if (/^(TOTAL|BALANCE|GRANDTOTAL|SUBTOTAL)/.test(flat)) break;
+      const cells = l.trim().split(/\s{2,}/);
+      if (cells.length < 3 || !AMT.test(cells[cells.length - 1]) || !AMT.test(cells[cells.length - 2])) continue;
+      const debit = money(cells[cells.length - 2]); const credit = money(cells[cells.length - 1]);
+      let k = 0;
+      const bl = /^[A-Z]{4}[A-Z0-9]{6,}$/.test(cells[0]) && /\d{4}/.test(cells[0]) ? cells[k++] : null;
+      const desc = cells[k];
+      if (!desc || !/[A-Za-z]{2}/.test(desc)) continue;
+      const rest = cells.slice(k + 1, -2);
+      const rate = rest.length && AMT.test(rest[rest.length - 1]) ? money(rest[rest.length - 1]) : null;
+      const qty = rest.find((c) => /^\d+(\.\d+)?$/.test(c));
+      two.push({ description: desc.toUpperCase(), bl_no: bl, qty: qty != null ? Number(qty) : null, rate, amount: round(debit || credit), issuerCredit: !debit && credit > 0 });
+    }
+    if (two.length) {
+      out.lines = two.map((l) => ({ description: l.description, bl_no: l.bl_no, qty: l.qty, rate: l.rate, amount: l.amount,
+        side: (issuer === 'us') !== (kind === 'CN' || l.issuerCredit) ? 'DEBIT' : 'CREDIT' }));
+      out.total = round(out.lines.reduce((a, l) => a + (l.side === 'DEBIT' ? l.amount : -l.amount), 0));
+      balanceCheck(out, T, own, issuer);
+      if (!out.number) out.warnings.push('Note number not found');
+      if (!out.party) out.warnings.push('Agent not recognised — pick it from the list');
+      return out;
+    }
+  }
 
   // Lines: "M KMHB2409001 TRUCKING CHARGE 650.00 C 650.00" → description + B/L, amount = last figure.
   const raw = chargeLines(lines.map((l) => l.replace(/\s+[PC]\s+(?=[\d,]+\.\d{2}\s*$)/, '  ')));
@@ -81,13 +138,7 @@ function parseNote(text, { companies = [], ownName = 'GLOBALBRIDGE' } = {}) {
     side: (issuer === 'us') !== issuerCredit(i) ? 'DEBIT' : 'CREDIT' }));
   const net = round(out.lines.reduce((a, l) => a + (l.side === 'DEBIT' ? l.amount : -l.amount), 0));
   out.total = net;
-  // Cross-check with "BALANCE DUE TO …" when printed.
-  const dueTo = /BALANCE\s+DUE\s+TO\s+([A-Z][A-Z .,&()-]{2,60}?)\s+(?:USD\s*)?([\d,]+\.\d{2})/i.exec(T);
-  if (dueTo) {
-    const toUs = own && norm(dueTo[1]).includes(own.split(' ')[0]);
-    const printed = money(dueTo[2]) * (toUs ? 1 : -1);
-    if (Math.abs(printed - net) > 0.01) out.warnings.push(`Lines give a balance of ${net.toFixed(2)} but the note says ${dueTo[1].trim()} ${money(dueTo[2]).toFixed(2)} — check the lines`);
-  }
+  balanceCheck(out, T, own, issuer);
   if (!out.number) out.warnings.push('Note number not found');
   if (!out.party) out.warnings.push('Agent not recognised — pick it from the list');
   if (!out.lines.length) out.warnings.push('No lines read — enter them from the note');
