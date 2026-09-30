@@ -1,6 +1,6 @@
 <%- include('../partials/head') %>
-<% const lines = ex.lines && ex.lines.length ? ex.lines : [{}]; const sid = d.shipment_id; %>
-<div class="pagehead"><div><h1 style="margin-bottom:4px">Book vendor invoice</h1>
+<% const lines = ex.lines && ex.lines.length ? ex.lines : [{}]; const sid = d.shipment_id; const note = ex.doc_kind === 'DN'; %>
+<div class="pagehead"><div><h1 style="margin-bottom:4px"><%= note ? `Book ${ex.note?.issuer === 'us' ? 'our' : 'agent'} ${ex.note?.kind === 'CN' ? 'credit' : 'debit'} note` : 'Book vendor invoice' %></h1>
   <div class="muted small"><%= d.filename %> · received <%= fmtDateTime(d.created_at) %> · read by <%= ex.source === 'ai' ? 'AI + rules' : 'rules' %><%= ex.ocr ? ' (OCR)' : '' %></div></div>
   <div class="actions">
     <form method="post" action="/vendor-bills/<%= d.id %>/reread"><input type="hidden" name="_csrf" value="<%= csrf %>"><button class="btn secondary">↻ Read again</button></form>
@@ -9,14 +9,18 @@
 </div>
 <div class="split">
   <div class="card flush docview"><iframe src="/documents/<%= d.id %>" title="Vendor invoice"></iframe></div>
-  <form class="card" method="post" action="/vendor-bills/<%= d.id %>" data-bill>
-    <input type="hidden" name="_csrf" value="<%= csrf %>">
+  <form class="card <%= note ? 'is-note' : '' %>" method="post" action="/vendor-bills/<%= d.id %>" data-bill>
+    <input type="hidden" name="_csrf" value="<%= csrf %>"><input type="hidden" name="agent_ref" value="<%= ex.agent_ref || '' %>">
+    <div class="field"><label>Type</label><select name="doc_kind" data-doc-kind>
+      <option value="AP" <%= note ? '' : 'selected' %>>Vendor bill (A/P — we pay the vendor)</option>
+      <option value="DN" <%= note ? 'selected' : '' %>>Debit / credit note with an agent (D/N account: Debit = agent owes us, Credit = we owe)</option></select>
+      <% if (note) { %><span class="small muted">Read as <b><%= ex.note.issuer === 'us' ? 'our' : "the agent's" %> <%= ex.note.kind === 'CN' ? 'credit' : 'debit' %> note</b><%= ex.note.issuer === 'us' ? '' : ' — their charges are credits on our side (we owe), their credits are debits (they owe us)' %>.</span><% } %></div>
     <% if ((ex.warnings || []).length) { %><div class="warnbox"><b>Please check</b><ul><% ex.warnings.forEach((w) => { %><li><%= w %></li><% }) %></ul></div>
     <% } else { %><div class="okbox">✔ Everything was read — check against the invoice and book.</div><% } %>
     <div class="grid g2">
-      <div class="field"><label>Vendor</label><select name="company_id" required data-party-search data-new-party><option value="">— pick —</option>
+      <div class="field"><label><%= note ? 'Agent' : 'Vendor' %></label><select name="company_id" required data-party-search data-new-party><option value="">— pick —</option>
         <% const nv = !d.company_id && !ex.vendor && ex.vendor_new; if (nv) { %><option value="new" selected>＋ New vendor from the invoice: <%= nv.name %></option><% } %>
-        <%- include('../partials/party-options', { parties, selected: d.company_id || ex.vendor?.id, prefer: ['vendor', 'trucker', 'broker', 'delivery', 'agent'] }) %></select>
+        <%- include('../partials/party-options', { parties, selected: d.company_id || ex.vendor?.id, prefer: note ? ['agent'] : ['vendor', 'trucker', 'broker', 'delivery', 'agent'] }) %></select>
         <% if (nv) { %><div class="new-party" data-new-party-box>
           <span class="small muted">Not on Parties yet — added when you book (edit if needed):</span>
           <input name="new_party_name" value="<%= nv.name %>" placeholder="Vendor name">
@@ -28,25 +32,28 @@
       <div class="field"><label>File</label><select name="shipment_id"><option value="">— no file (overhead) —</option>
         <% files.forEach((s) => { %><option value="<%= s.id %>" <%= sid === s.id ? 'selected' : '' %>><%= matchedIds.includes(s.id) ? '★ ' : '' %><%= S.fileName(s) %> · <%= s.ref_no %></option><% }) %></select>
         <span class="small muted">★ = matched from the invoice (container / B/L)</span></div>
-      <div class="field"><label>Vendor invoice no.</label><input name="number" value="<%= ex.number || '' %>" required class="mono"></div>
-      <div class="field"><label>Invoice date</label><input type="date" name="invoice_date" value="<%= ex.invoice_date || '' %>"></div>
+      <div class="field"><label><%= note ? 'Note no. (kept as on the note)' : 'Vendor invoice no.' %></label><input name="number" value="<%= ex.number || '' %>" required class="mono"></div>
+      <div class="field"><label><%= note ? 'Note date' : 'Invoice date' %></label><input type="date" name="invoice_date" value="<%= ex.invoice_date || '' %>"></div>
       <div class="field"><label>Terms (days)</label><input type="number" name="terms_days" value="<%= ex.terms_days ?? '' %>" placeholder="vendor default"></div>
       <div class="field"><label>Due date</label><input type="date" name="due_date" value="<%= ex.due_date || '' %>"></div>
     </div>
     <div class="tablewrap"><table class="t lines" data-lines="bill">
-      <thead><tr><th style="min-width:200px">Charge</th><th>Qty</th><th>Rate</th><th>Amount</th><th></th></tr></thead>
+      <thead><tr><th style="min-width:200px">Charge</th><th class="note-col">B/L</th><th class="note-col">Debit / Credit</th><th class="ap-col">Qty</th><th class="ap-col">Rate</th><th>Amount</th><th></th></tr></thead>
       <tbody><% lines.forEach((l) => { %><tr>
         <td><input name="l_desc" value="<%= l.description || '' %>" list="charge-codes"></td>
-        <td><input name="l_qty" value="<%= l.qty ?? '' %>" style="width:64px"></td><td><input name="l_rate" value="<%= l.rate ?? '' %>" style="width:90px"></td>
+        <td class="note-col"><input name="l_bl" value="<%= l.bl_no || '' %>" style="width:130px" class="mono"></td>
+        <td class="note-col"><select name="l_side"><option value="DEBIT" <%= l.side === 'CREDIT' ? '' : 'selected' %>>Debit</option><option value="CREDIT" <%= l.side === 'CREDIT' ? 'selected' : '' %>>Credit</option></select></td>
+        <td class="ap-col"><input name="l_qty" value="<%= l.qty ?? '' %>" style="width:64px"></td><td class="ap-col"><input name="l_rate" value="<%= l.rate ?? '' %>" style="width:90px"></td>
         <td><input name="l_amount" value="<%= l.amount ?? '' %>" style="width:110px" data-amt></td>
         <td><button type="button" class="btn secondary small" data-remove-row>✕</button></td></tr><% }) %></tbody>
     </table></div>
     <datalist id="charge-codes"><% codes.forEach((c) => { %><option value="<%= c %>"><% }) %></datalist>
     <div class="billsum"><button type="button" class="btn secondary small" data-add-row="bill">+ Line</button>
-      <span>Lines total <b data-sum>0.00</b></span><span>Invoice total <b data-total="<%= ex.total ?? '' %>"><%= ex.total != null ? fmtNum(ex.total, 2) : '—' %></b></span><span data-diff class="late"></span></div>
+      <span>Lines total <b data-sum>0.00</b></span><span><%= note ? 'Note balance' : 'Invoice total' %> <b data-total="<%= ex.total ?? '' %>"><%= ex.total != null ? fmtNum(ex.total, 2) : '—' %></b></span><span data-diff class="late"></span>
+      <span class="note-col small" data-note-dir></span></div>
     <div class="field"><label>Memo</label><input name="memo" placeholder="optional"></div>
     <div class="actions">
-      <button class="btn" name="next" value="0">✔ Book vendor bill</button>
+      <button class="btn" name="next" value="0">✔ Book <%= note ? 'note' : 'vendor bill' %></button>
       <% if (nextId) { %><button class="btn secondary" name="next" value="1">✔ Book &amp; next</button><% } %>
     </div>
   </form>

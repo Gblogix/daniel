@@ -1,11 +1,11 @@
 <%- include('../partials/head') %>
 <% const m = (v) => (v == null ? '' : fmtNum(v, 2)); %>
-<div class="pagehead"><div><h1 style="margin-bottom:4px">Vendor invoices</h1>
-  <p class="muted small" style="margin:0">Upload CFS / warehouse / trucker / broker / carrier invoices — number, date, terms, charge lines and total are read automatically and the file is matched from the container / B/L. Check and book.</p></div></div>
+<div class="pagehead"><div><h1 style="margin-bottom:4px">Vendor invoices &amp; debit / credit notes</h1>
+  <p class="muted small" style="margin:0">Upload CFS / warehouse / trucker / broker / carrier invoices, and debit / credit notes with agents (theirs or ours) — number, date, lines (debit / credit), total and the file are read automatically. Check and book.</p></div></div>
 <form class="card dropzone" method="post" action="/vendor-bills/upload?_csrf=<%= csrf %>" enctype="multipart/form-data" data-drop data-drop-page data-autosubmit>
   <div class="grid g2" style="align-items:center;grid-template-columns:minmax(0,2fr) minmax(220px,1fr)">
     <label class="drop-hint"><span class="ico">📥</span>
-      <span><b>Drag the invoice here</b> — the PDF / image from the email, or the whole Outlook email<br>
+      <span><b>Drag the invoice or D/N · C/N here</b> — the PDF / image from the email, or the whole Outlook email<br>
         <span class="small muted">or <span class="pick">choose file(s)</span> · Ctrl+V to paste · it is read and opened for booking right away</span><br>
         <span data-drop-files></span></span>
       <input type="file" name="files" multiple accept=".pdf,.jpg,.jpeg,.png,.msg,.eml"></label>
@@ -21,7 +21,7 @@
     <% rows.forEach((d) => { const ex = d.ex || {}; %><tr>
       <td class="nowrap small"><%= fmtDateTime(d.created_at) %><br><span class="muted"><%= d.source === 'email' ? '✉ email' : '⬆ upload' %></span></td>
       <td><%= d.vendor_name || (ex.vendor_name_read ? `? ${ex.vendor_name_read}` : '—') %></td>
-      <td class="mono"><%= ex.number || '—' %></td><td class="nowrap"><%= ex.invoice_date || '—' %></td>
+      <td class="mono"><%= ex.number || '—' %><% if (ex.doc_kind === 'DN') { %> <span class="badge"><%= ex.note?.kind === 'CN' ? 'C/N' : 'D/N' %></span><% } %></td><td class="nowrap"><%= ex.invoice_date || '—' %></td>
       <td class="right"><b><%= m(ex.total) %></b></td>
       <td><% if (d.shipment_id) { %><a href="/shipments/<%= d.shipment_id %>"><%= S.fileName(d) %></a><% } else { %><span class="late">not matched</span><% } %></td>
       <td class="small"><% if (ex.duplicate) { %><span class="late">possible duplicate</span><% } else if ((ex.warnings || []).length) { %><span class="state draft"><%= ex.warnings.length %> to check</span><% } else { %><span class="state ready">✔ read OK</span><% } %></td>

@@ -68,7 +68,7 @@ router.get('/vendor-bills/:id', auth.requireAccounting, (req, res) => {
   const files = [current, ...matched, ...recent].filter((s) => s && !seen.has(s.id) && seen.add(s.id));
   const parties = store.db.all('SELECT id, name, type, terms_days FROM companies ORDER BY name');
   const nextId = V.pending().find((x) => x.id !== d.id)?.id || null;
-  res.render('billing/vendor-bill', { title: `Book vendor invoice — ${d.filename}`, d, ex, files, matchedIds: matched.map((s) => s.id), parties, codes: A.CHARGE_CODES, nextId });
+  res.render('billing/vendor-bill', { title: `${ex.doc_kind === 'DN' ? 'Book D/N · C/N' : 'Book vendor invoice'} — ${d.filename}`, d, ex, files, matchedIds: matched.map((s) => s.id), parties, codes: A.CHARGE_CODES, nextId });
 });
 
 router.post('/vendor-bills/:id', auth.requireAccounting, (req, res) => {
@@ -76,7 +76,9 @@ router.post('/vendor-bills/:id', auth.requireAccounting, (req, res) => {
   if (!d) return res.status(404).end();
   const b = req.body;
   const added = require('../extract/party').fromForm(b, 'company_id', { type: ['vendor', 'trucker', 'broker', 'delivery', 'agent'].includes(b.new_party_type) ? b.new_party_type : 'vendor' });
-  const lines = arr(b.l_desc).map((desc, i) => ({ description: desc, qty: arr(b.l_qty)[i], rate: arr(b.l_rate)[i], amount: arr(b.l_amount)[i] }))
+  const isNote = b.doc_kind === 'DN';
+  const lines = arr(b.l_desc).map((desc, i) => ({ description: desc, qty: arr(b.l_qty)[i], rate: arr(b.l_rate)[i], amount: arr(b.l_amount)[i],
+    side: arr(b.l_side)[i], bl_no: arr(b.l_bl)[i] || null }))
     .filter((l) => String(l.description || '').trim());
   if (!b.company_id || !String(b.number || '').trim() || !lines.length) {
     flash(req, 'err', 'Vendor, invoice number and at least one line are required');
@@ -84,14 +86,15 @@ router.post('/vendor-bills/:id', auth.requireAccounting, (req, res) => {
   }
   let id;
   try {
-    id = V.book(d.id, { shipment_id: Number(b.shipment_id) || null, company_id: b.company_id, number: String(b.number).trim(), invoice_date: b.invoice_date,
-      terms_days: b.terms_days, due_date: b.due_date, memo: b.memo, lines }, { userId: req.user.id });
+    id = V.book(d.id, { kind: isNote ? 'DN' : 'AP', shipment_id: Number(b.shipment_id) || null, company_id: b.company_id, number: String(b.number).trim(), invoice_date: b.invoice_date,
+      terms_days: b.terms_days, due_date: b.due_date, memo: b.memo, agent_ref: b.agent_ref || null, lines }, { userId: req.user.id });
   } catch (e) {
     flash(req, 'err', /UNIQUE/.test(e.message) ? `Invoice number ${b.number} is already used — add a suffix (e.g. ${b.number}-2) if it is really a different bill` : e.message);
     return res.redirect(`/vendor-bills/${d.id}`);
   }
   const inv = A.getInvoice(id);
-  flash(req, 'ok', `Vendor bill ${inv.number} booked — USD ${inv.total.toLocaleString('en-US', { minimumFractionDigits: 2 })}${inv.shipment_id ? ` on ${S.fileName(S.find(inv.shipment_id, null))}` : ''}${added ? ` · ${added} added to Parties` : ''}`);
+  const what = isNote ? (inv.total < 0 ? 'Agent note booked (we owe)' : 'Agent note booked (agent owes us)') : 'Vendor bill';
+  flash(req, 'ok', `${what} ${inv.number}${isNote ? '' : ' booked'} — USD ${Math.abs(inv.total).toLocaleString('en-US', { minimumFractionDigits: 2 })}${inv.shipment_id ? ` on ${S.fileName(S.find(inv.shipment_id, null))}` : ''}${added ? ` · ${added} added to Parties` : ''}`);
   if (b.next === '1') {
     const nxt = V.pending()[0];
     if (nxt) return res.redirect(`/vendor-bills/${nxt.id}`);

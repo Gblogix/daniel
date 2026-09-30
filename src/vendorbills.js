@@ -30,6 +30,19 @@ async function extract({ buffer, filename, mime, db = store.db }) {
   const text = segments.map((s) => s.text).join('\n');
   const companies = db.all('SELECT id, name, short_name, emails, billing_emails, type FROM companies');
   const own = require('./company').get().name;
+  const Note = require('./extract/debitNote');
+  if (Note.isNote(text)) {
+    // Debit / credit note with an agent: booked on the agent's D/N account (debit = they owe us, credit = we owe).
+    const n = Note.parseNote(text, { companies, ownName: own });
+    const r = { doc_kind: 'DN', note: { kind: n.kind, issuer: n.issuer }, number: n.number, invoice_date: n.date, agent_ref: n.agent_ref,
+      lines: n.lines, total: n.total, refs: n.refs, vendor: n.party, warnings: n.warnings, source: 'rules', ocr: segments.some((s) => s.ocr) };
+    r.shipments = matchShipments({ containers: n.refs.containers, tokens: [...n.refs.tokens, ...n.lines.map((l) => l.bl_no).filter(Boolean)] }, db);
+    if (r.vendor && r.number) {
+      const dup = db.get("SELECT id, number FROM invoices WHERE kind = 'DN' AND UPPER(number) = UPPER(?) AND status <> 'VOID'", r.number);
+      if (dup) { r.duplicate = dup.id; r.warnings.unshift(`Already booked: ${dup.number} — this may be a duplicate`); }
+    }
+    return r;
+  }
   const r = parseVendorInvoice(text, { companies, ownName: own });
   r.source = 'rules';
   r.ocr = segments.some((s) => s.ocr);
@@ -125,10 +138,12 @@ function book(docId, data, { db = store.db, userId = null } = {}) {
   if (!d) throw Object.assign(new Error('Vendor invoice not found'), { status: 404, expose: true });
   if (d.invoice_id) return d.invoice_id;
   return db.tx(() => {
-    const id = A.saveInvoice({ ...data, kind: 'AP' }, { db, userId });
+    // Vendor bill → A/P; a debit / credit note → the agent's D/N account, keeping the note's own number.
+    const kind = data.kind === 'DN' ? 'DN' : 'AP';
+    const id = A.saveInvoice({ ...data, kind, keep_number: kind === 'DN' && Boolean(data.number) }, { db, userId });
     db.run('UPDATE invoices SET document_id = ? WHERE id = ?', d.id, id);
     db.run('UPDATE documents SET invoice_id = ?, shipment_id = ?, company_id = ? WHERE id = ?', id, data.shipment_id || null, Number(data.company_id) || null, d.id);
-    if (data.shipment_id) S.addEvent(Number(data.shipment_id), 'VENDOR_BILL', `Vendor bill ${data.number} booked`, { db, userId, customerVisible: false });
+    if (data.shipment_id) S.addEvent(Number(data.shipment_id), kind === 'DN' ? 'AGENT_NOTE' : 'VENDOR_BILL', `${kind === 'DN' ? 'Debit / credit note' : 'Vendor bill'} ${A.getInvoice(id, db).number} booked`, { db, userId, customerVisible: false });
     return id;
   });
 }

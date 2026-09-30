@@ -75,7 +75,7 @@ function saveInvoice(data, { db = store.db, userId = null, id = null } = {}) {
     } else {
       // A/R GBL-INV10001, debit note GBL-DN10001, credit note (negative D/N) GBL-CN10001; vendor bills keep their own no.
       const number = kind === 'AR' ? company.nextRef('INV', { db, table: 'invoices', column: 'number' })
-        : kind === 'DN' ? company.nextRef(total < 0 ? 'CN' : 'DN', { db, table: 'invoices', column: 'number' })
+        : kind === 'DN' ? (data.keep_number ? String(data.number).trim() : company.nextRef(total < 0 ? 'CN' : 'DN', { db, table: 'invoices', column: 'number' }))
           : (data.number || `AP-${Date.now().toString(36).toUpperCase()}`);
       const cols = ['number', 'prepared_by', ...Object.keys(row)];
       id = Number(db.run(`INSERT INTO invoices (${cols.join(',')}) VALUES (${cols.map(() => '?').join(',')})`, number, userId, ...Object.values(row)).lastInsertRowid);

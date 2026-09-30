@@ -34,7 +34,7 @@ const MENU = [
   ] },
   { key: 'accounting', label: 'Accounting', icon: '🧮', perm: 'accounting', cols: [
     { head: 'Operation', items: [
-      { id: 'vendor-bills', label: 'Vendor invoices — upload & book', href: '/vendor-bills' },
+      { id: 'vendor-bills', label: 'Vendor invoices & agent D/N · C/N — upload & book', href: '/vendor-bills' },
       { id: 'ar-entry', label: 'A/R invoice entry', href: '/invoices/new?kind=AR' },
       { id: 'ap-entry', label: 'A/P vendor bill entry', href: '/invoices/new?kind=AP' },
       { id: 'dn-entry', label: 'Debit / credit note (agent)', href: '/invoices/new?kind=DN' },

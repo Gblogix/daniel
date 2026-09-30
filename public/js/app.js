@@ -81,13 +81,20 @@ document.querySelectorAll('form[data-bill]').forEach((form) => {
     form.querySelectorAll('tbody tr').forEach((tr) => {
       const g = (n) => Number(String(tr.querySelector(`[name="${n}"]`).value || '').replace(/,/g, ''));
       const a = tr.querySelector('[name="l_amount"]').value.trim() ? g('l_amount') : g('l_rate') * (g('l_qty') || 1);
-      if (Number.isFinite(a)) s += a;
+      // Debit / credit note: credit lines count against the debit lines.
+      const credit = form.classList.contains('is-note') && tr.querySelector('[name="l_side"]')?.value === 'CREDIT';
+      if (Number.isFinite(a)) s += credit ? -a : a;
     });
     sumEl.textContent = s.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    const dir = form.querySelector('[data-note-dir]');
+    if (dir) dir.textContent = !s ? '' : s > 0 ? '→ agent owes us' : '→ we owe the agent';
     const diff = Number.isFinite(total) && form.querySelector('[data-total]').dataset.total !== '' ? Math.round((s - total) * 100) / 100 : 0;
     diffEl.textContent = diff ? `Difference ${diff > 0 ? '+' : ''}${diff.toFixed(2)}` : '';
   };
   form.addEventListener('input', calc); form.addEventListener('click', () => setTimeout(calc)); calc();
+  const kind = form.querySelector('[data-doc-kind]');
+  kind?.addEventListener('change', () => { form.classList.toggle('is-note', kind.value === 'DN'); calc(); });
+  form.addEventListener('change', calc);
 });
 
 // Inside a workspace tab: "/" jumps to the global search; saving anything refreshes the bell.

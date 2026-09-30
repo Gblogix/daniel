@@ -217,4 +217,4 @@ function matchVendor(text, companies, ownName) {
   return best ? { id: best.id, name: best.name } : null;
 }
 
-module.exports = { parseVendorInvoice, chargeLines, totalDue, matchVendor, references };
+module.exports = { parseVendorInvoice, chargeLines, totalDue, matchVendor, references, labelled, labelDate, NUMBER_OK };

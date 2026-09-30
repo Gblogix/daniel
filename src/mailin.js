@@ -57,9 +57,23 @@ async function pollOnce({ db = store.db, fetchImpl, now = new Date() } = {}) {
       db.run('INSERT INTO mail_imports (message_id, sender, subject) VALUES (?, ?, ?)', m.id, m.from, m.subject);
       continue;
     }
+    // Agent debit / credit notes go to accounting's queue (read and pre-filled), not to Document intake.
+    const V = require('./vendorbills');
+    const shipping = [];
+    let notes = 0;
+    for (const a of files) {
+      const maybeNote = /\.(pdf|jpe?g|png)$/i.test(a.filename) && /\b(D\s*[/_-]?\s*N|C\s*[/_-]?\s*N|DEBIT|CREDIT|DCN)\b/i.test(`${a.filename} ${m.subject}`.replace(/_/g, ' '));
+      const ex = maybeNote ? await V.extract({ buffer: a.content, filename: a.filename, mime: a.mime || '', db }).catch(() => null) : null;
+      if (ex?.doc_kind === 'DN') { await V.receive({ buffer: a.content, filename: a.filename, mime: a.mime || '', companyId: agent.id, via: 'email', ex, db }); notes++; } else shipping.push(a);
+    }
+    if (!shipping.length) {
+      db.run('INSERT INTO mail_imports (message_id, sender, subject) VALUES (?, ?, ?)', m.id, m.from, `${m.subject} [${notes} debit / credit note(s)]`);
+      imported++;
+      continue;
+    }
     const dir = path.join(config.uploadDir, 'intake');
     fs.mkdirSync(dir, { recursive: true });
-    const saved = files.map((a) => {
+    const saved = shipping.map((a) => {
       const p = path.join(dir, crypto.randomBytes(16).toString('hex'));
       fs.writeFileSync(p, a.content);
       return { path: p, originalname: a.filename, mimetype: a.mime || '', size: a.content.length, slot: 'OTHER' };
