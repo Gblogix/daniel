@@ -176,3 +176,17 @@ test('workspace helpers: follow-ups page, bell count, global search; customer de
   assert.equal(x.status, 200);
   assert.match(x.headers.get('content-type'), /spreadsheetml/);
 });
+
+test('party lookup for Shipper / Consignee: Parties of the fitting type first, earlier files with their address; staff only', async () => {
+  const S = require('../src/shipments');
+  S.create({ mode: 'FCL', status: 'BOOKED', shipper_name: 'Olive International Inc.', shipper_address: '14F, 398, Seocho-daero, Seoul' });
+  const staff = await login('staff@gblogix.com');
+  const ship = await (await staff('/parties/lookup.json?role=shipper&q=olive')).json();
+  assert.deepEqual(ship.map((r) => [r.name, r.address, r.source]), [['Olive International Inc.', '14F, 398, Seocho-daero, Seoul', 'file']]);
+  const cnee = await (await staff('/parties/lookup.json?role=consignee&q=unlo')).json();
+  assert.equal(cnee[0].name, 'UNLOCKT BRANDS, INC');
+  assert.equal(cnee[0].type, 'customer');
+  assert.match(cnee[0].address, /FIRESTONE/);
+  const customer = await login('customer@unlockt.example');
+  assert.notEqual((await customer('/parties/lookup.json?role=consignee&q=unlo')).status, 200);
+});

@@ -348,3 +348,67 @@ document.querySelectorAll('input[data-dup-check]').forEach((inp) => {
     });
   });
 });
+
+// Shipper / Consignee / Notify: type a few letters → names from Parties and earlier files; picking one fills the
+// address (and the Customer when the consignee is a customer). An address typed by hand is never overwritten silently.
+document.querySelectorAll('input[data-party-lookup]').forEach((inp) => {
+  const role = inp.dataset.partyLookup;
+  const addr = document.getElementById(inp.dataset.address);
+  const form = inp.form;
+  const list = document.createElement('div');
+  list.className = 'lookup-list';
+  list.hidden = true;
+  inp.parentNode.style.position = 'relative';
+  inp.insertAdjacentElement('afterend', list);
+  const esc = (v) => String(v ?? '').replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+  let rows = []; let active = -1; let timer = null; let autoFilled = addr ? addr.value : '';
+  const TYPE = { customer: 'customer', importer: 'importer', shipper: 'shipper', agent: 'agent', broker: 'broker', trucker: 'trucker', vendor: 'vendor', delivery: 'warehouse' };
+  const render = () => {
+    list.innerHTML = rows.map((r, i) => `<div class="lookup-item ${i === active ? 'on' : ''}" data-i="${i}"><b>${esc(r.name)}</b>
+      <span class="muted small">${r.source === 'party' ? `Parties · ${TYPE[r.type] || r.type}` : 'used before'}</span>
+      ${r.address ? `<div class="small muted">${esc(r.address).replace(/\n/g, ', ')}</div>` : '<div class="small muted">no address on record</div>'}</div>`).join('');
+    list.hidden = !rows.length;
+  };
+  const pick = (r) => {
+    inp.value = r.name;
+    if (addr && r.address) {
+      if (!addr.value.trim() || addr.value === autoFilled) { addr.value = r.address; autoFilled = r.address; flash(addr); }
+      else if (addr.value.trim() !== r.address.trim()) offer(r.address);
+    }
+    if (role === 'consignee' && r.company_id && ['customer', 'importer'].includes(r.type)) {
+      const cust = form.querySelector('[name="customer_id"]');
+      if (cust && !cust.value && [...cust.options].some((o) => o.value === String(r.company_id))) { cust.value = String(r.company_id); cust.dispatchEvent(new Event('change', { bubbles: true })); flash(cust); }
+    }
+    rows = []; render();
+  };
+  const flash = (el) => { el.classList.add('autofilled'); setTimeout(() => el.classList.remove('autofilled'), 1600); };
+  const offer = (address) => {
+    let hint = addr.parentNode.querySelector('.addr-offer');
+    if (!hint) { hint = document.createElement('div'); hint.className = 'addr-offer small'; addr.insertAdjacentElement('afterend', hint); }
+    hint.innerHTML = `Saved address differs — <a href="#">use it</a>: <span class="muted">${esc(address).replace(/\n/g, ', ')}</span>`;
+    hint.querySelector('a').onclick = (e) => { e.preventDefault(); addr.value = address; autoFilled = address; hint.remove(); flash(addr); };
+  };
+  const search = async () => {
+    const q = inp.value.trim();
+    if (q.length < 2) { rows = []; return render(); }
+    try { rows = await fetch(`/parties/lookup.json?role=${role}&q=${encodeURIComponent(q)}`).then((r) => r.json()); } catch { rows = []; }
+    active = -1; render();
+  };
+  inp.addEventListener('input', () => { clearTimeout(timer); timer = setTimeout(search, 200); });
+  inp.addEventListener('keydown', (e) => {
+    if (list.hidden) return;
+    if (e.key === 'ArrowDown' || e.key === 'ArrowUp') { e.preventDefault(); active = (active + (e.key === 'ArrowDown' ? 1 : -1) + rows.length) % rows.length; render(); }
+    else if (e.key === 'Enter' && active >= 0) { e.preventDefault(); pick(rows[active]); }
+    else if (e.key === 'Escape') { rows = []; render(); }
+  });
+  list.addEventListener('mousedown', (e) => { const it = e.target.closest('[data-i]'); if (it) { e.preventDefault(); pick(rows[Number(it.dataset.i)]); } });
+  // Typed the whole name and left the field: fill an empty address from the exact match.
+  inp.addEventListener('blur', async () => {
+    setTimeout(() => { rows = []; render(); }, 150);
+    if (!addr || addr.value.trim() || inp.value.trim().length < 3) return;
+    const res = await fetch(`/parties/lookup.json?role=${role}&q=${encodeURIComponent(inp.value.trim())}`).then((r) => r.json()).catch(() => []);
+    const norm = (v) => String(v).toUpperCase().replace(/[^A-Z0-9]+/g, '');
+    const hit = res.find((r) => norm(r.name) === norm(inp.value)) || (res.length === 1 ? res[0] : null);
+    if (hit && !addr.value.trim()) pick({ ...hit, name: inp.value.trim() });
+  });
+});

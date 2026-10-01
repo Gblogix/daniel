@@ -32,9 +32,9 @@
   </div>
   <% const ta = (k, label) => `<div class="field"><label for="f_${k}">${label}${src(k)}</label><textarea id="f_${k}" name="${k}" rows="2">${e(s[k])}</textarea></div>`; %>
   <div class="grid g3" data-ship-only <%= misc ? 'hidden' : '' %>>
-    <div><%- inp('shipper_name', 'Shipper') %><%- ta('shipper_address', 'Shipper address') %></div>
-    <div><%- inp('consignee_name', 'Consignee (as on B/L)') %><%- ta('consignee_address', 'Consignee address') %></div>
-    <div><%- inp('notify_party', 'Notify party') %><%- ta('notify_address', 'Notify address') %></div>
+    <div><%- inp('shipper_name', 'Shipper', 'text', 'data-party-lookup="shipper" data-address="f_shipper_address" autocomplete="off"') %><%- ta('shipper_address', 'Shipper address') %></div>
+    <div><%- inp('consignee_name', 'Consignee (as on B/L)', 'text', 'data-party-lookup="consignee" data-address="f_consignee_address" autocomplete="off"') %><%- ta('consignee_address', 'Consignee address') %></div>
+    <div><%- inp('notify_party', 'Notify party', 'text', 'data-party-lookup="notify" data-address="f_notify_address" autocomplete="off"') %><%- ta('notify_address', 'Notify address') %></div>
   </div>
 </fieldset>
 

@@ -40,6 +40,39 @@ router.post('/followups/reopen', auth.requireInternal, (req, res) => {
 });
 
 /** Global search (top bar): files by container / B/L / shipper / customer / file no., invoices, parties. */
+/**
+ * Names for the Shipper / Consignee / Notify fields with their address: from Parties and from earlier files (the
+ * address last used for that name). Parties of the fitting type first.
+ */
+router.get('/parties/lookup.json', auth.requireInternal, (req, res) => {
+  const db = store.db;
+  const P = require('../extract/party');
+  const role = ['shipper', 'consignee', 'notify'].includes(req.query.role) ? req.query.role : 'consignee';
+  const q = String(req.query.q || '').trim();
+  const n = P.norm(q);
+  if (n.length < 2) return res.json([]);
+  const prefer = { shipper: ['shipper', 'agent'], consignee: ['customer', 'importer'], notify: ['customer', 'importer', 'broker'] }[role];
+  const out = [];
+  const seen = new Set();
+  const push = (r) => { const k = P.norm(r.name); if (!k || seen.has(k)) return; seen.add(k); out.push(r); };
+  const like = `%${q.replace(/[%_]/g, '').split(/\s+/)[0]}%`;
+  const parties = db.all('SELECT id, name, short_name, type, address, country FROM companies WHERE name LIKE ? OR short_name LIKE ? LIMIT 50', like, like)
+    .filter((c) => P.norm(c.name).includes(n) || P.norm(c.short_name).includes(n))
+    .sort((a, b) => (prefer.includes(b.type) - prefer.includes(a.type)) || a.name.localeCompare(b.name));
+  for (const c of parties) push({ name: c.name, address: c.address || '', company_id: c.id, type: c.type, source: 'party' });
+  const col = { shipper: ['shipper_name', 'shipper_address'], consignee: ['consignee_name', 'consignee_address'], notify: ['notify_party', 'notify_address'] }[role];
+  const used = db.all(`SELECT ${col[0]} AS name, ${col[1]} AS address, MAX(id) AS last FROM shipments WHERE ${col[0]} LIKE ? AND ${col[0]} <> ''
+    GROUP BY UPPER(${col[0]}) ORDER BY last DESC LIMIT 30`, like).filter((r) => P.norm(r.name).includes(n));
+  for (const r of used) {
+    // The address used most recently for this name (an earlier file may have it when the latest one does not).
+    const addr = r.address || db.get(`SELECT ${col[1]} AS a FROM shipments WHERE UPPER(${col[0]}) = UPPER(?) AND ${col[1]} <> '' ORDER BY id DESC LIMIT 1`, r.name)?.a || '';
+    const party = P.findParty(r.name, { db });
+    const partyAddr = party ? db.get('SELECT address FROM companies WHERE id = ?', party.id)?.address : null;
+    push({ name: r.name, address: addr || partyAddr || '', company_id: party?.id || null, type: party?.type || null, source: 'file' });
+  }
+  res.json(out.slice(0, 10));
+});
+
 router.get('/search.json', auth.requireInternal, (req, res) => {
   const q = String(req.query.q || '').trim();
   if (q.length < 2) return res.json([]);
