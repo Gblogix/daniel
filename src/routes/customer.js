@@ -10,7 +10,8 @@ router.get('/track', auth.requireLogin, (req, res) => {
   const filter = ['active', 'delivered', 'all', ...(internal ? ['history'] : [])].includes(req.query.filter) ? req.query.filter : 'active';
   // Staff: Delivered = billing still open, History = closed (customer paid). Customers see every delivered shipment.
   const stage = { active: 'active', delivered: internal ? 'delivered' : null, history: 'closed', all: null }[filter];
-  let rows = S.list(req.user, { q: req.query.q || '', stage });
+  const sort = ['asc', 'desc'].includes(req.query.sort) ? req.query.sort : '';
+  let rows = S.list(req.user, { q: req.query.q || '', stage, sort });
   if (filter === 'delivered' && !internal) rows = rows.filter((s) => s.status === 'DELIVERED');
   const cards = rows.map((s) => ({ s, tr: S.tracking(s) }));
   const counts = {
@@ -18,7 +19,7 @@ router.get('/track', auth.requireLogin, (req, res) => {
     arrived: cards.filter((c) => c.tr.phase === 'arrived' && c.s.status !== 'DELIVERED').length,
     waiting: cards.filter((c) => ['waiting', 'unscheduled'].includes(c.tr.phase)).length,
   };
-  res.render('customer/track', { title: 'Shipment tracking', cards, counts, filter, q: req.query.q || '' });
+  res.render('customer/track', { title: 'Shipment tracking', cards, counts, filter, sort, q: req.query.q || '' });
 });
 
 /** Customer asks for a delivery date / time window — lands on the PIC's follow-ups and in their inbox. */
@@ -49,7 +50,7 @@ router.post('/shipments/:id/delivery-request', auth.requireLogin, async (req, re
 /** Customer's shipment list as Excel (what they used to keep in Smartsheet). */
 router.get('/track.xlsx', auth.requireLogin, async (req, res) => {
   const ExcelJS = require('exceljs');
-  const rows = S.list(req.user, { q: req.query.q || '' });
+  const rows = S.list(req.user, { q: req.query.q || '', sort: req.query.sort === 'desc' ? 'desc' : 'asc' });
   const wb = new ExcelJS.Workbook();
   const ws = wb.addWorksheet('Shipments');
   ws.addRow(['Shipment', 'Ref.', 'Shipper', 'Mode', 'Containers', 'MBL / MAWB', 'HBL / HAWB', 'ETD', 'ETA', 'Status', 'Where / next', 'Customs', 'Delivery date', 'Time', 'Deliver to', 'Packages', 'KG', 'CBM', 'Contents']).font = { bold: true };

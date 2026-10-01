@@ -84,3 +84,16 @@ test('a house B/L without MB/L no. finds its master by container', () => {
   assert.equal(s.mbl_no, 'MAEU277000777');
   assert.equal(s.eta, '2026-10-12');
 });
+
+test('lists run in ETA order: next arrival first, no ETA last; history latest first', () => {
+  const admin = { id: 1, role: 'admin' };
+  const ids = [['2026-12-05', 'ZZ-LATE'], [null, 'ZZ-NOETA'], ['2026-11-02', 'ZZ-SOON'], ['2026-11-20', 'ZZ-MID']]
+    .map(([eta, hbl]) => S.create({ mode: 'LCL', status: 'BOOKED', eta, hbl_no: hbl }));
+  const order = (opts) => S.list(admin, { q: 'ZZ-', ...opts }).map((s) => s.hbl_no);
+  assert.deepEqual(order({ stage: 'open' }), ['ZZ-SOON', 'ZZ-MID', 'ZZ-LATE', 'ZZ-NOETA']);
+  assert.deepEqual(order({ stage: 'open', sort: 'desc' }), ['ZZ-LATE', 'ZZ-MID', 'ZZ-SOON', 'ZZ-NOETA']);
+  db.run("UPDATE shipments SET closed_at = datetime('now') WHERE id IN (?, ?)", ids[0], ids[2]);
+  assert.deepEqual(order({ stage: 'closed' }), ['ZZ-LATE', 'ZZ-SOON']);
+  const etas = M.list().map((m) => m.eta).filter(Boolean);
+  assert.deepEqual(etas, [...etas].sort());
+});

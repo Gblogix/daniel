@@ -73,6 +73,11 @@ test('accounting pages: admin and accounting staff only', async () => {
   assert.doesNotMatch(await staffHistory.text(), /Profit|Billing<\/th>/);
   assert.doesNotMatch(await (await staff('/track?filter=delivered')).text(), /bill-(warn|bad)/);
   assert.equal((await customer('/history')).status, 403);
+  for (const p of ['/shipments?sort=desc', '/masters?sort=desc', '/track?sort=asc', '/history?sort=asc']) {
+    const r = await staff(p);
+    assert.equal(r.status, 200, p);
+    assert.match(await r.text(), /ETA ↑ next arrival first/, p);
+  }
 
   assert.equal((await customer(`/invoices/${invId}`)).status, 403);
   assert.equal((await customer(`/documents/${docId}`)).status, 403);

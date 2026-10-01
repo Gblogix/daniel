@@ -192,7 +192,16 @@ function scopeFor(user) {
   }
 }
 
-function list(user, { q, status, mode, active, stage, owner, db = store.db } = {}) {
+/**
+ * Lists run in ETA order (actual arrival when known): the next arrival first; files without an ETA go last.
+ * Closed history defaults to the latest arrival first. `sort` = 'asc' | 'desc' overrides.
+ */
+function etaOrder(alias, dir) {
+  const d = dir === 'desc' ? 'DESC' : 'ASC';
+  return `(COALESCE(${alias}.ata, ${alias}.eta) IS NULL OR COALESCE(${alias}.ata, ${alias}.eta) = ''), COALESCE(${alias}.ata, ${alias}.eta) ${d}, ${alias}.created_at ${d}, ${alias}.id ${d}`;
+}
+
+function list(user, { q, status, mode, active, stage, owner, sort, db = store.db } = {}) {
   const scope = scopeFor(user);
   const where = [scope.where];
   const params = [...scope.params];
@@ -211,7 +220,7 @@ function list(user, { q, status, mode, active, stage, owner, db = store.db } = {
   if (stage === 'delivered') where.push("s.status = 'DELIVERED' AND s.closed_at IS NULL");
   if (stage === 'open') where.push('s.closed_at IS NULL');
   if (stage === 'closed') where.push('s.closed_at IS NOT NULL');
-  const rows = db.all(`${BASE_SELECT} WHERE ${where.join(' AND ')} ORDER BY COALESCE(s.eta, s.created_at) DESC, s.id DESC`, ...params);
+  const rows = db.all(`${BASE_SELECT} WHERE ${where.join(' AND ')} ORDER BY ${etaOrder('s', sort || (stage === 'closed' ? 'desc' : 'asc'))}`, ...params);
   const ids = rows.map((r) => r.id);
   if (ids.length) {
     const ph = ids.map(() => '?').join(',');
@@ -556,7 +565,7 @@ function setClosed(id, closed, { db = store.db, userId = null } = {}) {
   addEvent(id, closed ? 'CLOSED' : 'REOPENED', closed ? 'File closed manually' : 'File reopened', { db, userId, customerVisible: false });
 }
 
-module.exports = {
+module.exports = { etaOrder,
   MODES, isMisc, REQUIRED, MASTER_REQUIRED, missingRequired, STATUSES, STATUS_INDEX, CUSTOMS_STATUSES, HOLD_TYPES, EDITABLE_FIELDS, checklist, lfdInfo,
   statusLabel, normalizeInput, saveLines, nextRefNo, create, update, addEvent, list, find, scopeFor, tracking,
   inferStatus, mergeItems, guessCustomer, shortParty, fileName, billingState, stage, refreshClosed, setClosed, RECEIVABLE, timeline, costState, customerStep,

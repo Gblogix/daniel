@@ -21,6 +21,9 @@
     <option value="overdue" <%= bill === 'overdue' ? 'selected' : '' %>>Overdue</option>
     <option value="to_book" <%= bill === 'to_book' ? 'selected' : '' %>>Vendor invoice to book</option>
     <option value="no_cost" <%= bill === 'no_cost' ? 'selected' : '' %>>Delivered — no cost booked</option></select><% } %>
+  <select name="sort" onchange="this.form.submit()" title="Order by ETA (actual arrival when known)">
+    <option value="asc" <%= (sort || (history ? 'desc' : 'asc')) === 'asc' ? 'selected' : '' %>>ETA ↑ next arrival first</option>
+    <option value="desc" <%= (sort || (history ? 'desc' : 'asc')) === 'desc' ? 'selected' : '' %>>ETA ↓ latest first</option></select>
   <button class="btn secondary">Filter</button>
 </form>
 <div class="tablewrap">

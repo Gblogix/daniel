@@ -1,7 +1,10 @@
 <%- include('../partials/head') %>
 <div class="pagehead"><h1>Master B/L list</h1>
   <div class="actions">
-    <form method="get" action="/masters"><input name="q" value="<%= q %>" placeholder="MB/L, HB/L, vessel, ref…" style="width:220px"></form>
+    <form method="get" action="/masters"><input name="q" value="<%= q %>" placeholder="MB/L, HB/L, vessel, ref…" style="width:220px">
+      <select name="sort" onchange="this.form.submit()" title="Order by ETA (actual arrival when known)">
+    <option value="asc" <%= (sort || 'asc') === 'asc' ? 'selected' : '' %>>ETA ↑ next arrival first</option>
+    <option value="desc" <%= (sort || 'asc') === 'desc' ? 'selected' : '' %>>ETA ↓ latest first</option></select></form>
     <% if (can('shipments_edit')) { %><a class="btn" href="/masters/new">＋ Ocean master</a><a class="btn secondary" href="/masters/new?mode=AIR">＋ Air master (MAWB)</a><% } %>
   </div>
 </div>

@@ -16,8 +16,11 @@
   </div>
   <input type="hidden" name="filter" value="<%= filter %>">
   <input name="q" value="<%= q %>" placeholder="Search PO, B/L, container…">
+  <select name="sort" onchange="this.form.submit()" title="Order by ETA (actual arrival when known)">
+    <option value="asc" <%= (sort || (filter === 'history' ? 'desc' : 'asc')) === 'asc' ? 'selected' : '' %>>ETA ↑ next arrival first</option>
+    <option value="desc" <%= (sort || (filter === 'history' ? 'desc' : 'asc')) === 'desc' ? 'selected' : '' %>>ETA ↓ latest first</option></select>
   <button class="btn secondary">Search</button>
-  <a class="btn secondary" href="/track.xlsx?q=<%= encodeURIComponent(q) %>">⬇ Excel</a>
+  <a class="btn secondary" href="/track.xlsx?q=<%= encodeURIComponent(q) %>&sort=<%= sort || 'asc' %>">⬇ Excel</a>
 </form>
 <% if (!cards.length) { %><div class="card muted">No shipments to show.</div><% } %>
 <div class="cards">

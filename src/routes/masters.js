@@ -9,7 +9,8 @@ const flash = (req, type, msg) => { req.session.flash = { type, msg }; };
 const agents = () => store.db.all("SELECT id, name FROM companies WHERE type = 'agent' ORDER BY name");
 
 router.get('/masters', auth.requireInternal, (req, res) => {
-  res.render('masters/list', { title: 'Master B/L list', rows: M.list({ q: String(req.query.q || '').trim() }), q: req.query.q || '' });
+  const sort = req.query.sort === 'desc' ? 'desc' : 'asc';
+  res.render('masters/list', { title: 'Master B/L list', rows: M.list({ q: String(req.query.q || '').trim(), sort }), q: req.query.q || '', sort });
 });
 
 router.get('/masters/new', auth.requirePerm('shipments_edit'), (req, res) => {

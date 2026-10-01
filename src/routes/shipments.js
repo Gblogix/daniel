@@ -63,23 +63,25 @@ router.get('/shipments', auth.requireLogin, (req, res) => {
   const internal = auth.INTERNAL.includes(req.user.role);
   const stage = internal && STAGES[req.query.stage] ? req.query.stage : internal ? 'open' : 'all';
   const mine = internal && req.query.mine === '1';
-  let rows = S.list(req.user, { q, status, mode, stage: stage === 'all' ? null : stage, owner: mine ? req.user.id : null });
+  const sort = ['asc', 'desc'].includes(req.query.sort) ? req.query.sort : '';
+  let rows = S.list(req.user, { q, status, mode, stage: stage === 'all' ? null : stage, owner: mine ? req.user.id : null, sort });
   // Accounting follow-up filters on delivered files.
   const bill = auth.canAccounting(req.user) ? req.query.bill || '' : '';
   if (bill) {
     rows = rows.filter((s) => (S.billingState(s)?.code || '') === bill || (bill === 'unpaid' && ['unsent', 'awaiting', 'overdue'].includes(S.billingState(s)?.code))
       || (['no_cost', 'to_book'].includes(bill) && S.costState(s)?.code === bill));
   }
-  res.render('shipments/list', { title: 'Shipments', rows, q, status, mode, stage, STAGES, bill, history: false, mine });
+  res.render('shipments/list', { title: 'Shipments', rows, q, status, mode, stage, STAGES, bill, history: false, mine, sort });
 });
 
 /** Shipment history: closed files (customer paid), kept for look-up later. */
 router.get('/history', auth.requireInternal, (req, res) => {
   const { q = '', mode = '' } = req.query;
-  const rows = S.list(req.user, { q, mode, stage: 'closed' });
+  const sort = req.query.sort === 'asc' ? 'asc' : 'desc';
+  const rows = S.list(req.user, { q, mode, stage: 'closed', sort });
   const A = require('../accounting');
   if (auth.canAccounting(req.user)) for (const r of rows) r.pl = A.shipmentProfit(r.id);
-  res.render('shipments/list', { title: 'Shipment history', rows, q, status: '', mode, stage: 'closed', STAGES, bill: '', history: true, mine: false });
+  res.render('shipments/list', { title: 'Shipment history', rows, q, status: '', mode, stage: 'closed', STAGES, bill: '', history: true, mine: false, sort });
 });
 
 router.get('/shipments/new', auth.requirePerm('shipments_edit'), (req, res) => {
