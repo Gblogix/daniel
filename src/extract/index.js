@@ -93,16 +93,18 @@ const SCALARS = ['mbl_no', 'hbl_no', 'mawb_no', 'hawb_no', 'carrier', 'vessel', 
 
 /** Combine per-document extractions into one shipment draft. */
 function mergeExtractions(docs) {
-  const rank = (field, type) => {
+  const HOUSE_FIRST = ['shipper_name', 'shipper_address', 'consignee_name', 'consignee_address', 'consignee_contact', 'notify_party', 'notify_address', 'commodity', 'packages', 'weight_kg', 'chargeable_weight', 'ci_invoice_no'];
+  const rank = (field, type, d = {}) => {
     const order = PRIORITY[field] || PRIORITY.default;
     const i = order.indexOf(type);
-    return i < 0 ? 99 : i;
+    // MAWB vs HAWB are both 'AWB': for the house's parties and cargo the house waybill wins.
+    return (i < 0 ? 99 : i) + (HOUSE_FIRST.includes(field) && d.doc_role === 'master' ? 0.5 : 0);
   };
   const draft = { containers: [], items: [], warnings: [], sources: {} };
   const consolidated = new Set(docs.filter((d) => ['PL', 'CI'].includes(d.doc_type)).map((d) => d.ci_invoice_no || d.filename || Math.random())).size > 1;
   for (const field of SCALARS) {
     const candidates = docs.filter((d) => d[field] !== null && d[field] !== undefined && d[field] !== '')
-      .sort((a, b) => rank(field, a.doc_type) - rank(field, b.doc_type));
+      .sort((a, b) => rank(field, a.doc_type, a) - rank(field, b.doc_type, b));
     if (candidates.length) {
       draft[field] = candidates[0][field];
       draft.sources[field] = candidates[0].doc_type;

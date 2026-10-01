@@ -176,6 +176,14 @@ router.post('/intakes/:id/apply', auth.requirePerm('intake'), async (req, res) =
   }
   S.saveLines(id, req.body);
   db.run('UPDATE documents SET shipment_id = ? WHERE intake_id = ?', id, intake.id);
+  // The carrier's MB/L / MAWB belongs to the master (still listed on the house page).
+  const mid = db.get('SELECT master_id FROM shipments WHERE id = ?', id)?.master_id;
+  if (mid) {
+    const P = require('../intakePlan');
+    for (const d of db.all('SELECT * FROM documents WHERE intake_id = ?', intake.id)) {
+      if (P.isMasterDoc({ ...JSON.parse(d.extracted_json || '{}'), doc_type: d.doc_type })) db.run('UPDATE documents SET shipment_id = NULL, master_id = ? WHERE id = ?', mid, d.id);
+    }
+  }
   // Remember the invoices the B/L names, so a missing P/L stays on the file's follow-ups until it arrives.
   const refs = JSON.parse(intake.extracted_json || '{}').draft?.invoice_refs || [];
   if (refs.length) {

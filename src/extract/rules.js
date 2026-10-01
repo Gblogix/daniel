@@ -199,6 +199,72 @@ function nscHouseLayout(raw) {
   return out;
 }
 
+/**
+ * Air waybill printed on the IATA form (labels are graphics, so only values come out): read by position.
+ *   "350 ICN 35125226  NSCXA2610005"   → MAWB 350-35125226 (prefix, origin airport, serial) + HAWB (or the MAWB again)
+ *   issuer = the name above "AGENT FOR THE CARRIER : <airline>"; shipper = first other company at the top,
+ *   consignee = the next one; notify = right-hand name after the "FREIGHT PREPAID / COLLECT" line
+ *   "INCHEON AIRPORT, KOREA" / "LAX  YP  …" / "LOS ANGELES,CA U.S.A.  YP101/01.OCT.2026" → POL, carrier code, POD, flight, date
+ *   "1  291.0 KQ  291.0  AS AGREED  <goods>" → pieces, gross KG, chargeable KG, commodity
+ */
+function awbLayout(raw) {
+  const L = raw.map((l) => l.trim()).filter(Boolean);
+  const head = /^(\d{3})\s+([A-Z]{3})\s+(\d{8})\s+([A-Z0-9-]{6,})$/.exec(L[0] || '');
+  if (!head) return null;
+  const mawb = `${head[1]}-${head[3]}`;
+  const second = head[4].replace(/-/g, '');
+  const out = { mawb_no: mawb, mbl_no: mawb, doc_role: second === head[1] + head[3] ? 'master' : 'house' };
+  if (out.doc_role === 'house') { out.hawb_no = head[4]; out.hbl_no = head[4]; }
+  const cell = (l) => String(l || '').split(/\s{2,}/);
+  const companyLike = (t) => /\b(INC|LLC|LTD|CO|CORP|CORPORATION|COMPANY|LOGISTICS|TRADE|TRADING|GROUP|AIRLINES?|AIR)\b\.?/i.test(t) && !/^(TEL|E-?MAIL|MAIL|ATT|CONTACT|FAX)\b/i.test(t);
+  const agentFor = L.findIndex((l) => /AGENT\s+FOR\s+THE\s+CARRIER/i.test(l));
+  const airline = agentFor >= 0 ? (/CARRIER\s*:?\s*(.+)$/i.exec(L[agentFor]) || [])[1]?.trim() : null;
+  const issuer = agentFor > 0 ? cell(L[agentFor - 1]).filter((c) => companyLike(c)).pop() : null;
+  if (airline) out.carrier = airline.replace(/\s+(INC|CO|LTD)\.?$/i, '').trim();
+  const norm = (v) => String(v || '').toUpperCase().replace(/[^A-Z0-9]/g, '');
+  const freight = L.findIndex((l) => /"?FREIGHT\s+(PREPAID|COLLECT)"?/i.test(l));
+  const top = L.slice(1, freight > 0 ? freight : 20);
+  const names = [];
+  top.forEach((l, i) => cell(l).forEach((c, k) => { if (companyLike(c) && norm(c) !== norm(issuer) && norm(c) !== norm(airline)) names.push({ i, k, name: c.trim() }); }));
+  const firstLeft = names.filter((n) => n.k === 0 || cell(top[n.i]).length === 1);
+  if (firstLeft[0]) out.shipper_name = firstLeft[0].name;
+  if (firstLeft[1]) {
+    out.consignee_name = firstLeft[1].name;
+    const addr = []; const block = [];
+    for (let i = firstLeft[1].i + 1; i < top.length; i++) { const c = cell(top[i])[0]; block.push(top[i]); if (!/^(TEL|E-?MAIL|MAIL|ATT|CONTACT|FAX|PHONE)\b/i.test(c)) addr.push(c); }
+    out.consignee_address = addr.join('\n') || null;
+    const em = /[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/i.exec(block.join(' '));
+    const tel = /(?:TEL|PHONE|CONTACT)\)?\s*[.:]?\s*(\+?[\d(][\d\s().-]{7,}\d)/i.exec(block.join(' '));
+    if (em || tel) out.consignee_contact = { email: em ? em[0].toLowerCase() : null, phone: tel ? tel[1].trim() : null };
+    const saddr = [];
+    for (let i = firstLeft[0].i + 1; i < firstLeft[1].i; i++) { const c = cell(top[i])[0]; if (!/^(TEL|E-?MAIL|MAIL|ATT|CONTACT|FAX)\b/i.test(c) && !companyLike(c)) saddr.push(c); }
+    out.shipper_address = saddr.join('\n') || null;
+  }
+  if (freight > 0) {
+    const after = cell(L[freight + 1]);
+    const n = after.length > 1 ? after[after.length - 1] : null;
+    if (n && !/^SAME\s+AS/i.test(n)) out.notify_party = n; else if (n) out.notify_party = n;
+  }
+  const fl = L.findIndex((l) => /\b([A-Z0-9]{2}\d{2,4})\/(\d{1,2}\.?[A-Z]{3}\.?\d{2,4})\b/i.test(l));
+  if (fl >= 0) {
+    const m = /\b([A-Z0-9]{2}\d{2,4})\/(\d{1,2}\.?[A-Z]{3}\.?\d{2,4})\b/i.exec(L[fl]);
+    out.flight_no = m[1];
+    out.etd = toISODate(m[2].replace(/\./g, '-'));
+    out.pod = cell(L[fl])[0].replace(/\s*[A-Z0-9]{2}\d{2,4}\/.*$/, '').trim() || null;
+    const route = L.slice(Math.max(0, fl - 4), fl).find((l) => /^[A-Z]{3}\s+[A-Z0-9]{2}\b/.test(l));
+    const ri = route ? L.indexOf(route, Math.max(0, fl - 4)) : -1;
+    if (ri > 0 && /[A-Z]{3}/.test(L[ri - 1]) && !/\d{3,}/.test(L[ri - 1])) out.pol = cell(L[ri - 1])[0];
+  }
+  const wt = L.find((l) => /^\d+\s+[\d,]+(?:\.\d+)?\s*K\s*[GQ]?\b/i.test(l));
+  if (wt) {
+    const w = /^(\d+)\s+([\d,]+(?:\.\d+)?)\s*K\s*[GQ]?\s+([\d,]+(?:\.\d+)?)?/i.exec(wt);
+    out.packages = Number(w[1]); out.weight_kg = num(w[2]); if (w[3]) out.chargeable_weight = num(w[3]);
+    const goods = /AS\s+AGREED\s+(.+)$/i.exec(wt);
+    if (goods) out.commodity = goods[1].trim();
+  }
+  return out;
+}
+
 const REF = String.raw`([A-Z0-9][A-Z0-9-]{5,24})`;
 const SEP = String.raw`\s*(?:NO\.?|NUMBER|#)?\s*[:.]?\s*`;
 
@@ -305,6 +371,13 @@ function extractRules(text, { filename = '', rows = null } = {}) {
   out.shipper_name = partyName(raw, /^(?:\d{1,2}\.\s*)?(?:SHIPPER|EXPORTER|SELLER)(?:\s*\/\s*EXPORTER)?\b/i);
   out.consignee_name = partyName(raw, /^(?:\d{1,2}\.\s*)?(?:CONSIGNEE|BUYER|IMPORTER)\b/i);
   out.notify_party = partyName(raw, /^(?:\d{1,2}\.\s*)?NOTIFY(?:\s+PARTY)?\b/i);
+  // IATA air waybill without printed labels (MAWB / HAWB from NSC): read by position; its values win.
+  const awb = awbLayout(raw);
+  if (awb) {
+    for (const [k, v] of Object.entries(awb)) if (v != null && v !== '' && (out[k] == null || out[k] === '' || ['mawb_no', 'mbl_no', 'hbl_no', 'packages', 'weight_kg'].includes(k))) out[k] = v;
+    if (awb.doc_role === 'master') { out.hbl_no = null; out.hawb_no = null; }
+    out.agent_ref = out.agent_ref || (awb.hawb_no && /^NSC/.test(awb.hawb_no) ? awb.hawb_no : null);
+  }
   // Label-less NSC house B/L page: read by position.
   if (!out.shipper_name && !out.consignee_name && /\bNSC[A-Z]{2,5}\d{6,9}\b/.test(U)) {
     const nsc = nscHouseLayout(raw);
@@ -378,13 +451,15 @@ function extractRules(text, { filename = '', rows = null } = {}) {
     if (out.containers.every((c) => c.packages != null) && (!out.packages || out.packages < sum('packages'))) out.packages = sum('packages');
   }
   // Every commercial invoice a B/L / ISF names ("*INVOICE NO. : UB005", "NO. & DATE OF INVOICE: X & SEP.16.2026").
-  if (['MBL', 'HBL', 'ISF', 'NOA', 'OTHER'].includes(docType)) {
+  if (['MBL', 'HBL', 'ISF', 'NOA', 'AWB', 'OTHER'].includes(docType)) {
     const refs = new Set();
     for (const re of [/INVOICE\s*NO\.?\s*[:.]?\s*#?\s*([A-Z0-9][A-Z0-9_-]{3,24})/g, /NO\.?\s*(?:&|AND)\s*DATE\s+OF\s+INVOICE\s*[:.]?\s*#?\s*([A-Z0-9][A-Z0-9_-]{3,24})/g]) {
       for (const m of U.matchAll(re)) if (/\d/.test(m[1])) refs.add(m[1]);
     }
     out.invoice_refs = [...refs];
   }
+  // AWB figures read by position ("1  291.0 KQ  291.0") beat the generic KGS / package scan.
+  if (awb) for (const k of ['packages', 'weight_kg', 'chargeable_weight', 'commodity']) if (awb[k] != null) out[k] = awb[k];
   // Each cargo line remembers its invoice and final buyer (a consolidated box can hold Target and Nordstrom goods).
   out.buyer = ['PL', 'CI', 'OTHER'].includes(docType) || out.items.length ? finalBuyer(U, raw, { invoiceNo: out.ci_invoice_no, consignee: out.consignee_name }) : null;
   for (const it of out.items) { it.invoice_no = it.invoice_no || out.ci_invoice_no || null; it.buyer = it.buyer || out.buyer || null; }

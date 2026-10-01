@@ -116,3 +116,75 @@ test('heads-up when the B/L names an invoice with no C/I / P/L uploaded', () => 
   assert.ok(d.warnings.some((w) => /UB005/.test(w)));
   assert.ok(!d.warnings.some((w) => /packages differs/.test(w)), 'a P/L total is not compared with the B/L total');
 });
+
+// IATA air waybill (labels are printed graphics, only values come out). Master and house share the header line.
+const MAWB = `180 ICN 12345675  180-12345675
+SAMPLE SHIPPING CO., LTD.  SKY SAMPLE AIR INC
+11, SAMPLE-RO, SEOUL, REPUBLIC OF KOREA
+TEL: 02-000-0000
+GLOBAL BRIDGE LOGISTICS
+1661 N.RAYMOND AVE., SUITE 140F, ANAHEIM,
+CA 92801
+"FREIGHT PREPAID"
+SAMPLE HANDLING KOREA CO.,LTD  SAME AS CONSIGNEE
+INCHEON AIRPORT, KOREA
+LAX KE  KRW  N.V.D
+LOS ANGELES,CA U.S.A.  KE017/01.OCT.2026  NIL
+1  150.0 KQ  180.0  AS AGREED  CONSOLIDATION SHIPMENT AS
+PER ATTACHED MANIFEST
+SAMPLE HANDLING KOREA CO.,LTD
+AGENT FOR THE CARRIER : SKY SAMPLE AIR INC
+01.OCT.26 INCHEON, KOREA  ADMINISTRATOR`;
+
+const HAWB = `180 ICN 12345675  NSCXA2600001
+SAMPLE SHIPPING CO., LTD.
+MAPLE COSMETICS INC.
+1F, 1, SAMPLE-DAERO, SEOUL,  11, SAMPLE-RO, SEOUL
+REPUBLIC OF KOREA (00000)  REPUBLIC OF KOREA
+TEL: +82 70-0000-0000 ATT: KIM  TEL : 02-000-0000
+E-MAIL: KIM@MAPLE.EXAMPLE
+HARBOR TRADE INC
+100 W SAMPLE AVE FULLERTON, CA 92833
+TEL) (213) 555-0100
+E-MAIL: BUYER@HARBOR.EXAMPLE
+"FREIGHT COLLECT"
+SAMPLE SHIPPING CO., LTD.  SAMPLE CREDIT, INC.
+1 S SAMPLE ST, LOS ANGELES, CA
+INCHEON AIRPORT, KOREA
+LAX  KE  USD  C  C  N.V.D
+LOS ANGELES,CA U.S.A.  KE017/01.OCT.2026  NIL
+1  150.0 K Q  180.0  AS AGREED  LIP TINT
+INVOICE NO.:
+#MCUS26090001
+SAMPLE SHIPPING CO., LTD.
+AGENT FOR THE CARRIER : SKY SAMPLE AIR INC
+01.OCT.26 INCHEON, KOREA  K.W HAN`;
+
+test('air waybill: MAWB reads as master, HAWB as house under the same MAWB', () => {
+  const m = extractRules(MAWB, { filename: 'MAWB_180-12345675.pdf' });
+  assert.equal(m.doc_type, 'AWB');
+  assert.equal(m.mbl_no, '180-12345675');
+  assert.equal(m.doc_role, 'master');
+  assert.ok(!m.hbl_no);
+  assert.equal(m.flight_no, 'KE017');
+  assert.equal(m.etd, '2026-10-01');
+  assert.equal(m.weight_kg, 150);
+
+  const h = extractRules(HAWB, { filename: 'HAWB_NSCXA2600001.pdf' });
+  assert.equal(h.doc_role, 'house');
+  assert.equal(h.mbl_no, '180-12345675');
+  assert.equal(h.hbl_no, 'NSCXA2600001');
+  assert.equal(h.shipper_name, 'MAPLE COSMETICS INC.');
+  assert.equal(h.consignee_name, 'HARBOR TRADE INC');
+  assert.equal(h.notify_party, 'SAMPLE CREDIT, INC.');
+  assert.match(h.pol, /INCHEON/);
+  assert.match(h.pod, /LOS ANGELES/);
+  assert.equal(h.packages, 1);
+  assert.equal(h.chargeable_weight, 180);
+
+  const d = mergeExtractions([m, h]);
+  assert.equal(d.mode, 'AIR');
+  assert.equal(d.hbl_no, 'NSCXA2600001');
+  assert.equal(d.shipper_name, 'MAPLE COSMETICS INC.');
+  assert.equal(d.consignee_name, 'HARBOR TRADE INC');
+});

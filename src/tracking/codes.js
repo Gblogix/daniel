@@ -14,6 +14,7 @@ const CARRIERS = {
 
 // IATA air waybill prefix -> airline (common on KR/CN -> US lanes).
 const AIRLINES = {
+  '350': 'Air Premia',
   '180': 'Korean Air', '988': 'Asiana', '921': 'SF Airlines', '936': 'DHL Aviation', '112': 'China Cargo Airlines',
   '781': 'China Eastern', '784': 'China Southern', '999': 'Air China', '297': 'China Airlines', '695': 'EVA Air',
   '160': 'Cathay Pacific', '020': 'Lufthansa Cargo', '618': 'Singapore Airlines', '131': 'JAL', '205': 'ANA',
