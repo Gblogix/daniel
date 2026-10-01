@@ -168,6 +168,7 @@ document.querySelectorAll('select[name="mode"]').forEach((sel) => {
     form.querySelectorAll('[data-misc-only]').forEach((el) => { el.hidden = !misc; });
     form.querySelectorAll('[data-air-only]').forEach((el) => { el.hidden = misc || sel.value !== 'AIR'; });
     form.querySelectorAll('[data-ocean-only]').forEach((el) => { el.hidden = misc || sel.value === 'AIR'; });
+    form.querySelectorAll('[data-fcl-only]').forEach((el) => { el.hidden = misc || sel.value !== 'FCL'; });
   };
   sel.addEventListener('change', apply);
 });

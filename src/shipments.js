@@ -58,7 +58,7 @@ const EDITABLE_FIELDS = [
   'delivery_date', 'delivery_time', 'last_free_day', 'customs_status', 'isf_filed', 'service_price',
   'invoice_no', 'invoice_amount', 'paid', 'notes',
   'scac', 'direct_shipment', 'isf_no', 'telex_release', 'firms_code', 'entry_no', 'css_no', 'holds', 'cargo_value',
-  'ci_invoice_no', 'freight_paid', 'isc_paid', 'pierpass_paid', 'carrier_released', 'storage_start', 'available_for_pickup', 'pickup_appt',
+  'ci_invoice_no', 'freight_paid', 'pierpass_paid', 'carrier_released', 'storage_start', 'available_for_pickup', 'pickup_appt',
   'picked_up_at', 'pallets', 'pod_received', 'empty_returned_at', 'tracking_enabled', 'vessel_imo', 'vessel_mmsi',
   'master_id', 'ams_bl_no', 'customer_ref', 'sub_bl_no', 'it_no', 'it_place', 'it_date', 'devan_location', 'freight_location_tel',
   'available_date', 'go_date', 'final_destination', 'service_term', 'release_type', 'consignee_address', 'notify_address',
@@ -66,7 +66,7 @@ const EDITABLE_FIELDS = [
 ];
 const NUMERIC_FIELDS = new Set(['owner_id', 'customer_id', 'agent_id', 'broker_id', 'trucker_id', 'delivery_company_id',
   'packages', 'weight_kg', 'cbm', 'chargeable_weight', 'service_price', 'invoice_amount', 'cargo_value', 'pallets']);
-const BOOL_FIELDS = new Set(['isf_filed', 'paid', 'direct_shipment', 'telex_release', 'freight_paid', 'isc_paid', 'pierpass_paid', 'carrier_released',
+const BOOL_FIELDS = new Set(['isf_filed', 'paid', 'direct_shipment', 'telex_release', 'freight_paid', 'pierpass_paid', 'carrier_released',
   'pod_received', 'tracking_enabled']);
 
 function normalizeInput(input) {
@@ -314,11 +314,12 @@ function checklist(s) {
   if (!air) add('isf', 'ISF filed', s.isf_filed);
   if (!air) add('telex', 'Telex release / OBL received', s.telex_release);
   add('an', 'A/N sent to broker & customer', s.an_sent_at, { date: s.an_sent_at });
-  add('freight', air ? 'Airline charges paid' : 'Carrier freight & fees paid', s.freight_paid);
+  if (!air) add('freight', 'Carrier freight & fees paid', s.freight_paid);
   add('customs', 'Customs cleared (1C)', s.customs_status === 'RELEASED');
   add('holds', 'No holds (exam / lien / BL hold)', !s.holds && s.customs_status !== 'EXAM' && s.customs_status !== 'HOLD', { note: s.holds || null });
-  if (air) add('isc', 'Import Service Fee paid', s.isc_paid);
-  else add('pierpass', 'PierPass / CTF paid', s.pierpass_paid);
+  // Air: the airline's Import Service Fee is the charge to pay before release (same flag as ocean freight paid).
+  if (air) add('freight', 'Import Service Fee paid', s.freight_paid);
+  if (fcl) add('pierpass', 'PierPass / CTF paid', s.pierpass_paid);
   add('release', air ? 'Airline / terminal released' : 'Carrier & terminal released', s.carrier_released || s.available_for_pickup === 1);
   add('do', air ? 'D/O + ATME sent to trucker' : 'D/O sent to trucker', s.do_sent_at, { date: s.do_sent_at });
   add('appt', 'Pickup appointment', s.pickup_appt, { date: s.pickup_appt });

@@ -310,7 +310,6 @@ CREATE TABLE IF NOT EXISTS sessions (
 const MIGRATIONS = {
   shipments: {
     title: 'TEXT', // name of an "Other" (non-shipment) file
-    isc_paid: 'INTEGER NOT NULL DEFAULT 0', // air: Import Service Fee (airline / CFS terminal) paid
     pierpass_paid: 'INTEGER NOT NULL DEFAULT 0', // ocean: PierPass TMF / Clean Truck Fee paid
     master_id: 'INTEGER', // house file → its master B/L (masters)
     bl_invoices: 'TEXT', // commercial invoice nos. the B/L names (UB005, EZVC_TGT_26-09…) — P/L expected for each

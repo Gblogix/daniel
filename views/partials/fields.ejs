@@ -104,9 +104,8 @@
     </div>
   </div>
   <div class="grid g4">
-    <div class="field"><label class="check"><input type="checkbox" name="freight_paid" value="1" <%= s.freight_paid ? 'checked' : '' %>> <%= s.mode === 'AIR' ? 'Airline charges paid' : 'Carrier freight & fees paid' %></label></div>
-    <div class="field" data-air-only <%= s.mode === 'AIR' ? '' : 'hidden' %>><label class="check"><input type="checkbox" name="isc_paid" value="1" <%= s.isc_paid ? 'checked' : '' %>> Import Service Fee paid</label></div>
-    <div class="field" data-ocean-only <%= s.mode === 'AIR' ? 'hidden' : '' %>><label class="check"><input type="checkbox" name="pierpass_paid" value="1" <%= s.pierpass_paid ? 'checked' : '' %>> PierPass / CTF paid</label></div>
+    <div class="field"><label class="check"><input type="checkbox" name="freight_paid" value="1" <%= s.freight_paid ? 'checked' : '' %>> <span data-air-only <%= s.mode === 'AIR' ? '' : 'hidden' %>>Import Service Fee paid</span><span data-ocean-only <%= s.mode === 'AIR' ? 'hidden' : '' %>>Carrier freight &amp; fees paid</span></label></div>
+    <div class="field" data-fcl-only <%= s.mode === 'FCL' ? '' : 'hidden' %>><label class="check"><input type="checkbox" name="pierpass_paid" value="1" <%= s.pierpass_paid ? 'checked' : '' %>> PierPass / CTF paid</label></div>
     <div class="field"><label class="check"><input type="checkbox" name="carrier_released" value="1" <%= s.carrier_released ? 'checked' : '' %>> Carrier / terminal released</label></div>
     <div class="field"><label class="check"><input type="checkbox" name="pod_received" value="1" <%= s.pod_received ? 'checked' : '' %>> POD received</label></div>
     <div class="field"><label class="check"><input type="checkbox" name="tracking_enabled" value="1" <%= s.tracking_enabled === 0 ? '' : 'checked' %>> Auto-tracking on</label></div>
