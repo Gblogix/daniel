@@ -53,3 +53,34 @@ test('back-fill links older files; required fields per mode', () => {
   assert.deepEqual(S.missingRequired({ mode: 'FCL', mbl_no: 'M', customer_id: 1, pol: 'A', pod: 'B', etd: 'x', eta: 'y', carrier: 'c', direct_shipment: 1 }), []);
   assert.deepEqual(M.missing({ mbl_no: 'M', carrier: 'C' }), ['ETD', 'ETA', 'POL', 'POD']);
 });
+
+test('upload plan: MB/L only → master; several HB/Ls → a house each, P/L by HB/L or invoice no.', () => {
+  const P = require('../src/intakePlan');
+  const doc = (id, type, ex) => ({ id, doc_type: type, filename: `${type}${id}.pdf`, extracted_json: JSON.stringify(ex) });
+  const mbl = doc(1, 'MBL', { mbl_no: 'MAEU1', carrier: 'Maersk', eta: '2026-10-12', containers: [{ container_no: 'MNBU4117750' }] });
+  assert.equal(P.plan([mbl]).kind, 'master');
+  assert.equal(P.plan([mbl, doc(2, 'HBL', { hbl_no: 'NSCLGB1' })]).kind, 'single');
+  const p = P.plan([mbl,
+    doc(2, 'HBL', { hbl_no: 'NSCLGB1', invoice_refs: ['EZVC_TGT_26-09'], consignee_name: 'A' }),
+    doc(3, 'HBL', { hbl_no: 'NSCLGB2', invoice_refs: ['BSBUS26091601'], consignee_name: 'B' }),
+    doc(4, 'PL', { ci_invoice_no: 'BSBUS26091601', items: [{ description: 'Cream', invoice_no: 'BSBUS26091601' }] }),
+    doc(5, 'ISF', { hbl_no: 'NSCLGB1' }),
+    doc(6, 'CI', { ci_invoice_no: 'UNKNOWN-1' })]);
+  assert.equal(p.kind, 'multi');
+  assert.deepEqual(p.houses.map((h) => [h.hbl, h.docIds]), [['NSCLGB1', [2, 5]], ['NSCLGB2', [3, 4]]]);
+  assert.deepEqual(p.unassigned, [6]);
+  assert.equal(p.houses[1].draft.items.length, 1);
+  assert.equal(p.houses[0].draft.mbl_no, 'MAEU1', 'house drafts carry the master leg');
+  const air = P.plan([doc(7, 'AWB', { mawb_no: '350-35125134', mbl_no: '350-35125134' })]);
+  assert.equal(air.kind, 'master');
+});
+
+test('a house B/L without MB/L no. finds its master by container', () => {
+  const mid = M.fromDraft({ mode: 'FCL', mbl_no: 'MAEU277000777', eta: '2026-10-12', containers: [{ container_no: 'TGHU1234567' }] });
+  const id = S.create({ mode: 'FCL', status: 'BOOKED', hbl_no: 'NSCLGB26099991' });
+  S.saveLines(id, { ctn_no: ['TGHU1234567'] });
+  const s = S.find(id, null);
+  assert.equal(s.master_id, mid);
+  assert.equal(s.mbl_no, 'MAEU277000777');
+  assert.equal(s.eta, '2026-10-12');
+});

@@ -272,6 +272,8 @@ function saveLines(id, body, { db = store.db } = {}) {
       });
     });
   }
+  // Containers just saved may be what finds the master (house B/L without the MB/L no.).
+  if ('ctn_no' in body && !db.get('SELECT master_id FROM shipments WHERE id = ?', id)?.master_id) require('./masters').linkHouse(id, { db });
   if ('charge_desc' in body) {
     db.tx(() => {
       db.run('DELETE FROM charges WHERE shipment_id = ?', id);

@@ -200,13 +200,14 @@
       <table class="t docs-table">
         <% docs.forEach((d) => { %>
           <tr class="<%= d.duplicate_of ? 'dup' : '' %>">
-            <% if (edit) { %><td style="width:22px"><input type="checkbox" name="doc_ids" value="<%= d.id %>" data-bulk-item <%= d.duplicate_of ? 'data-dup' : '' %>></td><% } %>
+            <% if (edit) { %><td style="width:22px"><% if (!d.from_master) { %><input type="checkbox" name="doc_ids" value="<%= d.id %>" data-bulk-item <%= d.duplicate_of ? 'data-dup' : '' %>><% } %></td><% } %>
             <td><% if (edit) { %><select class="doc-type" data-doc-type="<%= d.id %>" title="Change document type"><% [...new Set([d.doc_type, 'MBL', 'HBL', 'PL', 'CI', 'ISF', 'AWB', 'NOA', 'AN', 'DO', 'ATME', 'OTHER'])].forEach((t) => { %><option <%= t === d.doc_type ? 'selected' : '' %>><%= t %></option><% }) %></select><% } else { %><span class="badge"><%= d.doc_type %></span><% } %></td>
             <td><a href="/documents/<%= d.id %>" target="_blank"><%= d.filename %></a><br><span class="muted small"><%= d.source %> · <%= fmtDateTime(d.created_at) %></span>
-              <% if (d.duplicate_of) { %><span class="badge EXAM" title="Same file already on this file">duplicate</span><% } %></td>
+              <% if (d.duplicate_of) { %><span class="badge EXAM" title="Same file already on this file">duplicate</span><% } %>
+              <% if (d.from_master) { %><a class="badge" href="/masters/<%= s.master_id %>" title="On the master B/L">master</a><% } %></td>
             <td class="nowrap">
               <button class="btn secondary small" formaction="/documents/<%= d.id %>/visibility" title="Toggle customer visibility"><%= d.customer_visible ? '👁 Customer' : 'Internal' %></button>
-              <% if (edit) { %><button class="btn secondary small" name="one" value="<%= d.id %>" title="Delete" data-confirm="Delete <%= d.filename %>?">🗑</button><% } %>
+              <% if (edit && !d.from_master) { %><button class="btn secondary small" name="one" value="<%= d.id %>" title="Delete" data-confirm="Delete <%= d.filename %>?">🗑</button><% } %>
             </td>
           </tr>
         <% }) %>

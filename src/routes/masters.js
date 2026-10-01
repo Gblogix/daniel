@@ -29,7 +29,13 @@ router.post('/masters', auth.requirePerm('shipments_edit'), (req, res) => {
 router.get('/masters/:id', auth.requireInternal, (req, res) => {
   const m = M.get(Number(req.params.id));
   if (!m) return res.status(404).render('error', { title: 'Not found', message: 'Master not found.' });
-  res.render('masters/form', { title: m.mbl_no || m.ref_no, m, agents: agents(), missing: M.missing(m) });
+  // Invoices live on the house files; the master shows their total P/L to accounting users.
+  let profits = null;
+  if (auth.canAccounting(req.user) && m.houses.length) {
+    const A = require('../accounting');
+    profits = m.houses.map((h) => A.shipmentProfit(h.id)).reduce((a, p) => ({ revenue: a.revenue + p.revenue, cost: a.cost + p.cost, profit: a.profit + p.profit }), { revenue: 0, cost: 0, profit: 0 });
+  }
+  res.render('masters/form', { title: m.mbl_no || m.ref_no, m, profits, agents: agents(), missing: M.missing(m) });
 });
 
 router.post('/masters/:id', auth.requirePerm('shipments_edit'), async (req, res) => {

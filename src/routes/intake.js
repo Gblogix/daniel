@@ -112,6 +112,18 @@ router.get('/intakes/:id', auth.requireInternal, (req, res) => {
   if (!intake) return res.status(404).render('error', { title: 'Not found', message: 'Intake not found.' });
   const { draft = {}, perDoc = [] } = JSON.parse(intake.extracted_json || '{}');
   const docs = db.all('SELECT * FROM documents WHERE intake_id = ?', intake.id);
+  // Master-only upload, or several house B/Ls: master first, a house file per HB/L.
+  const plan = intake.status === 'PENDING' ? require('../intakePlan').plan(docs) : { kind: 'single' };
+  if (plan.kind !== 'single') {
+    const customers = db.all("SELECT id, name FROM companies WHERE type IN ('customer', 'importer') ORDER BY name");
+    for (const h of plan.houses) {
+      const name = /^TO\s+(THE\s+)?ORDER/i.test(h.draft.consignee_name || '') ? h.draft.notify_party : h.draft.consignee_name;
+      h.customer_id = name ? Party.findParty(name, { types: ['customer', 'importer'] })?.id || null : null;
+      h.existing = db.get('SELECT id, ref_no FROM shipments WHERE hbl_no = ? OR sub_bl_no = ? OR agent_ref = ?', h.hbl, h.hbl, h.hbl) || null;
+    }
+    const existingMaster = plan.master.mbl_no ? require('../masters').findByMbl(plan.master.mbl_no) : null;
+    return res.render('intakes/plan', { title: `Intake #${intake.id}`, intake, plan, docs, customers, existingMaster, agents: db.all("SELECT id, name FROM companies WHERE type = 'agent' ORDER BY name") });
+  }
   const target = intake.shipment_id ? S.find(intake.shipment_id, null) : null;
   // Pre-fill: existing shipment values, overridden by what the documents say.
   const s = { mode: draft.mode || 'FCL', status: 'BOOKED', customs_status: 'PENDING', ...(target || {}), agent_id: target?.agent_id || intake.agent_id };
@@ -151,6 +163,7 @@ router.post('/intakes/:id/apply', auth.requirePerm('intake'), async (req, res) =
   const db = store.db;
   const intake = db.get("SELECT * FROM intakes WHERE id = ? AND status = 'PENDING'", Number(req.params.id));
   if (!intake) return res.status(404).render('error', { title: 'Not found', message: 'Intake not found or already processed.' });
+  if (req.body.plan === 'master' || req.body.plan === 'multi') return applyPlan(req, res, intake);
   const targetId = req.body.target === 'new' ? null : Number(req.body.target) || null;
   let id;
   require('./shipments').stripAccounting(req);
@@ -176,6 +189,54 @@ router.post('/intakes/:id/apply', auth.requirePerm('intake'), async (req, res) =
   req.session.flash = { type: 'ok', msg: `Documents applied to shipment${req.body.send_notices ? ' — notices sent' : ''}${added ? ` · ${added} added to Parties as a new customer` : ''}` };
   res.redirect(`/shipments/${id}`);
 });
+
+/** Apply a master-only or multi-house upload: master (created / filled), then one house file per HB/L. */
+async function applyPlan(req, res, intake) {
+  const db = store.db;
+  const P = require('../intakePlan');
+  const M = require('../masters');
+  const docs = db.all('SELECT * FROM documents WHERE intake_id = ?', intake.id);
+  const plan = P.plan(docs);
+  const b = req.body;
+  const masterFields = ['mbl_no', 'carrier', 'vessel', 'voyage', 'flight_no', 'etd', 'eta', 'pol', 'pod', 'place_of_delivery'];
+  const mdraft = { ...plan.master, mode: b.mode || plan.master.mode };
+  for (const k of masterFields) if (k in b) mdraft[k] = String(b[k]).trim() || null;
+  const mid = M.fromDraft(mdraft);
+  if (b.agent_id || intake.agent_id) db.run('UPDATE masters SET agent_id = COALESCE(agent_id, ?) WHERE id = ?', Number(b.agent_id || intake.agent_id) || null, mid);
+  for (const id of plan.masterDocs) db.run('UPDATE documents SET master_id = ? WHERE id = ?', mid, id);
+  const made = [];
+  if (plan.kind === 'multi') {
+    plan.houses.forEach((h, i) => {
+      const body = { ...P.bodyFromDraft(h.draft), mode: mdraft.mode, master_id: mid, hbl_no: String(b[`hbl_${i}`] || h.hbl).trim(), agent_id: intake.agent_id || null };
+      for (const k of masterFields) if (mdraft[k]) body[k] = mdraft[k];
+      if (b[`customer_${i}`]) body.customer_id = b[`customer_${i}`];
+      const existing = db.get('SELECT id FROM shipments WHERE hbl_no = ? OR sub_bl_no = ? OR agent_ref = ?', body.hbl_no, body.hbl_no, body.hbl_no);
+      let id;
+      if (existing) { S.update(existing.id, body); id = existing.id; } else id = S.create(body, { userId: req.user.id });
+      const cur = S.find(id, null);
+      if (body.item_desc) {
+        const merged = S.mergeItems(cur.items, h.draft.items || []);
+        const col = (k) => merged.map((x) => x[k] ?? '');
+        Object.assign(body, { item_buyer: col('buyer'), item_inv: col('invoice_no'), item_po: col('po_no'), item_desc: col('description'), item_hs: col('hs_code'), item_qty: col('quantity'),
+          item_unit: col('unit'), item_pkgs: col('packages'), item_kg: col('weight_kg'), item_cbm: col('cbm'), item_price: col('unit_price'), item_amount: col('amount') });
+      }
+      S.saveLines(id, body);
+      const mine = [...h.docIds, ...plan.unassigned.filter((d) => Number(b[`doc_${d}`]) === i)];
+      for (const d of mine) db.run('UPDATE documents SET shipment_id = ? WHERE id = ?', id, d);
+      const refs = h.draft.invoice_refs || [];
+      if (refs.length) db.run('UPDATE shipments SET bl_invoices = ? WHERE id = ?', refs.join(','), id);
+      S.addEvent(id, 'DOCS_RECEIVED', 'Shipping documents received from origin agent', { userId: req.user.id });
+      require('../tracking').refreshSoon(id, { userId: req.user.id });
+      made.push(S.find(id, null));
+    });
+    for (const d of plan.unassigned.filter((x) => b[`doc_${x}`] === 'master')) db.run('UPDATE documents SET master_id = ? WHERE id = ?', mid, d);
+  }
+  db.run("UPDATE intakes SET status = 'APPLIED', master_id = ?, shipment_id = ?, reviewed_at = datetime('now'), reviewed_by = ? WHERE id = ?", mid, made[0]?.id || null, req.user.id, intake.id);
+  const m = M.get(mid);
+  req.session.flash = { type: 'ok', msg: plan.kind === 'master' ? `Master ${m.mbl_no || m.ref_no} saved — add its house B/Ls (or upload them; they join it by MB/L or container)`
+    : `Master ${m.mbl_no || m.ref_no} with ${made.length} house B/Ls: ${made.map((s) => s.hbl_no).join(', ')}` };
+  res.redirect(`/masters/${mid}`);
+}
 
 /**
  * Delete intakes from the list (one, or the checked ones). Documents that were never applied to a file are removed

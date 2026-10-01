@@ -6,7 +6,7 @@
  */
 const store = require('./db');
 
-const FIELDS = ['mode', 'mbl_no', 'agent_id', 'carrier', 'scac', 'vessel', 'voyage', 'flight_no', 'etd', 'eta', 'atd', 'ata', 'pol', 'pod', 'place_of_delivery', 'service_term', 'notes'];
+const FIELDS = ['containers', 'mode', 'mbl_no', 'agent_id', 'carrier', 'scac', 'vessel', 'voyage', 'flight_no', 'etd', 'eta', 'atd', 'ata', 'pol', 'pod', 'place_of_delivery', 'service_term', 'notes'];
 // Copied from the master to its houses (the carrier leg).
 const SHARED = ['mbl_no', 'carrier', 'scac', 'vessel', 'voyage', 'flight_no', 'etd', 'eta', 'atd', 'ata', 'pol', 'pod'];
 const key = (v) => String(v || '').toUpperCase().replace(/[^A-Z0-9]/g, '');
@@ -30,6 +30,30 @@ function findByMbl(mbl, db = store.db) {
   const k = key(mbl);
   if (!k) return null;
   return db.all('SELECT * FROM masters WHERE mbl_no IS NOT NULL').find((m) => key(m.mbl_no) === k) || null;
+}
+
+/** The master whose MB/L lists one of these containers (or whose houses carry it). */
+function findByContainers(ctns, db = store.db) {
+  const list = (ctns || []).map((c) => key(c)).filter(Boolean);
+  if (!list.length) return null;
+  const m = db.all('SELECT * FROM masters WHERE containers IS NOT NULL').find((x) => String(x.containers).split(',').map(key).some((c) => list.includes(c)));
+  if (m) return m;
+  const ph = list.map(() => '?').join(',');
+  const s = db.get(`SELECT s.master_id FROM containers k JOIN shipments s ON s.id = k.shipment_id WHERE s.master_id IS NOT NULL AND REPLACE(UPPER(k.container_no), ' ', '') IN (${ph}) ORDER BY s.id DESC`, ...list);
+  return s ? db.get('SELECT * FROM masters WHERE id = ?', s.master_id) : null;
+}
+
+/** Master from a master-only document upload (MB/L / MAWB): created, or the existing one filled in (empty fields only). */
+function fromDraft(draft, { db = store.db } = {}) {
+  const pick = (k) => draft[k] ?? null;
+  const data = { mode: draft.mode === 'AIR' ? 'AIR' : draft.mode || 'FCL', mbl_no: pick('mbl_no'), carrier: pick('carrier'), scac: pick('scac'), vessel: pick('vessel'),
+    voyage: pick('voyage'), flight_no: pick('flight_no'), etd: pick('etd'), eta: pick('eta'), pol: pick('pol'), pod: pick('pod'), place_of_delivery: pick('place_of_delivery'),
+    service_term: pick('service_term'), containers: (draft.containers || []).map((c) => c.container_no).join(',') || null };
+  const hit = (data.mbl_no && findByMbl(data.mbl_no, db)) || null;
+  if (!hit) return create(data, { db });
+  const fill = Object.fromEntries(Object.entries(data).filter(([k, v]) => v != null && v !== '' && (hit[k] == null || hit[k] === '')));
+  if (Object.keys(fill).length) update(hit.id, fill, { db });
+  return hit.id;
 }
 
 function create(data, { db = store.db } = {}) {
@@ -66,6 +90,12 @@ function linkHouse(shipmentId, { db = store.db } = {}) {
   const s = db.get('SELECT * FROM shipments WHERE id = ?', shipmentId);
   if (!s || s.mode === 'OTHER' || s.mode === 'TRUCK') return null;
   let m = s.master_id ? db.get('SELECT * FROM masters WHERE id = ?', s.master_id) : null;
+  if (!s.mbl_no && !m) {
+    // House B/L without the master no. (NSC house B/Ls): find the master by container.
+    const ctns = db.all('SELECT container_no FROM containers WHERE shipment_id = ?', s.id).map((c) => c.container_no);
+    m = findByContainers(ctns, db);
+    if (m && m.mbl_no) db.run('UPDATE shipments SET mbl_no = ? WHERE id = ?', m.mbl_no, s.id);
+  }
   if (s.mbl_no && (!m || key(m.mbl_no) !== key(s.mbl_no))) {
     m = findByMbl(s.mbl_no, db);
     if (!m) m = db.get('SELECT * FROM masters WHERE id = ?', create(Object.fromEntries(['mode', ...SHARED].map((k) => [k, s[k]]).concat([['agent_id', s.agent_id]])), { db }));
@@ -92,8 +122,10 @@ function get(id, { db = store.db } = {}) {
   const m = db.get('SELECT m.*, a.name AS agent_name FROM masters m LEFT JOIN companies a ON a.id = m.agent_id WHERE m.id = ?', id);
   if (!m) return null;
   m.houses = db.all('SELECT id FROM shipments WHERE master_id = ? ORDER BY id', id).map((r) => S.find(r.id, null, { db })).filter(Boolean);
+  m.docs = db.all('SELECT * FROM documents WHERE master_id = ? ORDER BY id DESC', id);
   const seen = new Set();
-  m.containers = m.houses.flatMap((h) => h.containers || []).filter((c) => !seen.has(c.container_no) && seen.add(c.container_no));
+  const onMbl = String(m.containers || '').split(',').filter(Boolean).map((c) => ({ container_no: c }));
+  m.containers = [...m.houses.flatMap((h) => h.containers || []), ...onMbl].filter((c) => !seen.has(c.container_no) && seen.add(c.container_no));
   return m;
 }
 
@@ -113,4 +145,4 @@ function missing(m) {
   return require('./shipments').MASTER_REQUIRED.filter(([k]) => !m[k]).map(([, l]) => l);
 }
 
-module.exports = { FIELDS, SHARED, create, update, linkHouse, backfill, get, list, findByMbl, missing };
+module.exports = { FIELDS, SHARED, findByContainers, fromDraft, create, update, linkHouse, backfill, get, list, findByMbl, missing };

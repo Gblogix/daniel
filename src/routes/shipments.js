@@ -119,6 +119,8 @@ router.get('/shipments/:id', auth.requireLogin, (req, res) => {
   const db = store.db;
   const hideAcct = auth.canAccounting(req.user) ? '' : `AND doc_type NOT IN (${auth.ACCOUNTING_DOCS.map((t) => `'${t}'`).join(',')})`;
   const docs = db.all(`SELECT * FROM documents WHERE shipment_id = ? ${hideAcct} ${internal ? '' : docFilter(viewer)} ORDER BY id DESC`, s.id);
+  // The master's MB/L belongs to every house (staff only).
+  if (internal && s.master_id) docs.push(...db.all('SELECT *, 1 AS from_master FROM documents WHERE master_id = ? AND shipment_id IS NULL ORDER BY id DESC', s.master_id));
   // Same file uploaded twice ("x.pdf" / "x (3).pdf", same size): the newer copy is marked as a duplicate.
   const seenDoc = new Map();
   for (const d of [...docs].reverse()) {

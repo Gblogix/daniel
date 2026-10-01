@@ -336,7 +336,9 @@ const MIGRATIONS = {
   cargo_items: { unit_price: 'REAL', amount: 'REAL', source: 'TEXT', invoice_no: 'TEXT', buyer: 'TEXT' }, // buyer = final buyer (Target, Nordstrom…)
   companies: { billing_emails: 'TEXT', terms_days: 'INTEGER', short_name: 'TEXT', default_pic_id: 'INTEGER', report_frequency: 'TEXT', report_emails: 'TEXT', report_last: 'TEXT' },
   invoices: { document_id: 'INTEGER', reviewed_at: 'TEXT', reviewed_by: 'INTEGER' },
-  documents: { invoice_id: 'INTEGER', company_id: 'INTEGER' },
+  documents: { invoice_id: 'INTEGER', company_id: 'INTEGER', master_id: 'INTEGER' },
+  masters: { containers: 'TEXT' }, // container nos. on the MB/L (comma list) — finds the master of a house B/L without MB/L no.
+  intakes: { master_id: 'INTEGER' },
   users: { can_accounting: 'INTEGER NOT NULL DEFAULT 0', favorites: 'TEXT', perms: 'TEXT' },
 };
 

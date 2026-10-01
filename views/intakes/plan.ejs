@@ -1,0 +1,50 @@
+<%- include('../partials/head') %>
+<% const mm = plan.master; const air = mm.mode === 'AIR'; const e = (v) => String(v ?? '').replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;');
+   const inp = (k, label, type = 'text') => `<div class="field"><label>${label}</label><input name="${k}" type="${type}" value="${e(mm[k])}"></div>`;
+   const docName = (id) => docs.find((d) => d.id === id); %>
+<div class="pagehead">
+  <div><h1 style="margin-bottom:4px">Intake #<%= intake.id %> <span class="badge <%= intake.status %>"><%= intake.status %></span></h1>
+    <div class="muted small">From <%= intake.agent_name || 'unknown agent' %> · <%= fmtDateTime(intake.created_at) %> UTC ·
+      <b><%= plan.kind === 'master' ? `${air ? 'MAWB' : 'MB/L'} only — becomes a master (no house file)` : `${plan.houses.length} house B/Ls under one master` %></b></div></div>
+  <a class="btn secondary" href="/intakes">← Back</a>
+</div>
+<% if ((mm.warnings || []).length) { %><div class="warnbox"><b>Please check</b><ul><% mm.warnings.forEach((w) => { %><li><%= w %></li><% }) %></ul></div><% } %>
+<form method="post" action="/intakes/<%= intake.id %>/apply">
+  <input type="hidden" name="_csrf" value="<%= csrf %>"><input type="hidden" name="plan" value="<%= plan.kind %>"><input type="hidden" name="mode" value="<%= mm.mode || 'FCL' %>">
+  <fieldset class="fieldset"><legend>Master <%= air ? 'MAWB' : 'MB/L' %> <%= existingMaster ? `— already in the system (${existingMaster.ref_no}), empty fields are filled` : '— new' %></legend>
+    <div class="grid g4">
+      <%- inp('mbl_no', air ? 'MAWB No.' : 'MB/L No.') %><%- inp('carrier', air ? 'Airline' : 'Carrier') %>
+      <% if (air) { %><%- inp('flight_no', 'Flight') %><% } else { %><%- inp('vessel', 'Vessel') %><%- inp('voyage', 'Voyage') %><% } %>
+      <%- inp('etd', 'ETD', 'date') %><%- inp('eta', 'ETA', 'date') %><%- inp('pol', air ? 'Departure' : 'POL') %><%- inp('pod', air ? 'Destination' : 'POD') %>
+    </div>
+    <p class="small muted" style="margin:0">Containers on the master: <%= (mm.containers || []).map((c) => c.container_no).join(', ') || '—' %> · documents: <%= plan.masterDocs.map((id) => docName(id)?.filename).join(', ') || '—' %></p>
+  </fieldset>
+
+  <% if (plan.kind === 'multi') { %>
+  <% plan.houses.forEach((h, i) => { const d = h.draft; %>
+  <fieldset class="fieldset"><legend>House <%= i + 1 %> — <%= air ? 'HAWB' : 'HB/L' %> <%= h.hbl %> <%= h.existing ? `(updates file ${h.existing.ref_no})` : '(new file)' %></legend>
+    <div class="grid g4">
+      <div class="field"><label><%= air ? 'HAWB' : 'HB/L' %> No.</label><input name="hbl_<%= i %>" value="<%= h.hbl %>" class="mono"></div>
+      <div class="field"><label>Customer</label><select name="customer_<%= i %>"><option value="">—</option><% customers.forEach((c) => { %><option value="<%= c.id %>" <%= h.customer_id === c.id ? 'selected' : '' %>><%= c.name %></option><% }) %></select></div>
+      <div class="field"><label>Shipper</label><div class="small"><%= d.shipper_name || '—' %></div></div>
+      <div class="field"><label>Consignee</label><div class="small"><%= d.consignee_name || '—' %></div></div>
+    </div>
+    <p class="small" style="margin:0"><%= [d.packages && `${d.packages} ${d.package_unit || 'PKGS'}`, d.weight_kg && `${fmtNum(d.weight_kg, 1)} KG`, d.cbm && `${fmtNum(d.cbm, 3)} CBM`, (d.containers || []).length && `Ctn ${d.containers.map((c) => c.container_no).join(', ')}`, (d.items || []).length && `${d.items.length} P/L lines`].filter(Boolean).join(' · ') %></p>
+    <p class="small muted" style="margin:4px 0 0">Documents: <%= h.docIds.map((id) => `${docName(id)?.doc_type} ${docName(id)?.filename}`).join(' · ') || '—' %></p>
+  </fieldset>
+  <% }) %>
+  <% if (plan.unassigned.length) { %>
+  <fieldset class="fieldset"><legend>Which house do these belong to?</legend>
+    <% plan.unassigned.forEach((id) => { const d = docName(id); %><div class="grid g2" style="align-items:center;gap:8px"><div><span class="badge"><%= d.doc_type %></span> <%= d.filename %></div>
+      <select name="doc_<%= id %>"><% plan.houses.forEach((h, i) => { %><option value="<%= i %>"><%= h.hbl %></option><% }) %><option value="master">Master only</option></select></div><% }) %>
+  </fieldset><% } %>
+  <% } %>
+  <% if (can('intake')) { %><div class="actions"><button class="btn">✔ <%= plan.kind === 'master' ? 'Save master' : `Create master + ${plan.houses.length} house files` %></button>
+    <span class="muted small">Invoices / D/N go on the house files; the master holds the carrier leg and its MB/L.</span></div><% } %>
+</form>
+<form method="post" action="/intakes/<%= intake.id %>/reject" class="card" style="margin-top:18px">
+  <input type="hidden" name="_csrf" value="<%= csrf %>">
+  <div class="field"><label>Reject reason</label><input name="reason" placeholder="e.g. duplicate upload"></div>
+  <% if (can('intake')) { %><button class="btn danger small" data-confirm="Reject this intake?">Reject</button><% } %>
+</form>
+<%- include('../partials/foot') %>
