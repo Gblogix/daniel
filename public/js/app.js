@@ -166,6 +166,8 @@ document.querySelectorAll('select[name="mode"]').forEach((sel) => {
     const misc = sel.value === 'OTHER';
     form.querySelectorAll('[data-ship-only]').forEach((el) => { el.hidden = misc; });
     form.querySelectorAll('[data-misc-only]').forEach((el) => { el.hidden = !misc; });
+    form.querySelectorAll('[data-air-only]').forEach((el) => { el.hidden = misc || sel.value !== 'AIR'; });
+    form.querySelectorAll('[data-ocean-only]').forEach((el) => { el.hidden = misc || sel.value === 'AIR'; });
   };
   sel.addEventListener('change', apply);
 });
