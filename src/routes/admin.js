@@ -4,10 +4,8 @@ const auth = require('../auth');
 const notify = require('../notify');
 
 const router = express.Router();
-const COMPANY_TYPES = {
-  customer: 'Customer (CNEE / bill-to)', agent: 'Overseas agent', broker: 'Customs broker', trucker: 'Trucker', importer: 'Importer of record (consignee)',
-  delivery: 'Delivery location / warehouse', shipper: 'Shipper / factory', vendor: 'Vendor (CFS / carrier / terminal / other)',
-};
+const PT = require('../partyTypes');
+const COMPANY_TYPES = PT.LABELS;
 const flash = (req, type, msg) => { req.session.flash = { type, msg }; };
 const staffUsers = () => store.db.all("SELECT id, name FROM users WHERE role IN ('admin', 'staff') AND active = 1 ORDER BY name");
 
@@ -22,11 +20,14 @@ router.get('/companies/:id', auth.requireInternal, (req, res) => {
   res.render('admin/companies', { title: 'Parties', rows, COMPANY_TYPES, edit, staffUsers: staffUsers() });
 });
 router.post('/companies', auth.requirePerm('parties'), (req, res) => {
-  const { id, name, type, country, emails, phone, address, billing_emails, short_name } = req.body;
+  const { id, name, country, emails, phone, address, billing_emails, short_name } = req.body;
   const terms = req.body.terms_days === '' || req.body.terms_days == null ? null : Number(req.body.terms_days);
-  if (!name || !COMPANY_TYPES[type]) { flash(req, 'err', 'Name and type are required'); return res.redirect('/companies'); }
-  if (id) store.db.run('UPDATE companies SET name = ?, type = ?, country = ?, emails = ?, phone = ?, address = ?, billing_emails = ?, terms_days = ?, short_name = ? WHERE id = ?', name, type, country, emails, phone, address, billing_emails, terms, short_name, Number(id));
-  else store.db.run('INSERT INTO companies (name, type, country, emails, phone, address, billing_emails, terms_days, short_name) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)', name, type, country, emails, phone, address, billing_emails, terms, short_name);
+  const current = id ? store.db.get('SELECT type FROM companies WHERE id = ?', Number(id))?.type : null;
+  const roles = PT.fromForm(req.body, current);
+  if (!name || !roles) { flash(req, 'err', 'Name and at least one type are required'); return res.redirect(id ? `/companies/${id}` : '/companies'); }
+  const { type, types } = roles;
+  if (id) store.db.run('UPDATE companies SET name = ?, type = ?, types = ?, country = ?, emails = ?, phone = ?, address = ?, billing_emails = ?, terms_days = ?, short_name = ? WHERE id = ?', name, type, types, country, emails, phone, address, billing_emails, terms, short_name, Number(id));
+  else store.db.run('INSERT INTO companies (name, type, types, country, emails, phone, address, billing_emails, terms_days, short_name) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)', name, type, types, country, emails, phone, address, billing_emails, terms, short_name);
   const cid = id ? Number(id) : Number(store.db.get('SELECT MAX(id) AS id FROM companies').id);
   const freq = ['daily', 'weekly'].includes(req.body.report_frequency) ? req.body.report_frequency : null;
   store.db.run('UPDATE companies SET default_pic_id = ?, report_frequency = ?, report_emails = ? WHERE id = ?',

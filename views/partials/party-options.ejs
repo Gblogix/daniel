@@ -4,7 +4,8 @@
     delivery: 'Delivery locations / warehouses', importer: 'Importers', shipper: 'Shippers' };
   const order = [...(locals.prefer || []), ...Object.keys(LABEL)].filter((t, i, a) => a.indexOf(t) === i);
   const groups = {};
-  parties.forEach((p) => { (groups[p.type] = groups[p.type] || []).push(p); });
+  // A party with several roles is listed once, under the first of its roles this screen prefers.
+  parties.forEach((p) => { const roles = PT.of(p); const g = order.find((t) => roles.includes(t)) || p.type; (groups[g] = groups[g] || []).push(p); });
   const types = [...order.filter((t) => groups[t]), ...Object.keys(groups).filter((t) => !order.includes(t))];
 %>
-<% types.forEach((t) => { %><optgroup label="<%= LABEL[t] || t %>"><% groups[t].forEach((p) => { %><option value="<%= p.id %>" data-type="<%= p.type %>" <%= String(selected) === String(p.id) ? 'selected' : '' %>><%= p.name %></option><% }) %></optgroup><% }) %>
+<% types.forEach((t) => { %><optgroup label="<%= LABEL[t] || t %>"><% groups[t].forEach((p) => { %><option value="<%= p.id %>" data-type="<%= p.type %>" <%= String(selected) === String(p.id) ? 'selected' : '' %>><%= p.name %><%= PT.of(p).length > 1 ? `  (${PT.label(p)})` : '' %></option><% }) %></optgroup><% }) %>

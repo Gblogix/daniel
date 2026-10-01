@@ -13,7 +13,7 @@ const { expandMailFiles } = require('../extract/mailfile');
 const router = express.Router();
 const upload = multer({ dest: path.join(config.uploadDir, 'shipments'), limits: { fileSize: 25 * 1024 * 1024, files: 20 } });
 
-const companies = (type) => store.db.all('SELECT id, name FROM companies WHERE type = ? ORDER BY name', type);
+const companies = (type) => store.db.all(`SELECT id, name FROM companies WHERE ${require('../partyTypes').sql(type)} ORDER BY name`);
 const partyLists = () => ({
   customers: companies('customer'), agents: companies('agent'), brokers: companies('broker'),
   truckers: companies('trucker'), deliveries: companies('delivery'),
@@ -153,7 +153,7 @@ router.get('/shipments/:id', auth.requireLogin, (req, res) => {
     return { ...i, to: require('../invoicing').emailsOf(c) };
   });
   const vendorPending = internal && acct ? require('../vendorbills').pending().filter((d) => d.shipment_id === s.id) : [];
-  const acctParties = internal && acct ? db.all('SELECT id, name, type FROM companies ORDER BY type, name') : [];
+  const acctParties = internal && acct ? db.all('SELECT id, name, type, types FROM companies ORDER BY type, name') : [];
   const trackEvents = db.all("SELECT * FROM tracking_events WHERE shipment_id = ? AND classifier IN ('ACT', '') ORDER BY event_time DESC LIMIT 30", s.id);
   const view = internal ? 'shipments/detail' : 'customer/detail';
   const nextActions = internal ? require('../followups').forUser(req.user, { shipmentId: s.id }) : [];

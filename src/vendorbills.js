@@ -42,7 +42,7 @@ async function extract({ buffer, filename, mime, db = store.db }) {
   const { readDocument } = require('./extract/text');
   const { segments } = await readDocument(buffer, filename, mime);
   const text = segments.map((s) => s.text).join('\n');
-  const companies = db.all('SELECT id, name, short_name, emails, billing_emails, type FROM companies');
+  const companies = db.all('SELECT id, name, short_name, emails, billing_emails, type, types FROM companies');
   const own = require('./company').get().name;
   const Note = require('./extract/debitNote');
   if (Note.isNote(text)) {

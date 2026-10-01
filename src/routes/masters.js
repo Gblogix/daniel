@@ -6,7 +6,7 @@ const M = require('../masters');
 
 const router = express.Router();
 const flash = (req, type, msg) => { req.session.flash = { type, msg }; };
-const agents = () => store.db.all("SELECT id, name FROM companies WHERE type = 'agent' ORDER BY name");
+const agents = () => store.db.all(`SELECT id, name FROM companies WHERE ${require('../partyTypes').sql('agent')} ORDER BY name`);
 
 router.get('/masters', auth.requireInternal, (req, res) => {
   const sort = req.query.sort === 'desc' ? 'desc' : 'asc';

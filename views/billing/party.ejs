@@ -3,12 +3,12 @@
    const kindLabel = (i) => ({ AR: 'Invoice', DN: i.total < 0 ? 'C/N' : 'D/N', AP: 'Vendor bill' }[i.kind]); %>
 <div class="pagehead">
   <div><h1 style="margin-bottom:4px"><%= party.name %></h1>
-    <div class="chips"><span class="badge"><%= party.type %></span>
+    <div class="chips"><% PT.of(party).forEach((t) => { %><span class="badge"><%= PT.SHORT[t] || t %></span><% }) %>
       <% if (items.dueToUs) { %><span class="badge bill-warn">Owes us <%= m(items.dueToUs) %></span><% } %>
       <% if (items.dueToThem) { %><span class="badge bill-bad">We owe <%= m(items.dueToThem) %></span><% } %></div></div>
   <div class="actions"><a class="btn secondary" href="/billing">← Billing</a>
     <a class="btn" href="/billing/parties/<%= party.id %>/statement">📄 Statement of account (SOA)</a>
-    <% if (party.type === 'agent') { %><a class="btn secondary" href="/billing/agents/<%= party.id %>">Statement of account</a><% } %></div>
+    <% if (PT.has(party, 'agent')) { %><a class="btn secondary" href="/billing/agents/<%= party.id %>">Statement of account</a><% } %></div>
 </div>
 
 <form method="post" action="/billing/parties/<%= party.id %>/settle" data-settle>

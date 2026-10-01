@@ -16,14 +16,14 @@ const ALLOWED = /\.(pdf|xlsx|csv|jpe?g|png)$/i;
 function vendorForSender(email, db = store.db) {
   const domain = email.split('@')[1];
   if (!domain) return null;
-  const rows = db.all("SELECT id, name, emails, billing_emails FROM companies WHERE type IN ('vendor', 'trucker', 'broker', 'delivery') AND (emails IS NOT NULL OR billing_emails IS NOT NULL)");
+  const rows = db.all(`SELECT id, name, emails, billing_emails FROM companies WHERE ${require('./partyTypes').sql(['vendor', 'trucker', 'broker', 'delivery'])} AND (emails IS NOT NULL OR billing_emails IS NOT NULL)`);
   return rows.find((c) => `${c.emails || ''},${c.billing_emails || ''}`.toLowerCase().split(/[,;\s]+/).some((e) => e && (e === email.toLowerCase() || e.endsWith(`@${domain.toLowerCase()}`)))) || null;
 }
 
 function agentForSender(email, db = store.db) {
   const domain = email.split('@')[1];
   if (!domain) return null;
-  const agents = db.all("SELECT id, name, emails FROM companies WHERE type = 'agent' AND emails IS NOT NULL");
+  const agents = db.all(`SELECT id, name, emails FROM companies WHERE ${require('./partyTypes').sql('agent')} AND emails IS NOT NULL`);
   return agents.find((a) => a.emails.toLowerCase().split(/[,;\s]+/).some((e) => e === email || e.endsWith(`@${domain}`))) || null;
 }
 

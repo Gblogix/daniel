@@ -78,7 +78,7 @@ function parseNote(text, { companies = [], ownName = 'GLOBALBRIDGE' } = {}) {
   const byDomain = others.find((c) => String(`${c.emails || ''},${c.billing_emails || ''}`).toLowerCase().split(/[,;\s]+/)
     .some((e) => e.includes('@') && !/example$/.test(e) && new RegExp(`@${e.split('@')[1].replace(/\./g, '\\.')}\\b`, 'i').test(T)));
   out.party = (byLetter && { id: byLetter.id, name: byLetter.name })
-    || matchVendor(T, others.filter((c) => c.type === 'agent'), ownName)
+    || matchVendor(T, others.filter((c) => require('../partyTypes').has(c, 'agent')), ownName)
     || (byDomain && { id: byDomain.id, name: byDomain.name })
     || (issuer === 'us' ? matchVendor(T, others, ownName) : null);
 

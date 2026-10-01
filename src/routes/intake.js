@@ -9,6 +9,7 @@ const express = require('express');
 const multer = require('multer');
 const config = require('../config');
 const store = require('../db');
+const PT = require('../partyTypes');
 const auth = require('../auth');
 const S = require('../shipments');
 const Party = require('../extract/party');
@@ -33,7 +34,7 @@ router.get('/portal', canUpload, (req, res) => {
     ? store.db.all('SELECT i.*, s.ref_no FROM intakes i LEFT JOIN shipments s ON s.id = i.shipment_id WHERE i.agent_id = ? OR i.uploaded_by = ? ORDER BY i.id DESC LIMIT 50', req.user.company_id, req.user.id)
     : store.db.all('SELECT i.*, s.ref_no FROM intakes i LEFT JOIN shipments s ON s.id = i.shipment_id WHERE i.uploaded_by = ? ORDER BY i.id DESC LIMIT 50', req.user.id);
   for (const i of mine) i.docs = store.db.all('SELECT id, doc_type, filename FROM documents WHERE intake_id = ?', i.id);
-  const agents = store.db.all("SELECT id, name FROM companies WHERE type = 'agent' ORDER BY name");
+  const agents = store.db.all(`SELECT id, name FROM companies WHERE ${PT.sql('agent')} ORDER BY name`);
   res.render('portal', { title: 'Document upload', mine, slots: SLOTS, agents });
 });
 
@@ -115,14 +116,14 @@ router.get('/intakes/:id', auth.requireInternal, (req, res) => {
   // Master-only upload, or several house B/Ls: master first, a house file per HB/L.
   const plan = intake.status === 'PENDING' ? require('../intakePlan').plan(docs) : { kind: 'single' };
   if (plan.kind !== 'single') {
-    const customers = db.all("SELECT id, name FROM companies WHERE type IN ('customer', 'importer') ORDER BY name");
+    const customers = db.all(`SELECT id, name FROM companies WHERE ${PT.sql(['customer', 'importer'])} ORDER BY name`);
     for (const h of plan.houses) {
       const name = /^TO\s+(THE\s+)?ORDER/i.test(h.draft.consignee_name || '') ? h.draft.notify_party : h.draft.consignee_name;
       h.customer_id = name ? Party.findParty(name, { types: ['customer', 'importer'] })?.id || null : null;
       h.existing = db.get('SELECT id, ref_no FROM shipments WHERE hbl_no = ? OR sub_bl_no = ? OR agent_ref = ?', h.hbl, h.hbl, h.hbl) || null;
     }
     const existingMaster = plan.master.mbl_no ? require('../masters').findByMbl(plan.master.mbl_no) : null;
-    return res.render('intakes/plan', { title: `Intake #${intake.id}`, intake, plan, docs, customers, existingMaster, agents: db.all("SELECT id, name FROM companies WHERE type = 'agent' ORDER BY name") });
+    return res.render('intakes/plan', { title: `Intake #${intake.id}`, intake, plan, docs, customers, existingMaster, agents: db.all(`SELECT id, name FROM companies WHERE ${PT.sql('agent')} ORDER BY name`) });
   }
   const target = intake.shipment_id ? S.find(intake.shipment_id, null) : null;
   // Pre-fill: existing shipment values, overridden by what the documents say.
@@ -149,11 +150,11 @@ router.get('/intakes/:id', auth.requireInternal, (req, res) => {
     }
   }
   const lists = {
-    customers: db.all("SELECT id, name FROM companies WHERE type = 'customer' ORDER BY name"),
-    agents: db.all("SELECT id, name FROM companies WHERE type = 'agent' ORDER BY name"),
-    brokers: db.all("SELECT id, name FROM companies WHERE type = 'broker' ORDER BY name"),
-    truckers: db.all("SELECT id, name FROM companies WHERE type = 'trucker' ORDER BY name"),
-    deliveries: db.all("SELECT id, name FROM companies WHERE type = 'delivery' ORDER BY name"),
+    customers: db.all(`SELECT id, name FROM companies WHERE ${PT.sql('customer')} ORDER BY name`),
+    agents: db.all(`SELECT id, name FROM companies WHERE ${PT.sql('agent')} ORDER BY name`),
+    brokers: db.all(`SELECT id, name FROM companies WHERE ${PT.sql('broker')} ORDER BY name`),
+    truckers: db.all(`SELECT id, name FROM companies WHERE ${PT.sql('trucker')} ORDER BY name`),
+    deliveries: db.all(`SELECT id, name FROM companies WHERE ${PT.sql('delivery')} ORDER BY name`),
   };
   const openShipments = db.all("SELECT id, ref_no, mbl_no, hbl_no FROM shipments WHERE status <> 'DELIVERED' ORDER BY id DESC LIMIT 200");
   res.render('intakes/review', { title: `Intake #${intake.id}`, intake, draft, perDoc, docs, target, s, sources, openShipments, newCustomer, ...lists });

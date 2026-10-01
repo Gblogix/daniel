@@ -95,3 +95,21 @@ test('a vendor invoice from an unknown vendor carries the letterhead to add it w
   assert.equal(d.ex.vendor_new.name, 'PACIFIC CFS WAREHOUSE INC.');
   assert.equal(d.ex.vendor_new.email, 'billing@pacificcfs.com');
 });
+
+test('a party can have several roles: shows up in every matching list, main role kept', () => {
+  const PT = require('../src/partyTypes');
+  const db = require('../src/db').db;
+  assert.deepEqual(PT.fromForm({ types: ['agent', 'customer'], type: 'agent' }), { type: 'agent', types: 'agent,customer' });
+  assert.deepEqual(PT.fromForm({ types: ['trucker', 'delivery'] }, 'delivery'), { type: 'delivery', types: 'delivery,trucker' });
+  assert.deepEqual(PT.fromForm({ type: 'vendor' }), { type: 'vendor', types: 'vendor' });
+  assert.equal(PT.fromForm({ types: ["x' OR 1=1 --"] }), null);
+  const id = Number(db.run("INSERT INTO companies (name, type, types) VALUES ('DUAL ROLE CO', 'customer', 'customer,agent')").lastInsertRowid);
+  const old = Number(db.run("INSERT INTO companies (name, type) VALUES ('ONE ROLE AGENT', 'agent')").lastInsertRowid);
+  const ids = (t) => db.all(`SELECT id FROM companies WHERE ${PT.sql(t)}`).map((r) => r.id);
+  assert.ok(ids('customer').includes(id));
+  assert.ok(ids('agent').includes(id));
+  assert.ok(ids('agent').includes(old), 'rows without types fall back to type');
+  assert.ok(!ids('customer').includes(old));
+  assert.ok(!ids('trucker').includes(id));
+  assert.equal(PT.label({ type: 'customer', types: 'customer,agent' }), 'Customer · Agent');
+});

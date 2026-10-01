@@ -125,7 +125,7 @@ function own() {
 function findParty(name, { db = store.db, types = null } = {}) {
   const n = norm(name);
   if (n.length < 3) return null;
-  const rows = db.all(`SELECT id, name, short_name, type FROM companies${types ? ` WHERE type IN (${types.map(() => '?').join(',')})` : ''}`, ...(types || []));
+  const rows = db.all(`SELECT id, name, short_name, type, types FROM companies${types ? ` WHERE ${require('../partyTypes').sql(types)}` : ''}`);
   return rows.find((c) => norm(c.name) === n) || rows.find((c) => c.short_name && norm(c.short_name) === n)
     || rows.find((c) => norm(c.name).length >= 6 && (n.startsWith(`${norm(c.name)} `) || norm(c.name).startsWith(`${n} `))) || null;
 }

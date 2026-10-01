@@ -547,7 +547,7 @@ function guessCustomer(s, db = store.db) {
   const text = ` ${String(s.title || s.consignee_name || '').toUpperCase().replace(/[^A-Z0-9]+/g, ' ')} `;
   if (!text.trim()) return null;
   const words = (v) => String(v || '').toUpperCase().replace(/[^A-Z0-9]+/g, ' ').trim();
-  const hits = db.all("SELECT id, name, short_name FROM companies WHERE type = 'customer'").filter((c) => {
+  const hits = db.all(`SELECT id, name, short_name FROM companies WHERE ${require('./partyTypes').sql('customer')}`).filter((c) => {
     const keys = [words(c.short_name), words(shortParty(c.name)), words(c.name).split(' ')[0]].filter((k) => k.length >= 3);
     return keys.some((k) => text.includes(` ${k} `));
   });

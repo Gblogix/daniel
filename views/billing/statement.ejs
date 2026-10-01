@@ -1,7 +1,7 @@
 <%- include('../partials/head') %>
 <% const m = (v) => fmtNum(v, 2); const t = st.totals; const qs = (extra) => new URLSearchParams({ ...opts, ...extra }).toString(); %>
 <div class="pagehead"><div><h1 style="margin-bottom:4px">Statement of account</h1>
-  <div class="muted"><a href="/billing/parties/<%= party.id %>"><b><%= party.name %></b></a> · <%= party.type %></div></div>
+  <div class="muted"><a href="/billing/parties/<%= party.id %>"><b><%= party.name %></b></a> · <%= PT.label(party) %></div></div>
   <div class="actions">
     <a class="btn secondary" href="?<%= qs({ format: 'print' }) %>" target="_blank">🖨 Print view</a>
     <a class="btn secondary" href="?<%= qs({ format: 'pdf' }) %>">⬇ PDF</a>

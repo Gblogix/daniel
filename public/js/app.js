@@ -479,3 +479,25 @@ document.querySelectorAll('input[data-party-lookup]').forEach((inp) => {
   form.addEventListener('input', (e) => e.target.classList?.remove('autofilled'));
   if (!/\/shipments\/\d+/.test(location.pathname)) trigger();
 })();
+
+// Party types: several roles may be ticked; the radio marks the main one (ticking it ticks the role, unticking the
+// main role moves "main" to the next ticked role).
+document.querySelectorAll('.type-picks').forEach((box) => {
+  const sync = () => {
+    const picks = [...box.querySelectorAll('.type-pick')];
+    if (!picks.some((p) => p.querySelector('[type=checkbox]').checked)) picks[0].querySelector('[type=checkbox]').checked = true;
+    const main = picks.find((p) => p.querySelector('[type=radio]').checked && p.querySelector('[type=checkbox]').checked)
+      || picks.find((p) => p.querySelector('[type=checkbox]').checked);
+    for (const p of picks) {
+      const on = p.querySelector('[type=checkbox]').checked;
+      p.classList.toggle('on', on);
+      p.querySelector('[type=radio]').checked = p === main;
+      p.querySelector('[type=radio]').hidden = !on;
+    }
+  };
+  box.addEventListener('change', (e) => {
+    if (e.target.type === 'radio') e.target.closest('.type-pick').querySelector('[type=checkbox]').checked = true;
+    sync();
+  });
+  sync();
+});

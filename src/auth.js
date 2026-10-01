@@ -58,6 +58,7 @@ function loadUser(req, res, next) {
   res.locals.isInternal = Boolean(req.user && INTERNAL.includes(req.user.role));
   res.locals.canAccounting = canAccounting(req.user);
   res.locals.can = (key) => can(req.user, key);
+  res.locals.PT = require('./partyTypes');
   next();
 }
 

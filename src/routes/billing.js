@@ -1,5 +1,6 @@
 const express = require('express');
 const store = require('../db');
+const PT = require('../partyTypes');
 const auth = require('../auth');
 const S = require('../shipments');
 const A = require('../accounting');
@@ -11,13 +12,13 @@ const { INVOICE_GENERATORS, esc } = require('../docs/templates');
 const router = express.Router();
 const flash = (req, type, msg) => { req.session.flash = { type, msg }; };
 const arr = (v) => (Array.isArray(v) ? v : v == null ? [] : [v]);
-const parties = () => store.db.all('SELECT id, name, type, terms_days FROM companies ORDER BY type, name');
+const parties = () => store.db.all('SELECT id, name, type, types, terms_days FROM companies ORDER BY type, name');
 
 // ---------- overview ----------
 router.get('/billing', auth.requireAccounting, (req, res) => {
   const db = store.db;
   const aging = A.arAging();
-  const agents = db.all("SELECT id, name FROM companies WHERE type = 'agent' ORDER BY name")
+  const agents = db.all(`SELECT id, name FROM companies WHERE ${PT.sql('agent')} ORDER BY name`)
     .map((a) => ({ ...a, soa: A.agentStatement(a.id) })).filter((a) => a.soa.items.length);
   const payments = db.all(`SELECT p.*, c.name AS company_name, (SELECT COUNT(*) FROM payment_allocations x WHERE x.payment_id = p.id) AS n
     FROM payments p LEFT JOIN companies c ON c.id = p.company_id ORDER BY p.paid_on DESC, p.id DESC LIMIT 30`);
@@ -284,7 +285,7 @@ router.get('/billing/profit', auth.requireAccounting, async (req, res) => {
     res.set('Content-Disposition', `attachment; filename="PL_by_file_${month || new Date().toISOString().slice(0, 10)}.xlsx"`);
     return res.type('application/vnd.openxmlformats-officedocument.spreadsheetml.sheet').send(Buffer.from(await wb.xlsx.writeBuffer()));
   }
-  const customers = store.db.all("SELECT id, name FROM companies WHERE type IN ('customer', 'importer') ORDER BY name");
+  const customers = store.db.all(`SELECT id, name FROM companies WHERE ${PT.sql(['customer', 'importer'])} ORDER BY name`);
   res.render('billing/profit', { title: 'Profit & loss by file', report, q: { ...req.query, month }, customers });
 });
 

@@ -4,8 +4,8 @@
   <div class="tablewrap"><table class="t">
     <thead><tr><th>Name</th><th>Type</th><th>Country</th><th>Notice emails</th><th>Users</th><th></th></tr></thead>
     <% rows.forEach((c) => { %>
-      <tr><td><b><%= c.name %></b><% if (c.address) { %><br><span class="small muted"><%= c.address %></span><% } %></td><td><%= COMPANY_TYPES[c.type] || c.type %></td><td><%= c.country || '' %></td>
-        <td class="small"><%= c.emails || '' %><% if (!c.emails && ['customer','broker','trucker'].includes(c.type)) { %><span class="badge EXAM">no email — notices will be skipped</span><% } %></td>
+      <tr><td><b><%= c.name %></b><% if (c.address) { %><br><span class="small muted"><%= c.address %></span><% } %></td><td><%= PT.of(c).map((t) => PT.SHORT[t] || t).join(' · ') %></td><td><%= c.country || '' %></td>
+        <td class="small"><%= c.emails || '' %><% if (!c.emails && ['customer','broker','trucker'].some((t) => PT.has(c, t))) { %><span class="badge EXAM">no email — notices will be skipped</span><% } %></td>
         <td><%= c.users %></td><td><a class="btn secondary small" href="/companies/<%= c.id %>">Edit</a></td></tr>
     <% }) %>
   </table></div>
@@ -22,7 +22,12 @@
     <input type="hidden" name="_csrf" value="<%= csrf %>">
     <% const c = edit || {}; if (edit) { %><input type="hidden" name="id" value="<%= c.id %>"><% } %>
     <div class="field"><label>Name</label><input name="name" value="<%= c.name || '' %>" required></div>
-    <div class="field"><label>Type</label><select name="type"><% Object.entries(COMPANY_TYPES).forEach(([k, v]) => { %><option value="<%= k %>" <%= c.type === k ? 'selected' : '' %>><%= v %></option><% }) %></select></div>
+    <% const roles = edit ? PT.of(c) : ['customer']; %>
+    <div class="field"><label>Type <span class="muted small">— tick every role this party plays; ● = main role</span></label>
+      <div class="type-picks"><% Object.entries(COMPANY_TYPES).forEach(([k, v]) => { %>
+        <label class="type-pick"><input type="checkbox" name="types" value="<%= k %>" <%= roles.includes(k) ? 'checked' : '' %>>
+          <span><%= v %></span><input type="radio" name="type" value="<%= k %>" title="Main role" <%= roles[0] === k ? 'checked' : '' %>></label>
+      <% }) %></div></div>
     <div class="field"><label>Country</label><input name="country" value="<%= c.country || '' %>" placeholder="US / KR / CN"></div>
     <div class="field"><label>Notice emails (comma separated)</label><input name="emails" value="<%= c.emails || '' %>"></div>
     <div class="field"><label>Billing emails (invoices / D/N / SOA)</label><input name="billing_emails" value="<%= c.billing_emails || '' %>"></div>

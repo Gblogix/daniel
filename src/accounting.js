@@ -502,13 +502,13 @@ function partyStatement(companyId, { db = store.db, basis = 'invoice', from = ''
  */
 function agingSummary({ db = store.db, asOf = today(), basis = 'due', side = 'all' } = {}) {
   const col = BASIS_COL[basis] || BASIS_COL.due;
-  const rows = db.all(`SELECT i.*, ${col} AS basis_date, c.name AS company_name, c.type AS company_type
+  const rows = db.all(`SELECT i.*, ${col} AS basis_date, c.name AS company_name, c.type AS company_type, c.types AS company_types
     FROM invoices i JOIN companies c ON c.id = i.company_id LEFT JOIN shipments s ON s.id = i.shipment_id
     WHERE i.status = 'OPEN' ORDER BY c.name, basis_date`);
   const by = new Map();
   for (const i of rows) {
     if (!by.has(i.company_id)) {
-      by.set(i.company_id, { company_id: i.company_id, name: i.company_name, type: i.company_type, ar: 0, debit: 0, credit: 0, ap: 0, count: 0,
+      by.set(i.company_id, { company_id: i.company_id, name: i.company_name, type: require('./partyTypes').label({ type: i.company_type, types: i.company_types }), ar: 0, debit: 0, credit: 0, ap: 0, count: 0,
         ...Object.fromEntries(BUCKETS.map((b) => [b, 0])), oldest: null });
     }
     const g = by.get(i.company_id);
