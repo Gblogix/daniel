@@ -61,7 +61,9 @@ function create(data, { db = store.db } = {}) {
   if (d.mbl_no) { const hit = findByMbl(d.mbl_no, db); if (hit) return hit.id; }
   const ref = require('./company').nextRef(isAir(d.mode) ? 'AM' : 'OM', { db, table: 'masters', column: 'ref_no' });
   const cols = ['ref_no', ...Object.keys(d)];
-  return Number(db.run(`INSERT INTO masters (${cols.join(',')}) VALUES (${cols.map(() => '?').join(',')})`, ref, ...Object.values(d)).lastInsertRowid);
+  const id = Number(db.run(`INSERT INTO masters (${cols.join(',')}) VALUES (${cols.map(() => '?').join(',')})`, ref, ...Object.values(d)).lastInsertRowid);
+  require('./autofill').applyMaster(id, { db });
+  return id;
 }
 
 /** Save the master; changed carrier-leg fields go to every house (through the normal file update — ETA mails etc.). */
@@ -72,6 +74,7 @@ function update(id, data, { db = store.db } = {}) {
   const d = clean(data);
   const changed = Object.keys(d).filter((k) => (cur[k] ?? null) != d[k]); // eslint-disable-line eqeqeq
   if (changed.length) db.run(`UPDATE masters SET ${changed.map((k) => `${k} = ?`).join(', ')}, updated_at = datetime('now') WHERE id = ?`, ...changed.map((k) => d[k]), id);
+  for (const k of require('./autofill').applyMaster(id, { db })) if (!changed.includes(k)) { changed.push(k); d[k] = db.get(`SELECT ${k} FROM masters WHERE id = ?`, id)[k]; }
   const push = changed.filter((k) => SHARED.includes(k));
   const results = [];
   if (push.length) {

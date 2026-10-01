@@ -84,6 +84,16 @@ router.get('/history', auth.requireInternal, (req, res) => {
   res.render('shipments/list', { title: 'Shipment history', rows, q, status: '', mode, stage: 'closed', STAGES, bill: '', history: true, mine: false, sort });
 });
 
+/** Form helper: what past files suggest for the fields still empty (carrier, pick-up location, delivery). */
+router.get('/shipments/autofill.json', auth.requireInternal, (req, res) => {
+  const q = req.query;
+  const keys = ['id', 'mode', 'mbl_no', 'carrier', 'scac', 'pod', 'agent_id', 'customer_id', 'consignee_name', 'ctn', ...require('../autofill').PICKUP, ...require('../autofill').DELIVERY];
+  const s = Object.fromEntries(keys.map((k) => [k, typeof q[k] === 'string' ? q[k].trim().slice(0, 300) : '']));
+  s.id = Number(s.id) || 0;
+  s.containers = s.ctn ? [{ container_no: s.ctn.toUpperCase() }] : [];
+  res.json(require('../autofill').suggest(s));
+});
+
 router.get('/shipments/new', auth.requirePerm('shipments_edit'), (req, res) => {
   let mode = S.MODES[req.query.mode] ? req.query.mode : 'FCL';
   const s = { mode, status: 'BOOKED', customs_status: 'PENDING', containers: [], items: [] };

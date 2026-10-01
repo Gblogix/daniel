@@ -5,11 +5,12 @@ const BL_PREFIX = {
   HDMU: 'HDMU', ONEY: 'ONEY', CMDU: 'CMDU', ANNU: 'CMDU', CHNL: 'CMDU', MAEU: 'MAEU', SEAU: 'MAEU', MEDU: 'MSCU', MSCU: 'MSCU',
   EGLV: 'EGLV', EISU: 'EGLV', COSU: 'COSU', CCMJ: 'COSU', OOLU: 'OOLU', YMLU: 'YMLU', YMJA: 'YMLU', ZIMU: 'ZIMU',
   HLCU: 'HLCU', WHLC: 'WHLC', SMLM: 'SMLM', KMTC: 'KMTU', KMTU: 'KMTU', SKLU: 'SKLU', SNKO: 'SNKO', PABV: 'PABV', MATS: 'MATS',
+  APLU: 'APLU', HASL: 'HASL', NSSL: 'NSSL',
 };
 const CARRIERS = {
   HDMU: 'HMM', ONEY: 'ONE', CMDU: 'CMA CGM', MAEU: 'Maersk', MSCU: 'MSC', EGLV: 'Evergreen', COSU: 'COSCO', OOLU: 'OOCL',
   YMLU: 'Yang Ming', ZIMU: 'ZIM', HLCU: 'Hapag-Lloyd', WHLC: 'Wan Hai', SMLM: 'SM Line', KMTU: 'KMTC', SKLU: 'Sinokor',
-  SNKO: 'Sinokor', PABV: 'PIL', MATS: 'Matson',
+  SNKO: 'Sinokor', PABV: 'PIL', MATS: 'Matson', APLU: 'APL', HASL: 'Heung-A', NSSL: 'Namsung',
 };
 
 // IATA air waybill prefix -> airline (common on KR/CN -> US lanes).
@@ -19,7 +20,8 @@ const AIRLINES = {
   '781': 'China Eastern', '784': 'China Southern', '999': 'Air China', '297': 'China Airlines', '695': 'EVA Air',
   '160': 'Cathay Pacific', '020': 'Lufthansa Cargo', '618': 'Singapore Airlines', '131': 'JAL', '205': 'ANA',
   '176': 'Emirates', '157': 'Qatar Airways', '172': 'Cargolux', '369': 'Atlas Air', '406': 'UPS', '023': 'FedEx',
-  '016': 'United', '001': 'American', '006': 'Delta', '880': 'Hainan', '479': 'Shenzhen Airlines', '324': 'Shandong Airlines',
+  '016': 'United', '001': 'American', '006': 'Delta', '074': 'KLM', '057': 'Air France', '125': 'British Airways',
+  '235': 'Turkish Airlines', '217': 'Thai Airways', '738': 'Vietnam Airlines', '607': 'Etihad', '403': 'Polar Air Cargo', '880': 'Hainan', '479': 'Shenzhen Airlines', '324': 'Shandong Airlines',
 };
 
 function scacFromBl(bl) {

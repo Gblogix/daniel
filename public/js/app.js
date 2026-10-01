@@ -437,3 +437,45 @@ document.querySelectorAll('input[data-party-lookup]').forEach((inp) => {
   form.addEventListener('change', (e) => { const f = e.target.closest('.field.req'); if (f) f.classList.toggle('missing', !String(e.target.value || '').trim()); });
   apply();
 })();
+
+// Shipment form: as the B/L no., carrier, port, agent or customer is entered, fill the still-empty carrier /
+// pick-up location / delivery fields from past files (the server decides; typed values are never overwritten).
+(() => {
+  const form = document.getElementById('f_delivery_address')?.form;
+  if (!form || !form.querySelector('#f_mbl_no')) return;
+  const val = (k) => form.querySelector(`[name="${k}"]`)?.value || '';
+  const keys = ['mode', 'mbl_no', 'carrier', 'scac', 'pod', 'agent_id', 'customer_id', 'consignee_name',
+    'cfs_location', 'firms_code', 'freight_location_tel', 'delivery_company_id', 'delivery_address', 'trucker_id', 'broker_id'];
+  const group = { cfs_location: 'pickup', firms_code: 'pickup', freight_location_tel: 'pickup',
+    delivery_company_id: 'delivery', delivery_address: 'delivery', trucker_id: 'delivery', broker_id: 'delivery', carrier: 'carrier', scac: 'carrier' };
+  let timer;
+  const run = async () => {
+    const p = new URLSearchParams();
+    for (const k of keys) p.set(k, val(k));
+    p.set('ctn', val('ctn_no'));
+    const id = /\/shipments\/(\d+)/.exec(location.pathname)?.[1];
+    if (id) p.set('id', id);
+    let r;
+    try { r = await fetch(`/shipments/autofill.json?${p}`).then((x) => x.json()); } catch { return; }
+    for (const [k, v] of Object.entries(r.fills || {})) {
+      const el = form.querySelector(`[name="${k}"]`);
+      if (!el || el.value) continue;
+      if (el.tagName === 'SELECT' && ![...el.options].some((o) => o.value === String(v))) continue;
+      el.value = v;
+      el.classList.add('autofilled');
+      el.dispatchEvent(new Event('change', { bubbles: true }));
+      const g = group[k];
+      const lab = form.querySelector(`label[for="${el.id}"]`);
+      const text = g === 'carrier' ? `↺ ${r.from.carrier || ''}` : `↺ from ${r.from[g] || ''}`;
+      if (lab && !lab.querySelector('.autofill-src')) { const sp = document.createElement('span'); sp.className = 'autofill-src'; sp.textContent = text; sp.title = 'Filled from past files — change it if this one is different'; lab.append(sp); }
+    }
+  };
+  const trigger = () => { clearTimeout(timer); timer = setTimeout(run, 350); };
+  for (const k of ['mode', 'mbl_no', 'carrier', 'pod', 'agent_id', 'customer_id', 'consignee_name']) {
+    const el = form.querySelector(`[name="${k}"]`);
+    if (el) { el.addEventListener('change', trigger); if (el.tagName === 'INPUT') el.addEventListener('blur', trigger); }
+  }
+  form.querySelector('[name="ctn_no"]')?.addEventListener('change', trigger);
+  form.addEventListener('input', (e) => e.target.classList?.remove('autofilled'));
+  if (!/\/shipments\/\d+/.test(location.pathname)) trigger();
+})();

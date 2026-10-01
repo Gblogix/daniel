@@ -149,6 +149,13 @@ function mergeExtractions(docs) {
   const types = new Set(docs.map((d) => d.doc_type));
   if (!draft.carrier && draft.scac) draft.carrier = require('../tracking/codes').CARRIERS[draft.scac] || null;
   draft.mode = types.has('AWB') || draft.mawb_no || draft.flight_no ? 'AIR' : draft.containers.length ? 'FCL' : 'LCL';
+  // Carrier / airline from the B/L SCAC prefix, the AWB prefix or the container owner (or a past file with the same prefix).
+  if (!draft.carrier || (!draft.scac && draft.mode !== 'AIR')) {
+    let c = null;
+    try { c = require('../autofill').carrierFor(draft); } catch { c = null; }
+    if (c?.carrier && !draft.carrier) draft.carrier = c.carrier;
+    if (c?.scac && !draft.scac && draft.mode !== 'AIR') draft.scac = c.scac;
+  }
   for (const d of docs) for (const w of d.warnings || []) if (!draft.warnings.includes(w)) draft.warnings.push(w);
   // Heads-up: an invoice the B/L names with no C/I or P/L uploaded for it.
   draft.invoice_refs = [...new Set(docs.flatMap((d) => d.invoice_refs || []))];

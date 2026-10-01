@@ -107,8 +107,12 @@ function create(input, { db = store.db, userId } = {}) {
   const id = Number(res.lastInsertRowid);
   addEvent(id, 'CREATED', `Shipment ${ref} created`, { db, userId, customerVisible: false });
   require('./masters').linkHouse(id, { db });
+  require('./autofill').apply(id, { db });
   return id;
 }
+
+// A change to any of these can make the history suggest a carrier / pick-up location / delivery address.
+const AUTOFILL_KEYS = ['mbl_no', 'mode', 'master_id', 'customer_id', 'consignee_name', 'carrier', 'pod', 'agent_id'];
 
 /** Updates a shipment and returns the list of changed fields ({field, from, to}). */
 function update(id, input, { db = store.db } = {}) {
@@ -131,6 +135,7 @@ function update(id, input, { db = store.db } = {}) {
     if (changes.some((c) => c.field === 'status')) refreshClosed(id, { db });
   }
   if (!current.master_id || changes.some((c) => ['mbl_no', 'mode', 'master_id'].includes(c.field))) require('./masters').linkHouse(id, { db });
+  if (changes.some((c) => AUTOFILL_KEYS.includes(c.field))) require('./autofill').apply(id, { db });
   return changes;
 }
 
@@ -283,6 +288,7 @@ function saveLines(id, body, { db = store.db } = {}) {
   }
   // Containers just saved may be what finds the master (house B/L without the MB/L no.).
   if ('ctn_no' in body && !db.get('SELECT master_id FROM shipments WHERE id = ?', id)?.master_id) require('./masters').linkHouse(id, { db });
+  if ('ctn_no' in body) require('./autofill').apply(id, { db });
   if ('charge_desc' in body) {
     db.tx(() => {
       db.run('DELETE FROM charges WHERE shipment_id = ?', id);

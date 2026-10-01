@@ -521,3 +521,6 @@ dialog.dup-dialog h3 { margin: 0 0 8px; color: #991b1b; }
 .field.req > label::after { content: ' ●'; color: #2563eb; font-size: 9px; vertical-align: middle; }
 .field.req input, .field.req select, .field.req textarea { background: #e8f1ff; border-color: #9ec1ff; }
 .field.req.missing input, .field.req.missing select { border-color: #f87171; box-shadow: inset 3px 0 0 #f87171; }
+
+.autofilled { background: #fff8e1; }
+.autofill-src { margin-left: 6px; font-size: 11px; font-weight: 400; color: #8a6d00; }
