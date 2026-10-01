@@ -12,7 +12,10 @@ const MENU = [
     { head: 'Files', items: [
       { id: 'ship-list', label: 'Shipment list (open)', href: '/shipments' },
       { id: 'ship-mine', label: 'My files', href: '/shipments?mine=1' },
-      { id: 'ship-new', label: 'New shipment', href: '/shipments/new', perm: 'shipments_edit' },
+      { id: 'masters', label: 'Master B/L list (MB/L · MAWB)', href: '/masters' },
+      { id: 'master-new', label: 'New ocean master (MB/L)', href: '/masters/new', perm: 'shipments_edit' },
+      { id: 'master-new-air', label: 'New air master (MAWB)', href: '/masters/new?mode=AIR', perm: 'shipments_edit' },
+      { id: 'ship-new', label: 'New house / shipment', href: '/shipments/new', perm: 'shipments_edit' },
       { id: 'misc-new', label: 'New other file (non-shipment invoices)', href: '/shipments/new?mode=OTHER', perm: 'shipments_edit' },
       { id: 'misc-list', label: 'Other files (non-shipment)', href: '/shipments?mode=OTHER' },
       { id: 'ship-active', label: 'Active — before delivery', href: '/shipments?stage=active' },

@@ -10,6 +10,26 @@ const MODES = {
 };
 const isMisc = (s) => s?.mode === 'OTHER';
 
+/**
+ * Required fields per mode (the dark-blue fields of the OPUS entry screens). Highlighted on the form; a file missing
+ * any of them gets a follow-up. Saving is never blocked — documents often arrive in pieces.
+ * AIR (OPUS AIH AWB Entry): HAWB, MAWB, customer, carrier, arrival date, departure, destination. File no. is automatic.
+ */
+const REQUIRED = {
+  AIR: [['hbl_no', 'HAWB No.'], ['mbl_no', 'MAWB No.'], ['customer_id', 'Customer'], ['carrier', 'Carrier / Airline'], ['eta', 'Arrival date (ETA)'], ['pol', 'Departure'], ['pod', 'Destination']],
+  // OPUS OIH B/L Entry: HB/L, filing (= master MB/L), customer, POL / POD with ETD / ETA, carrier.
+  FCL: [['hbl_no', 'HBL No.'], ['mbl_no', 'MBL No.'], ['customer_id', 'Customer'], ['pol', 'POL'], ['pod', 'POD'], ['etd', 'ETD'], ['eta', 'ETA'], ['carrier', 'Carrier']],
+  LCL: [['hbl_no', 'HBL No.'], ['mbl_no', 'MBL No.'], ['customer_id', 'Customer'], ['pol', 'POL'], ['pod', 'POD'], ['etd', 'ETD'], ['eta', 'ETA'], ['carrier', 'Carrier']],
+  TRUCK: [['customer_id', 'Customer']],
+  OTHER: [],
+};
+/** OPUS OIM / AIM master entry: MB/L (MAWB), carrier, ETD, ETA, POL, POD. */
+const MASTER_REQUIRED = [['mbl_no', 'MB/L No.'], ['carrier', 'Carrier'], ['etd', 'ETD'], ['eta', 'ETA'], ['pol', 'POL'], ['pod', 'POD']];
+function missingRequired(s) {
+  return (REQUIRED[s?.mode] || REQUIRED.FCL).filter(([k]) => s[k] == null || String(s[k]).trim() === '')
+    .filter(([k]) => !(k === 'hbl_no' && Number(s.direct_shipment) === 1)).map(([, label]) => label);
+}
+
 // Ordered milestones. Index is used for progress display.
 const STATUSES = [
   { code: 'BOOKED', label: 'Booked', ko: '부킹 완료' },
@@ -40,7 +60,7 @@ const EDITABLE_FIELDS = [
   'scac', 'direct_shipment', 'isf_no', 'telex_release', 'firms_code', 'entry_no', 'css_no', 'holds', 'cargo_value',
   'ci_invoice_no', 'freight_paid', 'carrier_released', 'storage_start', 'available_for_pickup', 'pickup_appt',
   'picked_up_at', 'pallets', 'pod_received', 'empty_returned_at', 'tracking_enabled', 'vessel_imo', 'vessel_mmsi',
-  'ams_bl_no', 'customer_ref', 'sub_bl_no', 'it_no', 'it_place', 'it_date', 'devan_location', 'freight_location_tel',
+  'master_id', 'ams_bl_no', 'customer_ref', 'sub_bl_no', 'it_no', 'it_place', 'it_date', 'devan_location', 'freight_location_tel',
   'available_date', 'go_date', 'final_destination', 'service_term', 'release_type', 'consignee_address', 'notify_address',
   'marks', 'agent_ref', 'owner_id',
 ];
@@ -86,6 +106,7 @@ function create(input, { db = store.db, userId } = {}) {
     ref, ...Object.values(data));
   const id = Number(res.lastInsertRowid);
   addEvent(id, 'CREATED', `Shipment ${ref} created`, { db, userId, customerVisible: false });
+  require('./masters').linkHouse(id, { db });
   return id;
 }
 
@@ -109,6 +130,7 @@ function update(id, input, { db = store.db } = {}) {
     db.run(`UPDATE shipments SET ${sets}, updated_at = datetime('now') WHERE id = ?`, ...changes.map((c) => c.to), id);
     if (changes.some((c) => c.field === 'status')) refreshClosed(id, { db });
   }
+  if (!current.master_id || changes.some((c) => ['mbl_no', 'mode', 'master_id'].includes(c.field))) require('./masters').linkHouse(id, { db });
   return changes;
 }
 
@@ -533,7 +555,7 @@ function setClosed(id, closed, { db = store.db, userId = null } = {}) {
 }
 
 module.exports = {
-  MODES, isMisc, STATUSES, STATUS_INDEX, CUSTOMS_STATUSES, HOLD_TYPES, EDITABLE_FIELDS, checklist, lfdInfo,
+  MODES, isMisc, REQUIRED, MASTER_REQUIRED, missingRequired, STATUSES, STATUS_INDEX, CUSTOMS_STATUSES, HOLD_TYPES, EDITABLE_FIELDS, checklist, lfdInfo,
   statusLabel, normalizeInput, saveLines, nextRefNo, create, update, addEvent, list, find, scopeFor, tracking,
   inferStatus, mergeItems, guessCustomer, shortParty, fileName, billingState, stage, refreshClosed, setClosed, RECEIVABLE, timeline, costState, customerStep,
 };

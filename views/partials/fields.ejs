@@ -6,6 +6,7 @@
   const sel = (k, label, opts, blank = true) => `<div class="field"><label for="f_${k}">${label}</label><select id="f_${k}" name="${k}">${blank ? '<option value="">—</option>' : ''}${opts.map((o) => `<option value="${e(o.id)}" ${String(s[k]) === String(o.id) ? 'selected' : ''}>${e(o.name)}</option>`).join('')}</select></div>`;
 %>
 <% const misc = s.mode === 'OTHER'; const ship = (html) => html.replace('<div class="field">', `<div class="field" data-ship-only ${misc ? 'hidden' : ''}>`); %>
+<script type="application/json" id="required-fields"><%- JSON.stringify(Object.fromEntries(Object.entries(S.REQUIRED).map(([m, l]) => [m, l.map(([k]) => k)]))) %></script>
 <fieldset class="fieldset" id="pic"><legend>Parties & status</legend>
   <div class="grid g4">
     <%- sel('mode', 'Mode', Object.entries(S.MODES).map(([id, m]) => ({ id, name: m.label })), false) %>

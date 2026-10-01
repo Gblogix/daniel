@@ -49,7 +49,7 @@ document.querySelectorAll('form[data-settle]').forEach((form) => {
 
 // Inside the workspace, detail pages open in their own tab (like OPUS): shipment, invoice, party / agent statement.
 if (document.documentElement.classList.contains('embedded') && window.top.gbOpenTab) {
-  const DETAIL = /^\/(shipments\/(\d+|new)|invoices\/(\d+|new)|billing\/(parties|agents)\/\d+|billing\/profit|history)(?:[?#]|$)/;
+  const DETAIL = /^\/(shipments\/(\d+|new)|masters\/(\d+|new)|invoices\/(\d+|new)|billing\/(parties|agents)\/\d+|billing\/profit|history)(?:[?#]|$)/;
   document.addEventListener('click', (e) => {
     const a = e.target.closest('a[href]');
     if (!a || a.target || a.hasAttribute('download') || e.ctrlKey || e.metaKey || e.shiftKey || e.defaultPrevented) return;
@@ -412,3 +412,28 @@ document.querySelectorAll('input[data-party-lookup]').forEach((inp) => {
     if (hit && !addr.value.trim()) pick({ ...hit, name: inp.value.trim() });
   });
 });
+
+// Required fields for the chosen mode (OPUS dark-blue fields): bold label with ●, light-blue box; red edge while empty.
+(() => {
+  const cfg = document.getElementById('required-fields');
+  if (!cfg) return;
+  const REQ = JSON.parse(cfg.textContent);
+  const form = cfg.closest('form');
+  const mode = form?.querySelector('[name="mode"]');
+  if (!form || !mode) return;
+  const apply = () => {
+    const keys = REQ[mode.value] || REQ.FCL || [];
+    form.querySelectorAll('.field.req').forEach((f) => f.classList.remove('req', 'missing'));
+    for (const k of keys) {
+      const el = form.querySelector(`[name="${k}"]`);
+      const field = el?.closest('.field');
+      if (!field) continue;
+      field.classList.add('req');
+      field.classList.toggle('missing', !String(el.value || '').trim());
+    }
+  };
+  mode.addEventListener('change', apply);
+  form.addEventListener('input', (e) => { const f = e.target.closest('.field.req'); if (f) f.classList.toggle('missing', !String(e.target.value || '').trim()); });
+  form.addEventListener('change', (e) => { const f = e.target.closest('.field.req'); if (f) f.classList.toggle('missing', !String(e.target.value || '').trim()); });
+  apply();
+})();

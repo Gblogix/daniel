@@ -95,6 +95,20 @@ CREATE TABLE IF NOT EXISTS containers (
   cbm REAL
 );
 
+-- Master B/L (ocean MB/L or air MAWB): the carrier leg shared by its house files (OPUS OIM / AIM entry).
+CREATE TABLE IF NOT EXISTS masters (
+  id INTEGER PRIMARY KEY,
+  ref_no TEXT UNIQUE,
+  mode TEXT NOT NULL DEFAULT 'FCL',
+  mbl_no TEXT,
+  agent_id INTEGER REFERENCES companies(id),
+  carrier TEXT, scac TEXT, vessel TEXT, voyage TEXT, flight_no TEXT,
+  etd TEXT, eta TEXT, atd TEXT, ata TEXT,
+  pol TEXT, pod TEXT, place_of_delivery TEXT, service_term TEXT, notes TEXT,
+  created_at TEXT NOT NULL DEFAULT (datetime('now')),
+  updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
 CREATE TABLE IF NOT EXISTS cargo_items (
   id INTEGER PRIMARY KEY,
   shipment_id INTEGER NOT NULL REFERENCES shipments(id) ON DELETE CASCADE,
@@ -296,6 +310,7 @@ CREATE TABLE IF NOT EXISTS sessions (
 const MIGRATIONS = {
   shipments: {
     title: 'TEXT', // name of an "Other" (non-shipment) file
+    master_id: 'INTEGER', // house file → its master B/L (masters)
     bl_invoices: 'TEXT', // commercial invoice nos. the B/L names (UB005, EZVC_TGT_26-09…) — P/L expected for each
     scac: 'TEXT', direct_shipment: 'INTEGER NOT NULL DEFAULT 0', isf_no: 'TEXT', telex_release: 'INTEGER NOT NULL DEFAULT 0',
     firms_code: 'TEXT', entry_no: 'TEXT', css_no: 'TEXT', holds: 'TEXT', cargo_value: 'REAL', ci_invoice_no: 'TEXT',
@@ -347,7 +362,7 @@ const DEFAULT_SETTINGS = {
   // Next document numbers (continue from the current system; admin can change them)
   seq_OI: '11828', seq_AI: '10009', seq_OTH: '10582', seq_INV: '12215', seq_DCN: '11665',
   // GBL numbering (new files / invoices from Sep 2026): GBL-OI10001, GBL-INV10001, GBL-DN10001 …
-  num_prefix: 'GBL-', seq_G_OI: '10001', seq_G_AI: '10001', seq_G_OT: '10001', seq_G_INV: '10001', seq_G_DN: '10001', seq_G_CN: '10001',
+  num_prefix: 'GBL-', seq_G_OM: '10001', seq_G_AM: '10001', seq_G_OI: '10001', seq_G_AI: '10001', seq_G_OT: '10001', seq_G_INV: '10001', seq_G_DN: '10001', seq_G_CN: '10001',
   ar_terms_days: '25',
 };
 

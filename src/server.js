@@ -64,6 +64,7 @@ function createApp() {
   app.use(require('./routes/billing'));
   app.use(require('./routes/vendorbills'));
   app.use(require('./routes/followups'));
+  app.use(require('./routes/masters'));
 
   app.use((req, res) => res.status(404).render('error', { title: 'Not found', message: 'The page you are looking for does not exist.' }));
   // eslint-disable-next-line no-unused-vars
@@ -78,6 +79,8 @@ if (require.main === module) {
   if (config.sessionSecret === 'dev-only-change-me') console.warn('WARNING: set SESSION_SECRET before using this in production');
   bootstrap();
   const fresh = require('./reset').freshStartOnce();
+  const linked = require('./masters').backfill();
+  if (linked) console.log(`Masters: ${linked} file(s) grouped under their master B/L`);
   if (fresh) console.log(`Fresh start: removed ${fresh.shipments} test shipments, ${fresh.invoices} invoices, ${fresh.documents} files — new files come from email from now on`);
   createApp().listen(config.port, () => console.log(`GlobalBridge Logistics running at ${config.baseUrl}`));
   console.log(`Email: ${config.mailTransport}${config.graph.enabled && config.graph.intake ? ' · Outlook intake on' : ''}`);

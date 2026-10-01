@@ -2,6 +2,8 @@
 <div class="pagehead"><h1><%= title %></h1></div>
 <form method="post" action="/shipments">
   <input type="hidden" name="_csrf" value="<%= csrf %>">
+  <% if (locals.master) { %><input type="hidden" name="master_id" value="<%= master.id %>">
+  <div class="card small">Master <a href="/masters/<%= master.id %>" class="mono"><%= master.mbl_no || master.ref_no %></a> — carrier, vessel / voyage, ETD / ETA and POL / POD are filled from it. Enter the HB/L, customer and cargo.</div><% } %>
   <%- include('../partials/fields', { s }) %>
   <button class="btn"><%= s.mode === "OTHER" ? "Create file" : "Create shipment" %></button>
 </form>

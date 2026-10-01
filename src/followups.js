@@ -89,6 +89,9 @@ function shipmentItems(s, { now = new Date(), docs = new Set() } = {}) {
   if (s.delivery_date && d(s.delivery_date) < T) {
     add('pod', 'high', 'Delivery date passed — confirm POD', `Scheduled ${md(s.delivery_date)}; mark delivered when the POD arrives`, s.delivery_date, { label: 'Open file', href: `${file}#pickup` }, s.delivery_date);
   }
+  // OPUS-required fields still empty.
+  const missing = S.missingRequired(s).filter((l) => !/ETA|Arrival/.test(l));
+  if (missing.length && (s.mbl_no || s.hbl_no)) add('required', 'normal', `Required info missing: ${missing.join(', ')}`, 'Fill in from the B/L / AWB or ask the agent', null, { label: 'Open file', href: `${file}#pic` });
   // No ETA at all once the B/L is in: nobody can plan the A/N, customs or delivery.
   if (!s.eta && !s.ata && (s.mbl_no || s.hbl_no) && idx < S.STATUS_INDEX.ARRIVED) {
     add('eta_missing', etd != null && days(etd) <= 0 ? 'high' : 'normal', 'ETA unknown', 'Not on the documents and no tracking update yet — check the carrier site or ask the agent', null, { label: 'Open file', href: `${file}#pic` });

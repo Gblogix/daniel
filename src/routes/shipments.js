@@ -83,8 +83,15 @@ router.get('/history', auth.requireInternal, (req, res) => {
 });
 
 router.get('/shipments/new', auth.requirePerm('shipments_edit'), (req, res) => {
-  const mode = S.MODES[req.query.mode] ? req.query.mode : 'FCL';
-  res.render('shipments/form', { title: mode === 'OTHER' ? 'New other file' : 'New shipment', s: { mode, status: 'BOOKED', customs_status: 'PENDING', containers: [], items: [] }, ...partyLists() });
+  let mode = S.MODES[req.query.mode] ? req.query.mode : 'FCL';
+  const s = { mode, status: 'BOOKED', customs_status: 'PENDING', containers: [], items: [] };
+  // "+ Add house B/L" on a master: the carrier leg comes from the master.
+  const m = req.query.master ? require('../masters').get(Number(req.query.master)) : null;
+  if (m) {
+    mode = m.mode; Object.assign(s, { mode, master_id: m.id, agent_id: m.agent_id });
+    for (const k of require('../masters').SHARED) if (m[k]) s[k] = m[k];
+  }
+  res.render('shipments/form', { title: mode === 'OTHER' ? 'New other file' : m ? `New house B/L under ${m.mbl_no || m.ref_no}` : 'New shipment', s, master: m, ...partyLists() });
 });
 
 /** Non-accounting staff cannot set prices / invoice / paid fields. */
@@ -171,7 +178,8 @@ router.post('/shipments/:id', auth.requirePerm('shipments_edit'), async (req, re
   // New / changed B/L, or still no ETA: ask the tracking source now instead of waiting for the next round.
   const cur = store.db.get('SELECT eta, tracking_checked_at FROM shipments WHERE id = ?', id);
   if (changes.some((c) => c.field === 'mbl_no') || !cur?.eta || !cur?.tracking_checked_at) require('../tracking').refreshSoon(id, { userId: req.user.id });
-  flash(req, 'ok', `${changes.length ? `Saved (${changes.length} field${changes.length > 1 ? 's' : ''} changed)` : 'Saved'}${addedCustomer ? ` · ${addedCustomer} added to Parties as a new customer` : ''}`);
+  const miss = S.missingRequired(S.find(id, null));
+  flash(req, 'ok', `${changes.length ? `Saved (${changes.length} field${changes.length > 1 ? 's' : ''} changed)` : 'Saved'}${addedCustomer ? ` · ${addedCustomer} added to Parties as a new customer` : ''}${miss.length ? ` · still required: ${miss.join(', ')}` : ''}`);
   res.redirect(`/shipments/${id}`);
 });
 

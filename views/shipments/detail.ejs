@@ -3,7 +3,8 @@
   <div>
     <h1 style="margin-bottom:4px"><%= S.fileName(s) %> <span class="muted" style="font-weight:400">· <%= S.MODES[s.mode].icon %> <%= S.MODES[s.mode].label %></span></h1>
     <div class="muted small" style="margin-bottom:6px;display:flex;align-items:center;gap:6px;flex-wrap:wrap">Ref. <span class="ref-chip mono" title="System reference of this file"><%= s.ref_no %></span>
-      <button type="button" class="btn secondary small" data-copy="<%= s.ref_no %>" title="Copy">⧉</button><%= s.customer_name ? ` · ${s.customer_name}` : '' %></div>
+      <button type="button" class="btn secondary small" data-copy="<%= s.ref_no %>" title="Copy">⧉</button>
+      <% if (s.master_id) { %> · Master <a class="mono" href="/masters/<%= s.master_id %>"><%= s.mbl_no || 'MB/L' %></a><% } %><%= s.customer_name ? ` · ${s.customer_name}` : '' %></div>
     <div class="chips">
       <% if (s.closed_at) { %><span class="badge closed">Closed <%= fmtDate(s.closed_at) %> · in history</span><% } %>
       <% if (billing && !s.closed_at) { %><span class="badge bill-<%= billing.level %>"><%= billing.label %></span><% } %>

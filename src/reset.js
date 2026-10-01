@@ -19,7 +19,7 @@ function clearData({ db = store.db, keepUserId = null } = {}) {
   db.tx(() => {
     db.run('UPDATE mail_imports SET intake_id = NULL');
     for (const t of ['payment_allocations', 'payments', 'invoice_lines', 'invoices', 'smartsheet_files', 'smartsheet_rows',
-      'emails', 'tracking_events', 'events', 'followup_state', 'charges', 'cargo_items', 'containers', 'documents', 'intakes', 'shipments']) db.run(`DELETE FROM ${t}`);
+      'emails', 'tracking_events', 'events', 'followup_state', 'charges', 'cargo_items', 'containers', 'documents', 'intakes', 'shipments', 'masters']) db.run(`DELETE FROM ${t}`);
     const demo = db.all("SELECT id FROM users WHERE (email LIKE '%.example' OR name LIKE '%(demo)%') AND role <> 'admin' AND id IS NOT ?", keepUserId);
     counts.users = demo.length;
     for (const u of demo) db.run('DELETE FROM users WHERE id = ?', u.id);

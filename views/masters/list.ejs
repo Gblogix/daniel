@@ -1,0 +1,19 @@
+<%- include('../partials/head') %>
+<div class="pagehead"><h1>Master B/L list</h1>
+  <div class="actions">
+    <form method="get" action="/masters"><input name="q" value="<%= q %>" placeholder="MB/L, HB/L, vessel, ref…" style="width:220px"></form>
+    <% if (can('shipments_edit')) { %><a class="btn" href="/masters/new">＋ Ocean master</a><a class="btn secondary" href="/masters/new?mode=AIR">＋ Air master (MAWB)</a><% } %>
+  </div>
+</div>
+<div class="card flush"><div class="tablewrap"><table class="t">
+  <thead><tr><th>Master</th><th>Mode</th><th>Carrier · Vessel / Flight</th><th>POL → POD</th><th>ETD</th><th>ETA</th><th>Houses</th><th>Customers</th><th>Containers</th></tr></thead>
+  <tbody>
+  <% if (!rows.length) { %><tr><td colspan="9" class="muted">No masters yet — files with an MB/L are grouped here automatically, or create one.</td></tr><% } %>
+  <% rows.forEach((m) => { %><tr>
+    <td><a href="/masters/<%= m.id %>"><b class="mono"><%= m.mbl_no || '(no MB/L yet)' %></b></a><br><span class="mono small muted"><%= m.ref_no %></span></td>
+    <td><%= m.mode %></td><td class="small"><%= m.carrier || '' %> <%= m.mode === 'AIR' ? (m.flight_no || '') : [m.vessel, m.voyage].filter(Boolean).join(' ') %></td>
+    <td class="small"><%= m.pol || '?' %> → <%= m.pod || '?' %></td><td class="nowrap"><%= m.etd || '' %></td><td class="nowrap"><%= m.eta || '' %></td>
+    <td><b><%= m.houses %></b></td><td class="small"><%= m.customers || '' %></td><td class="mono small"><%= (m.ctns || '').split(',').filter(Boolean).join(', ') %></td></tr><% }) %>
+  </tbody>
+</table></div></div>
+<%- include('../partials/foot') %>

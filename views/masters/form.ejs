@@ -1,0 +1,63 @@
+<%- include('../partials/head') %>
+<% const e = (v) => String(v ?? '').replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;');
+   const air = m.mode === 'AIR'; const isNew = !m.id;
+   const inp = (k, label, type = 'text') => `<div class="field"><label for="m_${k}">${label}</label><input id="m_${k}" name="${k}" type="${type}" value="${e(m[k])}"></div>`; %>
+<div class="pagehead"><div>
+  <h1 style="margin-bottom:4px"><%= isNew ? title : `${air ? 'MAWB' : 'MB/L'} ${m.mbl_no || ''}` %> <span class="muted" style="font-weight:400">· Master</span></h1>
+  <% if (!isNew) { %><div class="muted small" style="display:flex;gap:6px;align-items:center">Ref. <span class="ref-chip mono"><%= m.ref_no %></span>
+    <button type="button" class="btn secondary small" data-copy="<%= m.ref_no %>">⧉</button> · <%= m.houses.length %> house B/L<%= m.houses.length === 1 ? '' : 's' %>
+    <% if (missing.length) { %> · <span class="late">required: <%= missing.join(', ') %></span><% } %></div><% } %>
+</div>
+  <div class="actions"><a class="btn secondary" href="/masters">Master list</a></div>
+</div>
+<form method="post" action="<%= isNew ? '/masters' : `/masters/${m.id}` %>">
+  <input type="hidden" name="_csrf" value="<%= csrf %>">
+  <script type="application/json" id="required-fields"><%- JSON.stringify(Object.fromEntries(['FCL', 'LCL', 'AIR'].map((x) => [x, S.MASTER_REQUIRED.map(([k]) => k)]))) %></script>
+  <div class="grid g3" style="align-items:start">
+    <fieldset class="fieldset"><legend>Master B/L</legend>
+      <div class="field"><label for="m_mode">Ship mode</label><select id="m_mode" name="mode"><% [['FCL', 'Ocean FCL'], ['LCL', 'Ocean LCL'], ['AIR', 'Air']].forEach(([v, l]) => { %><option value="<%= v %>" <%= m.mode === v ? 'selected' : '' %>><%= l %></option><% }) %></select></div>
+      <%- inp('mbl_no', air ? 'MAWB No.' : 'MB/L No.') %>
+      <div class="field"><label for="m_agent">Overseas agent</label><select id="m_agent" name="agent_id"><option value="">—</option><% agents.forEach((a) => { %><option value="<%= a.id %>" <%= m.agent_id === a.id ? 'selected' : '' %>><%= a.name %></option><% }) %></select></div>
+      <div class="field"><label>Notes</label><textarea name="notes" rows="3"><%= m.notes || '' %></textarea></div>
+    </fieldset>
+    <fieldset class="fieldset"><legend><%= air ? 'Flight' : 'Vessel' %></legend>
+      <div class="grid g2" style="gap:8px">
+        <%- inp('carrier', air ? 'Airline' : 'Carrier') %><%- inp('scac', air ? 'Airline prefix' : 'SCAC') %>
+        <% if (air) { %><%- inp('flight_no', 'Flight No.') %><% } else { %><%- inp('vessel', 'Vessel') %><%- inp('voyage', 'Voyage') %><% } %>
+        <%- inp('etd', 'ETD', 'date') %><%- inp('eta', 'ETA', 'date') %>
+        <%- inp('atd', 'ATD (actual)', 'date') %><%- inp('ata', 'ATA (actual)', 'date') %>
+      </div>
+    </fieldset>
+    <fieldset class="fieldset"><legend>Route</legend>
+      <%- inp('pol', air ? 'Departure' : 'POL') %><%- inp('pod', air ? 'Destination' : 'POD') %><%- inp('place_of_delivery', 'DEL') %>
+      <% if (!air) { %><div class="field"><label>Service term</label><select name="service_term"><option value="">—</option><% ['CY/CY', 'CFS/CFS', 'CY/CFS', 'CFS/CY', 'CY/DOOR', 'CFS/DOOR'].forEach((o) => { %><option <%= m.service_term === o ? 'selected' : '' %>><%= o %></option><% }) %></select></div><% } %>
+    </fieldset>
+  </div>
+  <% if (can('shipments_edit')) { %><div class="actions"><button class="btn"><%= isNew ? 'Create master' : 'Save master' %></button>
+    <% if (!isNew) { %><span class="muted small">Carrier, vessel / voyage, ETD / ETA and POL / POD are copied to every house B/L below.</span><% } %></div><% } %>
+</form>
+
+<% if (!isNew) { %>
+<div class="card flush" style="margin-top:14px">
+  <div style="display:flex;justify-content:space-between;align-items:center;padding:12px 14px 0">
+    <h2 style="margin:0">House B/L list (<%= m.houses.length %>)</h2>
+    <% if (can('shipments_edit')) { %><a class="btn small" href="/shipments/new?master=<%= m.id %>">＋ Add house B/L</a><% } %>
+  </div>
+  <div class="tablewrap"><table class="t">
+    <thead><tr><th>File</th><th><%= air ? 'HAWB' : 'HB/L' %></th><th>Customer</th><th>Shipper</th><th>Consignee</th><th class="right">Pkgs</th><th class="right">KG</th><th class="right">CBM</th><th>Status</th><th>Required</th></tr></thead>
+    <tbody>
+    <% if (!m.houses.length) { %><tr><td colspan="10" class="muted">No house B/L yet — add one.</td></tr><% } %>
+    <% m.houses.forEach((h) => { const miss = S.missingRequired(h); %><tr>
+      <td><a href="/shipments/<%= h.id %>"><b><%= S.fileName(h) %></b></a><br><span class="mono small muted"><%= h.ref_no %></span></td>
+      <td class="mono"><%= h.hbl_no || '—' %></td><td><%= h.customer_name || '—' %></td><td class="small"><%= h.shipper_name || '' %></td><td class="small"><%= h.consignee_name || '' %></td>
+      <td class="right"><%= h.packages ?? '' %></td><td class="right"><%= h.weight_kg != null ? fmtNum(h.weight_kg, 1) : '' %></td><td class="right"><%= h.cbm != null ? fmtNum(h.cbm, 3) : '' %></td>
+      <td><span class="badge <%= h.status %>"><%= S.statusLabel(h.status) %></span></td>
+      <td class="small"><%= miss.length ? miss.join(', ') : '✔' %></td></tr><% }) %>
+    </tbody>
+    <% if (m.houses.length > 1) { const sum = (k) => m.houses.reduce((a, h) => a + (Number(h[k]) || 0), 0); %>
+    <tfoot><tr><td colspan="5" class="right"><b>Total</b></td><td class="right"><b><%= sum('packages') || '' %></b></td><td class="right"><b><%= fmtNum(sum('weight_kg'), 1) %></b></td><td class="right"><b><%= fmtNum(sum('cbm'), 3) %></b></td><td colspan="2"></td></tr></tfoot><% } %>
+  </table></div>
+  <% if (m.containers.length) { %><p class="small" style="padding:0 14px 12px">Containers: <% m.containers.forEach((c) => { %><span class="mono badge"><%= c.container_no %><%= c.size_type ? ` ${c.size_type}` : '' %></span> <% }) %></p><% } %>
+</div>
+<% } %>
+<%- include('../partials/foot') %>

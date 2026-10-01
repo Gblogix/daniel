@@ -516,3 +516,8 @@ dialog.dup-dialog h3 { margin: 0 0 8px; color: #991b1b; }
 .lookup-item.on, .lookup-item:hover { background: #eef4ff; }
 .autofilled { box-shadow: 0 0 0 3px rgba(34,197,94,.35) !important; transition: box-shadow .3s; }
 .addr-offer { margin: -6px 0 8px; color: #92400e; }
+/* Required fields (OPUS-style) */
+.field.req > label { font-weight: 800; color: #0b3d91; }
+.field.req > label::after { content: ' ●'; color: #2563eb; font-size: 9px; vertical-align: middle; }
+.field.req input, .field.req select, .field.req textarea { background: #e8f1ff; border-color: #9ec1ff; }
+.field.req.missing input, .field.req.missing select { border-color: #f87171; box-shadow: inset 3px 0 0 #f87171; }
