@@ -106,6 +106,10 @@ router.get('/shipments', auth.requireLogin, (req, res) => {
     rows = rows.filter((s) => (S.billingState(s)?.code || '') === bill || (bill === 'unpaid' && ['unsent', 'awaiting', 'overdue'].includes(S.billingState(s)?.code))
       || (['no_cost', 'to_book'].includes(bill) && S.costState(s)?.code === bill));
   }
+  const pickupCount = internal ? require('./worklists').containerRows(req.user, { tab: 'pickup', type: 'fcl' }).tabs.pickup : 0;
+  res.locals.pickupCount = pickupCount;
+  res.locals.journey = (s) => require('../stages').stages(s, s.containers?.[0] || {});
+  res.locals.staffUsers = internal ? store.db.all("SELECT id, name FROM users WHERE role IN ('admin', 'staff') AND active = 1 ORDER BY name") : [];
   res.render('shipments/list', { title: { OCEAN: 'House B/L list · Ocean', AIR: 'HAWB list · Air', TRUCK: 'Truck files', OTHER: 'Other files' }[mode] || 'Shipments', rows, q, status, mode, stage, STAGES, bill, history: false, mine, sort });
 });
 

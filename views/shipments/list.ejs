@@ -26,17 +26,46 @@
     <option value="desc" <%= (sort || (history ? 'desc' : 'asc')) === 'desc' ? 'selected' : '' %>>ETA ↓ latest first</option></select>
   <button class="btn secondary">Filter</button>
 </form>
+<% const work = isInternal && !history && can('shipments_edit'); const LAB = { urgent: 'Urgent', important: 'Important', traffic: 'Traffic', document: 'Document' }; %>
+<% if (isInternal && !history) { %><div class="list-summary">
+  <a class="sum-chip" href="/containers?tab=pickup">📦 <b><%= locals.pickupCount || 0 %></b> container(s) to pick up</a>
+  <span class="muted small"><%= rows.length %> result(s)<%= mode ? ` · ${mode}` : '' %><%= q ? ` · "${q}"` : '' %><%= status ? ` · ${S.statusLabel(status)}` : '' %></span>
+  <button type="button" class="btn secondary small" data-colcfg="files" style="margin-left:auto">⚙ Columns</button>
+</div><% } %>
+<form method="post" action="/bulk/shipments" data-bulk>
+<input type="hidden" name="_csrf" value="<%= csrf %>"><input type="hidden" name="back" value="<%= path %><%= locals.query ? '' : '' %>">
+<% if (work && rows.length) { %><div class="bulkbar">
+  <span class="small muted">Checked (<span data-bulk-count>0</span>):</span>
+  <select name="owner_id" aria-label="New OP"><option value="">Change OP to…</option><% (locals.staffUsers || []).forEach((u) => { %><option value="<%= u.id %>"><%= u.name %></option><% }) %></select>
+  <button class="btn secondary small" name="action" value="owner" data-bulk-btn disabled>Change OP</button>
+  <select name="color_label" aria-label="Label"><option value="">Label…</option><% Object.entries(LAB).forEach(([k, v]) => { %><option value="<%= k %>"><%= v %></option><% }) %></select>
+  <button class="btn secondary small" name="action" value="label" data-bulk-btn disabled>Set label</button>
+  <% if (can('send_notices')) { %><button class="btn secondary small" name="action" value="send-an" data-bulk-btn disabled data-confirm="Send the A/N and documents to the customs broker of each checked file?">✉ Arrival notice</button><% } %>
+  <input name="reason" placeholder="Block reason" style="width:140px">
+  <button class="btn secondary small" name="action" value="block" data-bulk-btn disabled>🔒 Block</button>
+  <button class="btn secondary small" name="action" value="unblock" data-bulk-btn disabled>🔓 Unblock</button>
+  <% if (user.role === 'admin') { %><a class="btn secondary small" href="/insights/negative">Profit report</a><% } %>
+</div><% } %>
 <div class="tablewrap">
-<table class="t">
+<table class="t worklist" data-cols="files" data-csrf="<%= csrf %>">
   <thead><tr>
-    <th>File (Shipper · Container)</th><th>Mode</th><th>Customer</th><th>MBL / HBL</th><th>ETD</th><th>ETA</th>
+    <% if (work) { %><th style="width:26px"><input type="checkbox" data-bulk-all title="Select all"></th><th title="Flag">⚑</th><% } %>
+    <th>File (Shipper · Container)</th><% if (isInternal && !history) { %><th>Internal message</th><th>Label</th><th>Journey</th><th>Hold</th><% } %><th>Mode</th><th>Customer</th><th>MBL / HBL</th><th>ETD</th><th>ETA</th>
     <th>Status</th><th>Customs</th><th>A/N</th><th>D/O</th><% if (canAccounting) { %><th>Billing</th><% if (history) { %><th class="right">Profit</th><% } %><% } %><th><%= history ? 'Closed' : 'Delivery' %></th>
   </tr></thead>
   <tbody>
-  <% if (!rows.length) { %><tr><td colspan="14" class="muted">No shipments found.</td></tr><% } %>
+  <% if (!rows.length) { %><tr><td colspan="20" class="muted">No shipments found.</td></tr><% } %>
   <% rows.forEach((s) => { const b = canAccounting ? S.billingState(s) : null; %>
-    <tr>
-      <td><a href="/shipments/<%= s.id %>"><b><%= S.fileName(s) %></b></a><br><span class="muted small mono"><%= s.ref_no %></span><% if (s.owner_name) { %> <span class="muted small">· <%= s.owner_name %></span><% } %></td>
+    <tr class="<%= s.blocked_at ? 'row-blocked' : '' %>">
+      <% if (work) { %><td><input type="checkbox" name="ids" value="<%= s.id %>" data-bulk-item></td>
+        <td><input type="checkbox" class="flagbox" data-quick="/quick/shipments/<%= s.id %>" data-field="flagged" <%= s.flagged ? 'checked' : '' %> title="Flag" aria-label="Flag"></td><% } %>
+      <td><a href="/shipments/<%= s.id %>"><b><%= S.fileName(s) %></b></a><% if (s.blocked_at) { %> <span title="Blocked<%= s.block_reason ? `: ${s.block_reason}` : '' %>">🔒</span><% } %><br><span class="muted small mono"><%= s.ref_no %></span><% if (s.owner_name) { %> <span class="muted small">· <%= s.owner_name %></span><% } %></td>
+      <% if (isInternal && !history) { const j = locals.journey ? journey(s) : null; %>
+        <td><% if (work) { %><input class="note" data-quick="/quick/shipments/<%= s.id %>" data-field="internal_note" value="<%= s.internal_note || '' %>" placeholder="Add note…"><% } else { %><span class="small"><%= s.internal_note || '' %></span><% } %></td>
+        <td><% if (work) { %><select class="lab lab-<%= s.color_label || 'none' %>" data-quick="/quick/shipments/<%= s.id %>" data-field="color_label" aria-label="Label"><option value="">—</option><% Object.entries(LAB).forEach(([k, v]) => { %><option value="<%= k %>" <%= s.color_label === k ? 'selected' : '' %>>● <%= v %></option><% }) %></select><% } else if (s.color_label) { %><span class="lab-<%= s.color_label %> small">● <%= LAB[s.color_label] %></span><% } %></td>
+        <td class="small nowrap"><% if (j) { %><%- include('../partials/stagepop', { st: j }) %><% } %></td>
+        <td><%= s.holds || s.blocked_at ? '✔' : '' %></td>
+      <% } %>
       <td class="nowrap"><%= S.MODES[s.mode].icon %> <%= s.mode %></td>
       <td><%= s.customer_name || '—' %></td>
       <td class="mono small"><%= s.mbl_no || '—' %><br><%= s.hbl_no || '—' %></td>
@@ -54,4 +83,5 @@
   </tbody>
 </table>
 </div>
+</form>
 <%- include('../partials/foot') %>

@@ -24,6 +24,7 @@ const MENU = [
     ] },
     { head: 'Tracking', items: [
       { id: 'track', label: 'Tracking board', href: '/track' },
+      { id: 'containers', label: 'My containers (12 stages)', href: '/containers' },
       { id: 'track-delivered', label: 'Delivered cards', href: '/track?filter=delivered' },
       { id: 'lfd', label: 'Arrivals / LFD watch', href: '/dashboard#lfd' },
     ] },
@@ -88,6 +89,7 @@ const RAIL = [
       { label: 'My shipments', href: '/shipments?mode=OCEAN&mine=1' },
       { label: 'Master B/L list', href: '/masters?mode=OCEAN' },
       { label: 'House B/L list', href: '/shipments?mode=OCEAN' },
+      { label: 'My containers (12 stages)', href: '/containers' },
       { label: 'Tracking board', href: '/track' },
       { label: 'Arrivals / LFD watch', href: '/dashboard#lfd' },
     ] },

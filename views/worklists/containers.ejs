@@ -1,0 +1,38 @@
+<%- include('../partials/head') %>
+<% const qs = (o) => new URLSearchParams({ ...q, type, ...o }).toString(); const stale = (t) => !t || (Date.now() - Date.parse(t.replace(' ', 'T') + 'Z')) / 3600000 > 24; %>
+<div class="pagehead"><h1>My containers</h1>
+  <div class="actions"><button type="button" class="btn secondary small" data-colcfg="containers">⚙ Columns</button><a class="btn secondary small" href="/containers.xlsx?<%= qs({}) %>">⬇ Excel</a></div></div>
+<form class="filters" method="get">
+  <input type="hidden" name="type" value="<%= type %>"><input type="hidden" name="tab" value="<%= q.tab %>">
+  <span class="small muted">ETA</span><input type="date" name="from" value="<%= q.from %>"> – <input type="date" name="to" value="<%= q.to %>">
+  <select name="op" onchange="this.form.submit()"><option value="">All OP</option><% staff.forEach((u) => { %><option value="<%= u.id %>" <%= String(q.op) === String(u.id) ? 'selected' : '' %>><%= u.name %></option><% }) %></select>
+  <select name="stage" onchange="this.form.submit()"><option value="">All stages</option><% ['Gate in', 'ETD', 'ETA', 'ATA', 'Unloaded from vessel', 'LFD', 'Appointment', 'Gate out', 'ETA door', 'ATA door', 'Empty returned', 'Picked up'].forEach((x) => { %><option <%= q.stage === x ? 'selected' : '' %>><%= x %></option><% }) %></select>
+  <button class="btn secondary">Filter</button>
+</form>
+<div class="filters">
+  <div class="seg"><a class="<%= type === 'fcl' ? 'on' : '' %>" href="?<%= qs({ type: 'fcl' }) %>">FCL <span class="count"><%= counts.fcl %></span></a><a class="<%= type === 'others' ? 'on' : '' %>" href="?<%= qs({ type: 'others' }) %>">Others (LCL · Air) <span class="count"><%= counts.others %></span></a></div>
+  <div class="seg"><a class="<%= q.tab === 'all' ? 'on' : '' %>" href="?<%= qs({ tab: 'all' }) %>">All</a><a class="<%= q.tab === 'overdue' ? 'on' : '' %>" href="?<%= qs({ tab: 'overdue' }) %>">Overdue containers <span class="count"><%= tabs.overdue %></span></a><a class="<%= q.tab === 'pickup' ? 'on' : '' %>" href="?<%= qs({ tab: 'pickup' }) %>">Containers to pick up <span class="count"><%= tabs.pickup %></span></a></div>
+</div>
+<div class="tablewrap"><table class="t worklist" data-cols="containers" data-csrf="<%= csrf %>">
+  <thead><tr><th>File no.</th><th>Label</th><th>Remarks</th><th><%= type === 'fcl' ? 'Container' : 'HB/L · HAWB' %></th><th>Last tracking update</th><th>Internal remarks</th><th>Customer</th><th>Stage</th><th>MB/L · MAWB</th><th>ETA</th><th>LFD</th><th>Next</th></tr></thead>
+  <tbody>
+  <% if (!list.length) { %><tr><td colspan="12" class="muted">Nothing here.</td></tr><% } %>
+  <% list.forEach(({ s, c, st, fl }) => { const url = c ? `/quick/containers/${c.id}` : `/quick/shipments/${s.id}`; const lab = c ? c.color_label : s.color_label; const lfd = c?.pickup_lfd || s.last_free_day; %>
+    <tr class="<%= fl.overdue ? 'row-over' : '' %>">
+      <td class="nowrap"><a href="/shipments/<%= s.id %>"><b><%= s.ref_no %></b></a></td>
+      <td><select class="lab lab-<%= lab || 'none' %>" data-quick="<%= url %>" data-field="color_label" aria-label="Label"><option value="">—</option><% Object.entries(LABELS).forEach(([k, v]) => { %><option value="<%= k %>" <%= lab === k ? 'selected' : '' %>>● <%= v %></option><% }) %></select></td>
+      <td><% if (c) { %><input class="note" data-quick="<%= url %>" data-field="remark" value="<%= c.remark || '' %>" placeholder="Take a note…"><% } %></td>
+      <td class="mono"><%= c ? c.container_no : (s.hbl_no || '—') %><%= c && c.size_type ? ` ${c.size_type}` : '' %></td>
+      <td class="nowrap small"><%= s.tracking_checked_at ? fmtDateTime(s.tracking_checked_at) : '—' %><% if (stale(s.tracking_checked_at)) { %> <span class="warn-dot" title="No tracking update in the last 24 h">!</span><% } %></td>
+      <td><input class="note" data-quick="<%= url %>" data-field="internal_note" value="<%= (c ? c.internal_note : s.internal_note) || '' %>" placeholder="Take a note…"></td>
+      <td class="small"><%= s.customer_name || '—' %></td>
+      <td><%- include('../partials/stagepop', { st }) %></td>
+      <td class="mono small"><%= s.mbl_no || '—' %></td>
+      <td class="nowrap"><%= s.ata || s.eta || '' %></td>
+      <td class="nowrap <%= fl.overdue ? 'late' : '' %>"><%= lfd || '' %></td>
+      <td class="small"><%= st.next || '' %></td>
+    </tr>
+  <% }) %>
+  </tbody>
+</table></div>
+<%- include('../partials/foot') %>

@@ -1,0 +1,4 @@
+<%# 12-stage pop-over. locals: st %>
+<details class="stagepop"><summary><span class="sp-cur"><%= st.current %></span> <span class="muted small"><%= st.n %>/<%= st.total %></span></summary>
+  <ol class="sp-list"><% st.list.forEach((x, i) => { %><li class="<%= x.done ? 'done' : '' %>"><span class="sp-n"><%= i + 1 %></span><%= x.label %><% if (x.date) { %> <span class="muted small"><%= String(x.date).slice(0, 10) %></span><% } %></li><% }) %></ol>
+</details>

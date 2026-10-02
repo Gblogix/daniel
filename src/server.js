@@ -63,6 +63,7 @@ function createApp() {
   app.use(require('./routes/admin'));
   app.use(require('./routes/billing'));
   app.use(require('./routes/quickbooks'));
+  app.use(require('./routes/worklists'));
   app.use(require('./routes/vendorbills'));
   app.use(require('./routes/followups'));
   app.use(require('./routes/masters'));

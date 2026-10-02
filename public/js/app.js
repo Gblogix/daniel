@@ -504,3 +504,44 @@ document.querySelectorAll('.type-picks').forEach((box) => {
   });
   sync();
 });
+
+// Work lists: inline notes / labels / flags save as you type (no Save button).
+document.querySelectorAll('[data-quick]').forEach((el) => {
+  const table = el.closest('[data-csrf]');
+  const save = async () => {
+    const body = { [el.dataset.field]: el.type === 'checkbox' ? el.checked : el.value };
+    el.classList.remove('saved', 'failed');
+    try {
+      const r = await fetch(el.dataset.quick, { method: 'POST', headers: { 'content-type': 'application/json', 'x-csrf-token': table?.dataset.csrf || '' }, body: JSON.stringify(body) });
+      el.classList.add(r.ok ? 'saved' : 'failed');
+    } catch { el.classList.add('failed'); }
+    if (el.tagName === 'SELECT') el.className = el.className.replace(/lab-\w+/, `lab-${el.value || 'none'}`);
+  };
+  el.addEventListener('change', save);
+  if (el.tagName === 'INPUT' && el.type !== 'checkbox') el.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); el.blur(); } });
+});
+
+// Column settings: tick which columns a list shows (kept per list in this browser).
+document.querySelectorAll('[data-colcfg]').forEach((btn) => {
+  const key = `cols:${btn.dataset.colcfg}`;
+  const table = document.querySelector(`[data-cols="${btn.dataset.colcfg}"]`);
+  if (!table) return;
+  const heads = [...table.querySelectorAll('thead th')];
+  let hidden = [];
+  try { hidden = JSON.parse(localStorage.getItem(key) || '[]'); } catch { hidden = []; }
+  const apply = () => heads.forEach((th, i) => {
+    const off = hidden.includes(th.textContent.trim());
+    table.querySelectorAll(`tr > :nth-child(${i + 1})`).forEach((cell) => { cell.style.display = off ? 'none' : ''; });
+  });
+  apply();
+  const panel = document.createElement('div'); panel.className = 'colcfg'; panel.hidden = true;
+  heads.forEach((th) => {
+    const name = th.textContent.trim(); if (!name) return;
+    const l = document.createElement('label'); l.className = 'check small';
+    const c = document.createElement('input'); c.type = 'checkbox'; c.checked = !hidden.includes(name);
+    c.onchange = () => { hidden = c.checked ? hidden.filter((h) => h !== name) : [...hidden, name]; try { localStorage.setItem(key, JSON.stringify(hidden)); } catch { /* private mode */ } apply(); };
+    l.append(c, ` ${name}`); panel.append(l);
+  });
+  btn.after(panel);
+  btn.addEventListener('click', () => { panel.hidden = !panel.hidden; });
+});

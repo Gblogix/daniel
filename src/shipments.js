@@ -268,11 +268,12 @@ function saveLines(id, body, { db = store.db } = {}) {
         // Keep tracking data (discharge / LFD / holds) that came from the provider for containers that stay.
         const prev = kept.get(no) || {};
         db.run(`INSERT INTO containers (shipment_id, container_no, seal_no, size_type, packages, weight_kg, cbm, pickup_lfd,
-            available, holds, discharged_at, full_out_at, empty_returned_at, current_status, location, pickup_no) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+            available, holds, discharged_at, full_out_at, empty_returned_at, current_status, location, pickup_no, remark, internal_note, color_label) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
           id, no, arr(body.ctn_seal)[i] || null, arr(body.ctn_size)[i] || null,
           n(arr(body.ctn_pkgs)[i]), n(arr(body.ctn_kg)[i]), n(arr(body.ctn_cbm)[i]), arr(body.ctn_lfd)[i] || prev.pickup_lfd || null,
           prev.available ?? null, prev.holds ?? null, prev.discharged_at ?? null, prev.full_out_at ?? null,
-          prev.empty_returned_at ?? null, prev.current_status ?? null, prev.location ?? null, arr(body.ctn_pickup)[i] || prev.pickup_no || null);
+          prev.empty_returned_at ?? null, prev.current_status ?? null, prev.location ?? null, arr(body.ctn_pickup)[i] || prev.pickup_no || null,
+          prev.remark ?? null, prev.internal_note ?? null, prev.color_label ?? null);
       });
     });
   }

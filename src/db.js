@@ -321,6 +321,7 @@ CREATE TABLE IF NOT EXISTS sessions (
 const MIGRATIONS = {
   shipments: {
     title: 'TEXT', // name of an "Other" (non-shipment) file
+    internal_note: 'TEXT', color_label: 'TEXT', flagged: 'INTEGER NOT NULL DEFAULT 0', // list work screen
     bill_to_id: 'INTEGER', sales_id: 'INTEGER', // invoice party when not the customer; sales rep
     blocked_at: 'TEXT', blocked_by: 'INTEGER', block_reason: 'TEXT', // file locked (Tools › Block)
     profit_remark: 'TEXT', profit_ignore: 'INTEGER NOT NULL DEFAULT 0', // dashboard: negative-profit review
@@ -347,6 +348,7 @@ const MIGRATIONS = {
   containers: {
     pickup_lfd: 'TEXT', available: 'INTEGER', holds: 'TEXT', discharged_at: 'TEXT', full_out_at: 'TEXT',
     empty_returned_at: 'TEXT', current_status: 'TEXT', location: 'TEXT', pickup_no: 'TEXT',
+    remark: 'TEXT', internal_note: 'TEXT', color_label: 'TEXT', // My Containers: notes and colour label
   },
   cargo_items: { unit_price: 'REAL', amount: 'REAL', source: 'TEXT', invoice_no: 'TEXT', buyer: 'TEXT' }, // buyer = final buyer (Target, Nordstrom…)
   companies: { lost_ignored: 'INTEGER NOT NULL DEFAULT 0', types: 'TEXT', qbo_customer_id: 'TEXT', qbo_vendor_id: 'TEXT', billing_emails: 'TEXT', terms_days: 'INTEGER', short_name: 'TEXT', default_pic_id: 'INTEGER', report_frequency: 'TEXT', report_emails: 'TEXT', report_last: 'TEXT' },
