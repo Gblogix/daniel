@@ -2,9 +2,15 @@
 <% const T = locals.tools || {}; const editOk = can('shipments_edit'); %>
 <% if (s.blocked_at) { %><div class="blockbar" role="alert"><span class="blockicon">🔒</span><div><b>On hold — file blocked</b><%= s.block_reason ? `: ${s.block_reason}` : '' %>
   <div class="small">by <%= T.blockedBy || 'staff' %> on <%= fmtDateTime(s.blocked_at) %> UTC · nobody can change the file until it is unblocked (Tools › Unblock)</div></div></div><% } %>
+<% const cr = T.credit; if (cr && cr.hold) { %><div class="blockbar <%= cr.released ? 'released' : '' %>" role="alert"><span class="blockicon"><%= cr.released ? '⚠' : '⛔' %></span><div>
+  <b><%= cr.released ? 'Credit hold — released for this file' : 'On hold — credit' %></b>: <%= cr.party %> · <%= cr.reason %>
+  <div class="small"><%= cr.released ? 'An admin allowed the D/O for this file.' : 'D/O cannot be sent until the account is paid down or an admin releases this file.' %><% if (canAccounting) { %> Open A/R $<%= fmtNum(cr.open, 2) %><%= cr.limit ? ` / limit $${fmtNum(cr.limit, 0)}` : '' %><%= cr.overdue ? ` · past due $${fmtNum(cr.overdue, 2)}` : '' %>.<% } %></div></div>
+  <% if (user.role === 'admin') { %><form method="post" action="/shipments/<%= s.id %>/credit-release" style="margin-left:auto"><input type="hidden" name="_csrf" value="<%= csrf %>"><input type="hidden" name="on" value="<%= cr.released ? '0' : '1' %>">
+    <button class="btn small secondary" <%= cr.released ? '' : 'data-confirm="Release this file despite the credit hold?"' %>><%= cr.released ? 'Withdraw release' : 'Release this file' %></button></form><% } %></div><% } %>
 <div class="filebar">
   <span class="fb-no mono"><%= S.isMisc(s) ? s.ref_no : `${s.mode === 'AIR' ? 'HAWB' : 'HB/L'} ${s.hbl_no || '—'}` %></span>
   <span class="fb-item">👥 CUSTOMER: <% if (s.customer_id) { %><a href="/companies/<%= s.customer_id %>" title="Open the party"><%= s.customer_name %></a><% } else { %><span class="muted">not set</span><% } %></span>
+  <% if (cr && cr.over) { %><span class="fb-badge overdue" title="Open A/R above the credit limit">Over credit</span><% } %><% if (cr && cr.manual) { %><span class="fb-badge overdue" title="<%= cr.note || '' %>">Credit hold</span><% } %>
   <% (T.badges || []).forEach((b) => { %><span class="fb-badge <%= b.cls %>" title="<%= b.title %>"><%= b.label %><%= b.amount && canAccounting ? ` $${fmtNum(b.amount, 2)}` : '' %></span><% }) %>
   <% if (s.bill_to_id && s.bill_to_id !== s.customer_id) { %><span class="fb-item">BILL TO: <%= s.bill_to_name %></span><% } %>
   <span class="fb-item">SALES: <%= s.sales_name || '—' %></span>
@@ -60,6 +66,11 @@
   <h2 style="margin-bottom:4px"><%= nextActions.length ? `Next actions (${nextActions.length})` : '✔ Nothing pending on this file' %>
     <span class="muted small" style="font-weight:400"> · PIC: <a href="#pic"><%= s.owner_name || 'not assigned' %></a></span></h2>
   <% nextActions.forEach((i) => { %><%- include('../partials/fu-item', { i, back: `/shipments/${s.id}`, showFile: false }) %><% }) %>
+  <details class="addtask"><summary class="small">＋ Add a task for this file</summary>
+    <form method="post" action="/tasks" class="taskform"><input type="hidden" name="_csrf" value="<%= csrf %>"><input type="hidden" name="shipment_id" value="<%= s.id %>"><input type="hidden" name="back" value="/shipments/<%= s.id %>">
+      <input name="title" required placeholder="e.g. Customer will pay Friday — release D/O then" maxlength="200">
+      <select name="assignee_id" aria-label="Assignee"><% (locals.staffUsers || []).forEach((u) => { %><option value="<%= u.id %>" <%= u.id === (s.owner_id || user.id) ? 'selected' : '' %>><%= u.name %></option><% }) %></select>
+      <input type="date" name="due_date" aria-label="Due date"><button class="btn small">Add task</button></form></details>
 </div>
 
 <% const misc = S.isMisc(s); if (misc) { %><div class="card small muted">📁 <b>Other file</b> — holds invoices that belong to no shipment. Add A/R, A/P, D/N and C/N below; the file shows their profit and appears in P/L, SOA and aging like any file. Close it from the file list when you no longer use it.</div><% } else { %>

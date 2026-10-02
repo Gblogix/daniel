@@ -14,6 +14,19 @@ const iso = (ms) => new Date(ms).toISOString().slice(0, 10);
 const d = (s) => (s ? Date.parse(`${String(s).slice(0, 10)}T00:00:00Z`) : null);
 const md = (s) => (s ? `${Number(s.slice(5, 7))}/${Number(s.slice(8, 10))}` : '');
 const SEV_RANK = { critical: 0, high: 1, normal: 2 };
+// To-do groups (GoFreight "group by task"): follow-up code → task.
+const TASKS = {
+  lfd: 'LFD', empty: 'LFD', an: 'Arrival Notice', do: 'Cargo Release', credit: 'Cargo Release', customs: 'Customs Clearance', hold: 'Customs Clearance', isf: 'ISF',
+  docs: 'Pre-Alert', plmissing: 'Pre-Alert', required: 'Pre-Alert', eta_missing: 'Pre-Alert', 'g:intakes': 'Pre-Alert',
+  delivery_plan: 'Delivery', custreq: 'Delivery', pod: 'Delivery', eta_past: 'Tracking', tracking: 'Tracking', pic: 'Assign PIC',
+  not_invoiced: 'Create Invoice', review: 'Invoice', send: 'Invoice', overdue: 'Invoice', no_cost: 'A/P', pay: 'A/P', 'g:vinv': 'A/P', 'g:failed': 'Email', task: 'Task',
+};
+const TASK_ORDER = ['Task', 'LFD', 'Cargo Release', 'Arrival Notice', 'Customs Clearance', 'ISF', 'Pre-Alert', 'Delivery', 'Tracking', 'Create Invoice', 'Invoice', 'A/P', 'Assign PIC', 'Email'];
+function taskOf(key) {
+  if (key.startsWith('g:')) return TASKS[key] || 'Other';
+  const code = key.split(':')[1];
+  return TASKS[code] || 'Other';
+}
 
 function todayMs(now) { return Date.UTC(now.getFullYear(), now.getMonth(), now.getDate()); }
 
@@ -76,6 +89,11 @@ function shipmentItems(s, { now = new Date(), docs = new Set() } = {}) {
   } else if (arrived && s.customs_status !== 'RELEASED') {
     const since = d(s.ata) || eta || T;
     add('customs', days(since) <= -2 ? 'critical' : 'high', 'Customs not released', `Arrived ${md(iso(since))} — chase ${s.broker_name || 'the broker'} for 1C`, iso(since + DAY), { label: 'Open file', href: file });
+  }
+  // Credit hold on the bill-to party: no D/O until it is paid down or an admin releases this file.
+  if (!s.do_sent_at && s.status !== 'DELIVERED' && (s.bill_to_id || s.customer_id)) {
+    const cr = require('./credit').forShipment(s);
+    if (cr?.blocksRelease) add('credit', 'critical', `Credit hold — ${cr.party}`, `D/O blocked: ${cr.reason}. Collect payment, or an admin releases this file.`, null, { label: 'Open file', href: file });
   }
   if (s.customs_status === 'RELEASED' && !s.do_sent_at) {
     add('do', 'high', 'D/O not sent', `Released — send the delivery order to ${s.trucker_name || 'the trucker'}`, null,
@@ -150,7 +168,7 @@ function globalItems({ db = store.db } = {}) {
  * All open follow-ups visible to `user`, snoozed / done ones removed, sorted by severity then due date.
  * mine: only files where the user is PIC (plus unassigned and global items for admins).
  */
-function forUser(user, { db = store.db, now = new Date(), mine = false, area = '', shipmentId = null, includeHidden = false } = {}) {
+function forUser(user, { db = store.db, now = new Date(), mine = false, owner = null, area = '', shipmentId = null, includeHidden = false } = {}) {
   const auth = require('./auth');
   const rows = shipmentId ? [S.list(user, { db }).find((x) => x.id === shipmentId)].filter(Boolean) : S.list(user, { db, stage: 'open' });
   const ids = rows.map((r) => r.id);
@@ -167,8 +185,11 @@ function forUser(user, { db = store.db, now = new Date(), mine = false, area = '
     items = items.concat(shipmentId ? acct.filter((i) => i.shipment_id === shipmentId) : acct);
   }
   if (!shipmentId) items = items.concat(globalItems({ db }));
+  items = items.concat(taskItems({ db, shipmentId, now }));
   if (area) items = items.filter((i) => i.area === area);
-  if (mine) items = items.filter((i) => i.owner_id === user.id || i.area === 'acct' || !i.shipment_id || (!i.owner_id && user.role === 'admin'));
+  if (mine) items = items.filter((i) => i.owner_id === user.id || (i.area === 'acct' && auth.canAccounting(user)) || (!i.shipment_id && i.task !== 'Task') || (!i.owner_id && user.role === 'admin'));
+  if (owner) items = items.filter((i) => i.owner_id === owner);
+  for (const i of items) if (!i.task) i.task = taskOf(i.key);
   const state = new Map(db.all('SELECT * FROM followup_state').map((r) => [r.key, r]));
   const nowIso = now.toISOString();
   for (const i of items) {
@@ -186,11 +207,48 @@ function forUser(user, { db = store.db, now = new Date(), mine = false, area = '
   return items;
 }
 
+/** Action Center tasks as follow-ups (owner = assignee; "remind later" moves the reminder). */
+function taskItems({ db = store.db, shipmentId = null, now = new Date() } = {}) {
+  const nowIso = now.toISOString();
+  const rows = db.all(`SELECT t.*, s.ref_no FROM tasks t LEFT JOIN shipments s ON s.id = t.shipment_id
+    WHERE t.status = 'OPEN' ${shipmentId ? 'AND t.shipment_id = ?' : ''}`, ...(shipmentId ? [shipmentId] : []));
+  return rows.filter((t) => !t.remind_at || t.remind_at <= nowIso).map((t) => {
+    const s = t.shipment_id ? S.find(t.shipment_id, null, { db }) : null;
+    return { key: `t${t.id}:task`, task: 'Task', taskId: t.id, area: 'ops', severity: t.due_date && t.due_date < iso(Date.now()) ? 'high' : 'normal', title: t.title,
+      detail: t.note || (t.ref_no ? `File ${t.ref_no}` : 'Task'), due: t.due_date || iso(Date.now()), shipment_id: t.shipment_id, owner_id: t.assignee_id, s,
+      action: t.shipment_id ? { label: 'Open file', href: `/shipments/${t.shipment_id}` } : null };
+  });
+}
+
+/** Per person: alerts (critical + high) and warnings (normal) — the team to-do summary. */
+function teamSummary(user, { db = store.db, now = new Date() } = {}) {
+  const items = forUser(user, { db, now });
+  const staff = db.all("SELECT id, name FROM users WHERE role IN ('admin', 'staff') AND active = 1 ORDER BY name");
+  const rows = staff.map((u) => {
+    const mine = items.filter((i) => i.owner_id === u.id);
+    return { id: u.id, name: u.name, alerts: mine.filter((i) => i.severity !== 'normal').length, warnings: mine.filter((i) => i.severity === 'normal').length };
+  });
+  const none = items.filter((i) => !i.owner_id && i.shipment_id);
+  if (none.length) rows.push({ id: 0, name: 'No PIC', alerts: none.filter((i) => i.severity !== 'normal').length, warnings: none.filter((i) => i.severity === 'normal').length });
+  return rows.filter((r) => r.alerts || r.warnings);
+}
+
+/** Group items by task, in a fixed order. */
+function byTask(items) {
+  const g = new Map();
+  for (const i of items) { const t = i.task || taskOf(i.key); if (!g.has(t)) g.set(t, []); g.get(t).push(i); }
+  return [...g.entries()].sort((a, b) => (TASK_ORDER.indexOf(a[0]) + 1 || 99) - (TASK_ORDER.indexOf(b[0]) + 1 || 99)).map(([task, list]) => ({ task, list }));
+}
+
 function snooze(key, days = 1, { db = store.db, userId = null } = {}) {
+  const t = /^t(\d+):task$/.exec(key);
+  if (t) { db.run('UPDATE tasks SET remind_at = ? WHERE id = ?', new Date(Date.now() + days * DAY).toISOString(), Number(t[1])); return; }
   const until = new Date(Date.now() + days * DAY).toISOString();
   db.run('INSERT INTO followup_state (key, snoozed_until, user_id) VALUES (?, ?, ?) ON CONFLICT(key) DO UPDATE SET snoozed_until = excluded.snoozed_until, done_at = NULL, user_id = excluded.user_id', key, until, userId);
 }
 function done(key, { db = store.db, userId = null } = {}) {
+  const t = /^t(\d+):task$/.exec(key);
+  if (t) { db.run("UPDATE tasks SET status = 'DONE', done_at = datetime('now') WHERE id = ?", Number(t[1])); return; }
   db.run("INSERT INTO followup_state (key, done_at, user_id) VALUES (?, datetime('now'), ?) ON CONFLICT(key) DO UPDATE SET done_at = datetime('now'), user_id = excluded.user_id", key, userId);
 }
 function reopen(key, { db = store.db } = {}) { db.run('DELETE FROM followup_state WHERE key = ?', key); }
@@ -199,4 +257,4 @@ function counts(items) {
   return { total: items.length, critical: items.filter((i) => i.severity === 'critical').length, high: items.filter((i) => i.severity === 'high').length };
 }
 
-module.exports = { shipmentItems, accountingItems, globalItems, forUser, snooze, done, reopen, counts };
+module.exports = { taskItems, teamSummary, byTask, taskOf, TASKS, shipmentItems, accountingItems, globalItems, forUser, snooze, done, reopen, counts };

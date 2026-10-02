@@ -8,9 +8,16 @@ const router = express.Router();
 const safeBack = (v) => (typeof v === 'string' && /^\/(?!\/)/.test(v) ? v : null);
 
 router.get('/followups', auth.requireInternal, (req, res) => {
-  const scope = req.query.scope === 'all' ? 'all' : 'mine';
+  const op = Number(req.query.op) || null;
+  const scope = op ? 'op' : req.query.scope === 'all' ? 'all' : 'mine';
   const area = ['ops', 'acct'].includes(req.query.area) ? req.query.area : '';
-  const items = F.forUser(req.user, { mine: scope === 'mine', area, includeHidden: req.query.hidden === '1' });
+  const view = ['summary', 'details'].includes(req.query.view) ? req.query.view : 'list';
+  const items = F.forUser(req.user, { mine: scope === 'mine', owner: op, area, includeHidden: req.query.hidden === '1' });
+  const staff = store.db.all("SELECT id, name FROM users WHERE role IN ('admin', 'staff') AND active = 1 ORDER BY name");
+  if (view !== 'list') {
+    return res.render('followups-team', { title: 'To-do list', view, op, staff, scope, area,
+      summary: view === 'summary' ? F.teamSummary(req.user) : null, groups: view === 'details' ? F.byTask(items.filter((i) => !i.hidden)) : null });
+  }
   const T = new Date().toISOString().slice(0, 10);
   const groups = [
     ['Overdue & critical', items.filter((i) => !i.hidden && (i.severity === 'critical' || i.due < T))],
@@ -19,6 +26,23 @@ router.get('/followups', auth.requireInternal, (req, res) => {
     ['Snoozed / done', items.filter((i) => i.hidden)],
   ];
   res.render('followups', { title: 'Follow-ups', groups, scope, area, counts: F.counts(items.filter((i) => !i.hidden)), showHidden: req.query.hidden === '1' });
+});
+
+// ---------- Action Center tasks ----------
+router.post('/tasks', auth.requireInternal, (req, res) => {
+  const title = String(req.body.title || '').trim().slice(0, 200);
+  if (title) {
+    store.db.run('INSERT INTO tasks (title, shipment_id, assignee_id, due_date, note, created_by) VALUES (?, ?, ?, ?, ?, ?)', title, Number(req.body.shipment_id) || null,
+      Number(req.body.assignee_id) || req.user.id, /^\d{4}-\d{2}-\d{2}$/.test(req.body.due_date || '') ? req.body.due_date : null, String(req.body.note || '').trim().slice(0, 500) || null, req.user.id);
+  }
+  res.redirect(safeBack(req.body.back) || '/dashboard#action-center');
+});
+router.post('/tasks/:id/:op', auth.requireInternal, (req, res) => {
+  const id = Number(req.params.id);
+  if (req.params.op === 'done') store.db.run("UPDATE tasks SET status = 'DONE', done_at = datetime('now') WHERE id = ?", id);
+  if (req.params.op === 'remind') store.db.run('UPDATE tasks SET remind_at = ? WHERE id = ?', new Date(Date.now() + (Number(req.body.days) || 1) * 86400000).toISOString(), id);
+  if (req.params.op === 'reopen') store.db.run("UPDATE tasks SET status = 'OPEN', done_at = NULL, remind_at = NULL WHERE id = ?", id);
+  res.redirect(safeBack(req.body.back) || '/dashboard#action-center');
 });
 
 /** Bell in the workspace top bar. */

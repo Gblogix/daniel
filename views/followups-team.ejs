@@ -1,0 +1,38 @@
+<%- include('partials/head') %>
+<div class="pagehead"><div><h1 style="margin-bottom:4px">To-do list</h1>
+  <p class="muted small" style="margin:0">Grouped by task, per person in charge (OP). Items come from the files and from tasks people add; they clear themselves when the work is done.</p></div></div>
+<form class="filters" method="get">
+  <div class="seg"><a href="/followups">By urgency</a><a class="<%= view === 'details' ? 'on' : '' %>" href="?view=details&op=<%= op || user.id %>">By task</a><a class="<%= view === 'summary' ? 'on' : '' %>" href="?view=summary">Team summary</a></div>
+  <% if (view === 'details') { %><input type="hidden" name="view" value="details">
+    <label class="small muted" for="opsel">OP</label><select id="opsel" name="op" onchange="this.form.submit()"><option value="">Everyone</option><% staff.forEach((u) => { %><option value="<%= u.id %>" <%= op === u.id ? 'selected' : '' %>><%= u.name %></option><% }) %></select><% } %>
+</form>
+<% if (view === 'summary') { %>
+  <div class="tablewrap" style="max-width:720px"><table class="t">
+    <thead><tr><th>Name</th><th class="right">Alerts</th><th class="right">Warnings</th><th></th></tr></thead>
+    <% if (!summary.length) { %><tr><td colspan="4" class="muted">✔ Nobody has anything waiting.</td></tr><% } %>
+    <% summary.forEach((r) => { %><tr><td><b><%= r.name %></b></td><td class="right"><span class="badge <%= r.alerts ? 'bill-bad' : '' %>"><%= r.alerts %></span></td><td class="right"><%= r.warnings %></td>
+      <td><% if (r.id) { %><a class="btn secondary small" href="?view=details&op=<%= r.id %>">Details</a><% } %></td></tr><% }) %>
+  </table></div>
+<% } else { %>
+  <% if (!groups.length) { %><div class="card okbox">✔ Nothing waiting<%= op ? ' for this person' : '' %>.</div><% } %>
+  <% const back = `/followups?view=details&op=${op || ''}`; %>
+  <% groups.forEach((g, gi) => { %>
+    <details class="tgroup" <%= gi < 4 ? 'open' : '' %>><summary><span class="tg-name"><%= g.task %></span> <span class="tg-count"><%= g.list.length %></span>
+      <% const crit = g.list.filter((i) => i.severity !== 'normal').length; if (crit) { %><span class="badge bill-bad"><%= crit %> alert<%= crit > 1 ? 's' : '' %></span><% } %></summary>
+      <div class="tablewrap"><table class="t tg-table">
+        <% g.list.forEach((i, k) => { const s = i.s || {}; %><tr class="sev-<%= i.severity %>">
+          <td class="nowrap"><span class="tg-tag"><%= g.task %> (<%= k + 1 %>/<%= g.list.length %>)</span></td>
+          <td class="nowrap"><% if (s.id) { %><a href="/shipments/<%= s.id %>"><b><%= s.ref_no %></b></a><% } %></td>
+          <td class="nowrap small"><%= i.due || '' %></td>
+          <td class="mono small"><%= (s.containers || []).map((c) => c.container_no).join(', ') || s.hbl_no || '' %></td>
+          <td class="small"><%= s.pod || '' %></td>
+          <td class="small"><%= s.customer_name || '' %></td>
+          <td class="small"><b><%= i.title %></b><br><span class="muted"><%= i.detail %></span></td>
+          <td class="nowrap"><% if (i.action && i.action.href) { %><a class="btn small secondary" href="<%= i.action.href %>"><%= i.action.label %></a><% } %>
+            <form method="post" action="/followups/done" class="inline"><input type="hidden" name="_csrf" value="<%= csrf %>"><input type="hidden" name="key" value="<%= i.key %>"><input type="hidden" name="back" value="<%= back %>"><button class="xbtn" title="Done — remove from the list" aria-label="Done">✕</button></form></td>
+        </tr><% }) %>
+      </table></div>
+    </details>
+  <% }) %>
+<% } %>
+<%- include('partials/foot') %>

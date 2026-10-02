@@ -33,6 +33,9 @@
     <div class="field"><label>Billing emails (invoices / D/N / SOA)</label><input name="billing_emails" value="<%= c.billing_emails || '' %>"></div>
     <div class="grid g2" style="gap:8px"><div class="field"><label>Payment terms (days)</label><input name="terms_days" type="number" value="<%= c.terms_days ?? '' %>"></div>
       <div class="field"><label>Short name (file names)</label><input name="short_name" value="<%= c.short_name || '' %>" placeholder="Unlockt"></div></div>
+    <div class="grid g2" style="gap:8px"><div class="field"><label>Credit limit (USD)</label><input name="credit_limit" inputmode="decimal" value="<%= c.credit_limit ?? '' %>" placeholder="e.g. 200000"></div>
+      <div class="field"><label>&nbsp;</label><label class="check"><input type="checkbox" name="credit_hold" value="1" <%= c.credit_hold ? 'checked' : '' %>> Credit hold — no D/O release</label></div></div>
+    <div class="field"><label>Credit note</label><input name="credit_note" value="<%= c.credit_note || '' %>" placeholder="e.g. bad credit — pay before release"></div>
     <div class="field"><label>Phone</label><input name="phone" value="<%= c.phone || '' %>"></div>
     <div class="field"><label>Default person in charge (new files)</label><select name="default_pic_id"><option value="">— whoever creates the file —</option>
       <% staffUsers.forEach((u) => { %><option value="<%= u.id %>" <%= c.default_pic_id === u.id ? 'selected' : '' %>><%= u.name %></option><% }) %></select></div>

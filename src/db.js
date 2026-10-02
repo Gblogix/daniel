@@ -299,6 +299,21 @@ CREATE TABLE IF NOT EXISTS settings (
   value TEXT
 );
 
+-- Action Center: tasks people give themselves or a colleague (from an email, a call…), shown with the follow-ups.
+CREATE TABLE IF NOT EXISTS tasks (
+  id INTEGER PRIMARY KEY,
+  title TEXT NOT NULL,
+  shipment_id INTEGER REFERENCES shipments(id) ON DELETE CASCADE,
+  assignee_id INTEGER REFERENCES users(id),
+  due_date TEXT,
+  remind_at TEXT,
+  note TEXT,
+  status TEXT NOT NULL DEFAULT 'OPEN', -- OPEN | DONE
+  created_by INTEGER REFERENCES users(id),
+  created_at TEXT NOT NULL DEFAULT (datetime('now')),
+  done_at TEXT
+);
+
 -- Memo log on a file (who wrote what, when) — replaces notes lost in email threads.
 CREATE TABLE IF NOT EXISTS shipment_memos (
   id INTEGER PRIMARY KEY,
@@ -321,6 +336,7 @@ CREATE TABLE IF NOT EXISTS sessions (
 const MIGRATIONS = {
   shipments: {
     title: 'TEXT', // name of an "Other" (non-shipment) file
+    credit_released_at: 'TEXT', credit_released_by: 'INTEGER', // admin let this file go despite a credit hold
     internal_note: 'TEXT', color_label: 'TEXT', flagged: 'INTEGER NOT NULL DEFAULT 0', // list work screen
     bill_to_id: 'INTEGER', sales_id: 'INTEGER', // invoice party when not the customer; sales rep
     blocked_at: 'TEXT', blocked_by: 'INTEGER', block_reason: 'TEXT', // file locked (Tools › Block)
@@ -351,7 +367,7 @@ const MIGRATIONS = {
     remark: 'TEXT', internal_note: 'TEXT', color_label: 'TEXT', // My Containers: notes and colour label
   },
   cargo_items: { unit_price: 'REAL', amount: 'REAL', source: 'TEXT', invoice_no: 'TEXT', buyer: 'TEXT' }, // buyer = final buyer (Target, Nordstrom…)
-  companies: { lost_ignored: 'INTEGER NOT NULL DEFAULT 0', types: 'TEXT', qbo_customer_id: 'TEXT', qbo_vendor_id: 'TEXT', billing_emails: 'TEXT', terms_days: 'INTEGER', short_name: 'TEXT', default_pic_id: 'INTEGER', report_frequency: 'TEXT', report_emails: 'TEXT', report_last: 'TEXT' },
+  companies: { credit_limit: 'REAL', credit_hold: 'INTEGER NOT NULL DEFAULT 0', credit_note: 'TEXT', lost_ignored: 'INTEGER NOT NULL DEFAULT 0', types: 'TEXT', qbo_customer_id: 'TEXT', qbo_vendor_id: 'TEXT', billing_emails: 'TEXT', terms_days: 'INTEGER', short_name: 'TEXT', default_pic_id: 'INTEGER', report_frequency: 'TEXT', report_emails: 'TEXT', report_last: 'TEXT' },
   invoices: { document_id: 'INTEGER', reviewed_at: 'TEXT', reviewed_by: 'INTEGER',
     qbo_id: 'TEXT', qbo_type: 'TEXT', qbo_hash: 'TEXT', qbo_synced_at: 'TEXT', qbo_error: 'TEXT' }, // QuickBooks Online sync
   emails: { bcc_addr: 'TEXT', reply_to: 'TEXT' },

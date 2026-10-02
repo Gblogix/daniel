@@ -684,3 +684,23 @@ input.flagbox::before { content: '⚑'; font-size: 16px; color: #cbd5e1; }
 input.flagbox:checked::before { color: #dc2626; }
 .bulkbar select, .bulkbar input { width: auto !important; max-width: 200px; padding: 4px 6px; }
 input.flagbox { border: 0 !important; background: none !important; box-shadow: none !important; padding: 0 !important; }
+
+/* To-do by task */
+.tgroup { background: #fff; border: 1px solid var(--line); border-radius: var(--radius); margin-bottom: 8px; }
+.tgroup > summary { cursor: pointer; padding: 10px 14px; display: flex; align-items: center; gap: 8px; font-weight: 600; color: #0f766e; list-style: none; }
+.tgroup > summary::-webkit-details-marker { display: none; }
+.tgroup > summary::after { content: '▾'; margin-left: 4px; color: var(--muted); }
+.tgroup:not([open]) > summary::after { content: '▸'; }
+.tg-count { font-size: 12px; color: var(--muted); font-weight: 400; }
+.tgroup .tablewrap { border: 0; border-top: 1px solid var(--line); border-radius: 0 0 var(--radius) var(--radius); }
+.tg-tag { display: inline-block; background: #14b8a6; color: #fff; font-size: 12px; font-weight: 700; padding: 3px 10px; border-radius: 4px; }
+.tg-table tr.sev-critical .tg-tag { background: #dc2626; } .tg-table tr.sev-high .tg-tag { background: #ea580c; }
+.xbtn { border: 0; background: #334155; color: #fff; width: 20px; height: 20px; border-radius: 50%; font-size: 11px; cursor: pointer; }
+.xbtn:hover { background: #dc2626; }
+form.inline { display: inline; }
+.blockbar.released { background: #b45309; }
+.addtask { margin-top: 8px; } .addtask summary { cursor: pointer; color: var(--blue); }
+.taskform { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 6px; } .taskform input[name=title] { flex: 1; min-width: 240px; }
+.taskform select, .taskform input[type=date] { width: auto; }
+/* Action Center */
+.ac-tabs { margin-bottom: 8px; }

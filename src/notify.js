@@ -208,6 +208,8 @@ async function sendCustomerUpdate(shipmentId, reason, { db = store.db, userId = 
 
 async function sendDeliveryOrder(shipmentId, { db = store.db, userId = null } = {}) {
   const s = S.find(shipmentId, null, { db });
+  const cr = require('./credit').forShipment(s, { db });
+  if (cr?.blocksRelease) { S.addEvent(s.id, 'NOTICE_SKIPPED', `D/O held — credit hold on ${cr.party} (${cr.reason})`, { db, customerVisible: false }); return null; }
   const to = recipients(s.trucker_id, db);
   if (!to.length) { S.addEvent(s.id, 'NOTICE_SKIPPED', 'D/O not sent: no trucker email on file', { db, customerVisible: false }); return null; }
   const d = await generateDocument(s.id, 'DO', { db, userId });
@@ -308,6 +310,7 @@ async function sendComposed({ kind, shipmentId, to, cc = [], bcc = [], replyTo =
   const c = COMPOSE[kind];
   const s = S.find(shipmentId, null, { db });
   if (!to.length) throw new Error('Add at least one recipient');
+  if (kind === 'DO') { const cr = require('./credit').forShipment(s, { db }); if (cr?.blocksRelease) throw new Error(`D/O held — credit hold on ${cr.party}: ${cr.reason}. Collect payment or ask an admin to release this file.`); }
   const made = [];
   for (const t of generate.filter((x) => c.generate(s).includes(x))) made.push(await generateDocument(s.id, t, { db, userId }));
   const picked = docIds.length ? db.all(`SELECT * FROM documents WHERE shipment_id = ? AND id IN (${docIds.map(() => '?').join(',')})`, s.id, ...docIds) : [];

@@ -36,6 +36,55 @@
   <% followups.slice(0, 8).forEach((i) => { %><%- include('partials/fu-item', { i, back: '/dashboard' }) %><% }) %>
   <% if (followups.length > 8) { %><p class="small" style="margin:8px 0 0"><a href="/followups">+ <%= followups.length - 8 %> more</a></p><% } %>
 </div>
+<div class="grid g2" style="align-items:start">
+<div class="card" id="action-center">
+  <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap">
+    <h2 style="margin:0">Action Center</h2>
+    <div class="seg ac-tabs" role="tablist"><a class="on" href="#ac-task" data-actab="task">Task <span class="count"><%= tasks.length %></span></a><a href="#ac-email" data-actab="email">Email <span class="count"><%= mails.length %></span></a></div>
+  </div>
+  <div data-acpane="task">
+    <form method="post" action="/tasks" class="taskform"><input type="hidden" name="_csrf" value="<%= csrf %>"><input type="hidden" name="back" value="/dashboard#action-center">
+      <input name="title" required placeholder="New task — e.g. Call Unlockt about Friday delivery" maxlength="200">
+      <select name="assignee_id" aria-label="Assignee"><% staffUsers.forEach((u) => { %><option value="<%= u.id %>" <%= u.id === user.id ? 'selected' : '' %>><%= u.name %></option><% }) %></select>
+      <input type="date" name="due_date" aria-label="Due date"><button class="btn small">Add</button></form>
+    <% if (!tasks.length) { %><p class="muted small" style="margin:8px 0 0">No open tasks.</p><% } else { %>
+    <div class="tablewrap" style="margin-top:8px"><table class="t">
+      <thead><tr><th>Task</th><th>File</th><th>Assignee</th><th>Due</th><th>Action</th></tr></thead>
+      <% tasks.forEach((t) => { const late = t.due_date && t.due_date < new Date().toISOString().slice(0, 10); %><tr>
+        <td><b><%= t.title %></b><% if (t.remind_at && t.remind_at > new Date().toISOString()) { %><br><span class="muted small">remind <%= fmtDateTime(t.remind_at) %></span><% } %></td>
+        <td class="small"><% if (t.shipment_id) { %><a href="/shipments/<%= t.shipment_id %>"><%= t.ref_no %></a><% } else { %>—<% } %></td>
+        <td class="small"><%= t.assignee || '' %></td><td class="nowrap small <%= late ? 'late' : '' %>"><%= t.due_date || '—' %></td>
+        <td class="nowrap"><form method="post" action="/tasks/<%= t.id %>/remind" class="inline"><input type="hidden" name="_csrf" value="<%= csrf %>"><input type="hidden" name="days" value="1"><button class="btn secondary small">Remind later</button></form>
+          <form method="post" action="/tasks/<%= t.id %>/done" class="inline"><input type="hidden" name="_csrf" value="<%= csrf %>"><button class="btn small">Mark as done</button></form></td></tr><% }) %>
+    </table></div><% } %>
+  </div>
+  <div data-acpane="email" hidden>
+    <% if (!mails.length) { %><p class="muted small">No emails read into the system yet (Outlook intake).</p><% } else { %>
+    <div class="tablewrap"><table class="t">
+      <thead><tr><th>Subject</th><th>From</th><th>Received</th><th>Status</th></tr></thead>
+      <% mails.forEach((m) => { %><tr><td class="small"><% if (m.intake_id) { %><a href="/intakes/<%= m.intake_id %>"><%= m.subject || '(no subject)' %></a><% } else { %><%= m.subject || '(no subject)' %><% } %></td>
+        <td class="small"><%= m.sender || '' %></td><td class="nowrap small"><%= fmtDateTime(m.created_at) %></td>
+        <td><% if (m.intake_status) { %><span class="badge <%= m.intake_status === 'PENDING' ? 'ARRIVED' : 'paid' %>"><%= m.intake_status === 'PENDING' ? 'Pending review' : 'Applied' %></span><% } %></td></tr><% }) %>
+    </table></div><% } %>
+  </div>
+</div>
+<div class="card" id="team">
+  <div style="display:flex;justify-content:space-between;align-items:center;gap:8px"><h2 style="margin:0">To-do list — team</h2><a class="btn secondary small" href="/followups?view=details&op=<%= user.id %>">Details →</a></div>
+  <% if (!team.length) { %><p class="okbox" style="margin:10px 0 0">✔ Nobody has anything waiting.</p><% } else { %>
+  <div class="tablewrap" style="margin-top:8px"><table class="t">
+    <thead><tr><th>Name</th><th class="right">Alerts</th><th class="right">Warnings</th></tr></thead>
+    <% team.forEach((r) => { %><tr><td><% if (r.id) { %><a href="/followups?view=details&op=<%= r.id %>"><b><%= r.name %></b></a><% } else { %><b><%= r.name %></b><% } %></td>
+      <td class="right"><span class="badge <%= r.alerts ? 'bill-bad' : '' %>"><%= r.alerts %></span></td><td class="right"><%= r.warnings %></td></tr><% }) %>
+  </table></div><% } %>
+</div>
+</div>
+<script>
+document.querySelectorAll('[data-actab]').forEach((a) => a.addEventListener('click', (e) => {
+  e.preventDefault();
+  document.querySelectorAll('[data-actab]').forEach((x) => x.classList.toggle('on', x === a));
+  document.querySelectorAll('[data-acpane]').forEach((p) => { p.hidden = p.dataset.acpane !== a.dataset.actab; });
+}));
+</script>
 <% if (lfdWatch.length) { %>
 <div class="card" id="lfd">
   <h2>⏰ LFD watch — pick up before storage starts</h2>

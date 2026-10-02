@@ -4,6 +4,7 @@
   <div class="chips"><span class="badge bill-bad"><%= counts.critical %> critical</span><span class="badge bill-warn"><%= counts.high %> high</span><span class="badge"><%= counts.total %> open</span></div>
 </div>
 <div class="filters">
+  <div class="seg"><a class="on" href="/followups">By urgency</a><a href="/followups?view=details&op=<%= user.id %>">By task</a><a href="/followups?view=summary">Team summary</a></div>
   <div class="seg"><a class="<%= scope === 'mine' ? 'on' : '' %>" href="?scope=mine&area=<%= area %>">My files</a><a class="<%= scope === 'all' ? 'on' : '' %>" href="?scope=all&area=<%= area %>">Everyone</a></div>
   <div class="seg"><a class="<%= !area ? 'on' : '' %>" href="?scope=<%= scope %>">All</a><a class="<%= area === 'ops' ? 'on' : '' %>" href="?scope=<%= scope %>&area=ops">Operations</a>
     <% if (canAccounting) { %><a class="<%= area === 'acct' ? 'on' : '' %>" href="?scope=<%= scope %>&area=acct">Accounting</a><% } %></div>

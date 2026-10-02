@@ -55,7 +55,13 @@ router.get('/dashboard', auth.requireInternal, (req, res) => {
   const mineItems = F.forUser(req.user, { mine: true });
   // Management numbers: admins only.
   const mgmt = acct ? require('../insights').dashboard(req.query) : null;
-  res.render('dashboard', { title: 'Dashboard', kpi, active, events, lfdWatch, followups: mineItems, fcount: F.counts(mineItems), mgmt });
+  // Action Center: my tasks (and ones I gave others), the latest emails read into the system; team to-do summary.
+  const tasks = db.all(`SELECT t.*, s.ref_no, s.hbl_no, u.name AS assignee FROM tasks t LEFT JOIN shipments s ON s.id = t.shipment_id LEFT JOIN users u ON u.id = t.assignee_id
+    WHERE t.status = 'OPEN' AND (t.assignee_id = ? OR t.created_by = ?) ORDER BY COALESCE(t.due_date, '9999'), t.id LIMIT 30`, req.user.id, req.user.id);
+  const mails = db.all(`SELECT m.*, i.status AS intake_status, i.shipment_id FROM mail_imports m LEFT JOIN intakes i ON i.id = m.intake_id ORDER BY m.created_at DESC LIMIT 8`);
+  const staffUsers = db.all("SELECT id, name FROM users WHERE role IN ('admin', 'staff') AND active = 1 ORDER BY name");
+  res.render('dashboard', { title: 'Dashboard', kpi, active, events, lfdWatch, followups: mineItems, fcount: F.counts(mineItems), mgmt,
+    tasks, mails, staffUsers, team: F.teamSummary(req.user) });
 });
 
 /** Customers with no file for 60+ days (sales follow-up); "ignore" hides one-off customers. */
@@ -208,6 +214,8 @@ router.get('/shipments/:id', auth.requireLogin, (req, res) => {
     memos: FT.memos(s.id), badges: FT.badges(s),
     masters: db.all(`SELECT id, ref_no, mbl_no, eta FROM masters WHERE ${s.mode === 'AIR' ? "mode = 'AIR'" : "mode <> 'AIR'"} AND id IS NOT ? ORDER BY id DESC LIMIT 150`, s.master_id || null),
     blockedBy: s.blocked_by ? db.get('SELECT name FROM users WHERE id = ?', s.blocked_by)?.name : null,
+    credit: require('../credit').forShipment(s),
+    tasks: db.all("SELECT t.*, u.name AS assignee FROM tasks t LEFT JOIN users u ON u.id = t.assignee_id WHERE t.shipment_id = ? AND t.status = 'OPEN' ORDER BY t.due_date", s.id),
   } : {};
   res.render(view, { title: S.fileName(s), s, trackLink, tools, newCustomer, nextActions, tr: S.tracking(s), docs, events, emails, trackEvents, invoices, profit, plLines, acctParties, outgoing, vendorPending, autoSend: db.setting('auto_send_reviewed') === '1',
     codes: A.CHARGE_CODES, billing: acct ? S.billingState(s) : null, trackingStatus: require('../tracking').status(), ...(internal ? partyLists() : {}) });
@@ -270,6 +278,16 @@ router.post('/shipments/:id/memos', auth.requireInternal, (req, res) => {
   require('../fileTools').addMemo(Number(req.params.id), req.body, { userId: req.user.id });
   res.redirect(`/shipments/${req.params.id}#memos`);
 });
+// Credit hold: an admin lets this one file's cargo go (or takes that back).
+router.post('/shipments/:id/credit-release', auth.requireRole('admin'), (req, res) => {
+  const id = Number(req.params.id);
+  const on = req.body.on === '1';
+  store.db.run('UPDATE shipments SET credit_released_at = ?, credit_released_by = ? WHERE id = ?', on ? new Date().toISOString() : null, on ? req.user.id : null, id);
+  S.addEvent(id, 'CREDIT_RELEASE', on ? `Released despite credit hold by ${req.user.name}` : 'Credit release withdrawn', { userId: req.user.id, customerVisible: false });
+  flash(req, 'ok', on ? 'This file may be released (D/O) despite the credit hold' : 'Credit hold applies to this file again');
+  res.redirect(`/shipments/${id}`);
+});
+
 router.post('/memos/:id/delete', auth.requireInternal, (req, res) => {
   const m = store.db.get('SELECT * FROM shipment_memos WHERE id = ?', Number(req.params.id));
   if (m && (m.user_id === req.user.id || req.user.role === 'admin')) store.db.run('DELETE FROM shipment_memos WHERE id = ?', m.id);
@@ -319,7 +337,7 @@ router.post('/shipments/:id/delete', auth.requirePerm('delete'), (req, res) => {
 // ---------- actions: generate & send notices ----------
 const ACTIONS = {
   'send-an': (id, u) => notify.sendBrokerPacket(id, { userId: u.id }).then(() => 'Arrival notice & documents sent to customs broker'),
-  'send-do': (id, u) => notify.sendDeliveryOrder(id, { userId: u.id }).then(() => 'Delivery order sent to trucker'),
+  'send-do': (id, u) => notify.sendDeliveryOrder(id, { userId: u.id }).then((r) => (r ? 'Delivery order sent to trucker' : 'D/O not sent — credit hold on the customer, or no trucker email (see History)')),
   'send-update': (id, u) => notify.sendCustomerUpdate(id, 'Shipment status update', { userId: u.id }).then(() => 'Status update sent to customer'),
 };
 router.post('/shipments/:id/actions/:action', auth.requirePerm('send_notices'), async (req, res) => {
