@@ -1,4 +1,39 @@
 <%- include('../partials/head') %>
+<% const T = locals.tools || {}; const editOk = can('shipments_edit'); %>
+<% if (s.blocked_at) { %><div class="blockbar" role="alert"><span class="blockicon">🔒</span><div><b>On hold — file blocked</b><%= s.block_reason ? `: ${s.block_reason}` : '' %>
+  <div class="small">by <%= T.blockedBy || 'staff' %> on <%= fmtDateTime(s.blocked_at) %> UTC · nobody can change the file until it is unblocked (Tools › Unblock)</div></div></div><% } %>
+<div class="filebar">
+  <span class="fb-no mono"><%= S.isMisc(s) ? s.ref_no : `${s.mode === 'AIR' ? 'HAWB' : 'HB/L'} ${s.hbl_no || '—'}` %></span>
+  <span class="fb-item">👥 CUSTOMER: <% if (s.customer_id) { %><a href="/companies/<%= s.customer_id %>" title="Open the party"><%= s.customer_name %></a><% } else { %><span class="muted">not set</span><% } %></span>
+  <% (T.badges || []).forEach((b) => { %><span class="fb-badge <%= b.cls %>" title="<%= b.title %>"><%= b.label %><%= b.amount && canAccounting ? ` $${fmtNum(b.amount, 2)}` : '' %></span><% }) %>
+  <% if (s.bill_to_id && s.bill_to_id !== s.customer_id) { %><span class="fb-item">BILL TO: <%= s.bill_to_name %></span><% } %>
+  <span class="fb-item">SALES: <%= s.sales_name || '—' %></span>
+  <span class="fb-item">OP: <%= s.owner_name || '—' %></span>
+  <details class="tools">
+    <summary class="btn small">Tools ▾</summary>
+    <div class="tools-menu">
+      <% if (editOk) { %>
+        <form method="post" action="/shipments/<%= s.id %>/block"><input type="hidden" name="_csrf" value="<%= csrf %>">
+          <% if (s.blocked_at) { %><input type="hidden" name="on" value="0"><button>🔓 Unblock</button>
+          <% } else { %><input type="hidden" name="on" value="1"><input name="reason" placeholder="Reason (e.g. bad credit)" class="small"><button>🔒 Block</button><% } %></form>
+        <form method="post" action="/shipments/<%= s.id %>/copy"><input type="hidden" name="_csrf" value="<%= csrf %>"><button title="New file with the same parties and lane">⧉ Copy file</button></form>
+        <% if (!S.isMisc(s) && (T.masters || []).length) { %><form method="post" action="/shipments/<%= s.id %>/move" class="tools-move"><input type="hidden" name="_csrf" value="<%= csrf %>">
+          <select name="master_id" required aria-label="Move to master"><option value="">Move to master…</option><% T.masters.forEach((m) => { %><option value="<%= m.id %>"><%= m.mbl_no || m.ref_no %><%= m.eta ? ` · ETA ${m.eta}` : '' %></option><% }) %></select>
+          <button data-confirm="Move this house to the chosen master? Its carrier leg (MB/L, vessel, dates) will follow that master.">↪ Move</button></form><% } %>
+      <% } %>
+      <% if (!S.isMisc(s)) { %>
+        <div class="tools-head">Documents</div>
+        <% [['AN', 'Arrival notice'], ['DO', 'Delivery order'], ['ATME', 'Authority to make entry']].forEach(([t, l]) => { %><a href="/shipments/<%= s.id %>/doc/<%= t %>"><%= l %></a><% }) %>
+        <% if (can('send_notices')) { %><div class="tools-head">Email</div>
+          <a href="/shipments/<%= s.id %>/email/AN">✉ A/N &amp; documents → broker</a>
+          <a href="/shipments/<%= s.id %>/email/DO">✉ D/O → trucker</a>
+          <a href="/shipments/<%= s.id %>/email/UPDATE">✉ Status update → customer</a>
+          <a href="/shipments/<%= s.id %>/email/BLANK">✉ New email…</a><% } %>
+        <a href="/shipments/<%= s.id %>?view=customer">👁 View as customer</a>
+      <% } %>
+    </div>
+  </details>
+</div>
 <div class="pagehead">
   <div>
     <h1 style="margin-bottom:4px"><%= S.fileName(s) %> <span class="muted" style="font-weight:400">· <%= S.MODES[s.mode].icon %> <%= S.MODES[s.mode].label %></span></h1>
@@ -60,19 +95,15 @@
 <% if (can('send_notices') && !misc) { %><div class="card">
   <h2>Notices</h2>
   <div class="actions">
-    <form method="post" action="/shipments/<%= s.id %>/actions/send-an"><input type="hidden" name="_csrf" value="<%= csrf %>">
-      <button class="btn" data-confirm="Send A/N + HBL/PL/CI to <%= s.broker_name || 'broker' %>?" <%= s.broker_id ? '' : 'disabled title="Assign a customs broker first"' %>>✉ Send A/N & docs → broker</button></form>
-    <form method="post" action="/shipments/<%= s.id %>/actions/send-do"><input type="hidden" name="_csrf" value="<%= csrf %>">
-      <button class="btn" data-confirm="Send D/O to <%= s.trucker_name || 'trucker' %>?" <%= s.trucker_id ? '' : 'disabled title="Assign a trucker first"' %>>✉ Send D/O → trucker</button></form>
-    <form method="post" action="/shipments/<%= s.id %>/actions/send-update"><input type="hidden" name="_csrf" value="<%= csrf %>">
-      <button class="btn" data-confirm="Email a status update to <%= s.customer_name || 'customer' %>?" <%= s.customer_id ? '' : 'disabled title="Assign a customer first"' %>>✉ Status update → customer</button></form>
+    <a class="btn" href="/shipments/<%= s.id %>/email/AN">✉ A/N &amp; docs → broker</a>
+    <a class="btn" href="/shipments/<%= s.id %>/email/DO">✉ D/O → trucker</a>
+    <a class="btn" href="/shipments/<%= s.id %>/email/UPDATE">✉ Status update → customer</a>
+    <a class="btn secondary" href="/shipments/<%= s.id %>/email/BLANK">✉ New email</a>
     <% ['AN', 'DO', 'ATME'].forEach((t) => { const label = { AN: 'A/N', DO: 'D/O', ATME: 'ATME' }[t]; %>
-      <a class="btn secondary" href="/shipments/<%= s.id %>/preview/<%= t %>" target="_blank">Preview <%= label %></a>
-      <form method="post" action="/shipments/<%= s.id %>/issue/<%= t %>"><input type="hidden" name="_csrf" value="<%= csrf %>">
-        <button class="btn secondary" title="Save the document (PDF) without emailing">Issue <%= label %></button></form>
+      <a class="btn secondary" href="/shipments/<%= s.id %>/doc/<%= t %>">📄 <%= label %></a>
     <% }) %>
   </div>
-  <p class="muted small" style="margin:8px 0 0">Subject: <span class="mono">[A/N] MBL // HBL // Container // 40HC x 1 // ETA m/d // LFD m/d</span>. Re-issued documents are marked _Rev. Automatic sending rules are in Automation settings.</p>
+  <p class="muted small" style="margin:8px 0 0">Each button opens the send window: check the recipients (To / CC / BCC), attachments, subject and text, then send. It goes from our mailbox and a copy stays on the file. Automatic sending rules are in Automation settings.</p>
 </div><% } %>
 
 <% if (canAccounting) { const m = (v) => fmtNum(v, 2); %>
@@ -221,6 +252,20 @@
         <div class="muted small" style="margin-bottom:6px">…or drag files / the Outlook email here. <span data-drop-files></span></div>
         <button class="btn secondary small">Upload</button>
       </form><% } %>
+    </div>
+
+    <div class="card" id="memos">
+      <h2>Memo</h2>
+      <form method="post" action="/shipments/<%= s.id %>/memos" class="memo-form"><input type="hidden" name="_csrf" value="<%= csrf %>">
+        <input name="subject" placeholder="Subject (e.g. customer asked for Friday delivery)" maxlength="200">
+        <textarea name="body" rows="2" placeholder="Details — visible to staff only"></textarea>
+        <button class="btn secondary small">＋ Add memo</button></form>
+      <% if (!(T.memos || []).length) { %><p class="muted small" style="margin:6px 0 0">No memos yet.</p><% } %>
+      <ul class="memos"><% (T.memos || []).forEach((m) => { %><li>
+        <div><b><%= m.subject || '(no subject)' %></b><% if (m.user_id === user.id || user.role === 'admin') { %>
+          <form method="post" action="/memos/<%= m.id %>/delete" class="inline"><input type="hidden" name="_csrf" value="<%= csrf %>"><button class="linkbtn" title="Delete memo" data-confirm="Delete this memo?">✕</button></form><% } %></div>
+        <% if (m.body) { %><div class="small" style="white-space:pre-line"><%= m.body %></div><% } %>
+        <div class="when"><%= m.user_name || '' %> · <%= fmtDateTime(m.created_at) %> UTC</div></li><% }) %></ul>
     </div>
 
     <div class="card" id="emails">

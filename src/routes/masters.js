@@ -37,6 +37,15 @@ router.get('/masters/:id', auth.requireInternal, (req, res) => {
     const A = require('../accounting');
     profits = m.houses.map((h) => A.shipmentProfit(h.id)).reduce((a, p) => ({ revenue: a.revenue + p.revenue, cost: a.cost + p.cost, profit: a.profit + p.profit }), { revenue: 0, cost: 0, profit: 0 });
   }
+  // House cards beside the master: open A/R and A/P per house (accounting users).
+  if (auth.canAccounting(req.user)) {
+    for (const h of m.houses) {
+      const b = store.db.get(`SELECT ROUND(SUM(CASE WHEN kind IN ('AR', 'DN') AND total > 0 THEN ABS(total) - paid_amount ELSE 0 END), 2) AS ar,
+        ROUND(SUM(CASE WHEN kind = 'AP' OR (kind = 'DN' AND total < 0) THEN ABS(total) - paid_amount ELSE 0 END), 2) AS ap
+        FROM invoices WHERE shipment_id = ? AND status = 'OPEN'`, h.id);
+      h.ar_open = b.ar || 0; h.ap_open = b.ap || 0;
+    }
+  }
   res.render('masters/form', { title: m.mbl_no || m.ref_no, m, profits, agents: agents(), missing: M.missing(m) });
 });
 

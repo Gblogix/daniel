@@ -199,7 +199,13 @@ router.get('/shipments/:id', auth.requireLogin, (req, res) => {
     if (!P.findParty(s.consignee_name)) newCustomer = { name: s.consignee_name, address: s.consignee_address };
   }
   const trackLink = internal ? require('../tracking/codes').trackUrl(s) : null;
-  res.render(view, { title: S.fileName(s), s, trackLink, newCustomer, nextActions, tr: S.tracking(s), docs, events, emails, trackEvents, invoices, profit, plLines, acctParties, outgoing, vendorPending, autoSend: db.setting('auto_send_reviewed') === '1',
+  const FT = require('../fileTools');
+  const tools = internal ? {
+    memos: FT.memos(s.id), badges: FT.badges(s),
+    masters: db.all(`SELECT id, ref_no, mbl_no, eta FROM masters WHERE ${s.mode === 'AIR' ? "mode = 'AIR'" : "mode <> 'AIR'"} AND id IS NOT ? ORDER BY id DESC LIMIT 150`, s.master_id || null),
+    blockedBy: s.blocked_by ? db.get('SELECT name FROM users WHERE id = ?', s.blocked_by)?.name : null,
+  } : {};
+  res.render(view, { title: S.fileName(s), s, trackLink, tools, newCustomer, nextActions, tr: S.tracking(s), docs, events, emails, trackEvents, invoices, profit, plLines, acctParties, outgoing, vendorPending, autoSend: db.setting('auto_send_reviewed') === '1',
     codes: A.CHARGE_CODES, billing: acct ? S.billingState(s) : null, trackingStatus: require('../tracking').status(), ...(internal ? partyLists() : {}) });
 });
 
@@ -214,6 +220,10 @@ function docFilter(user) {
 
 router.post('/shipments/:id', auth.requirePerm('shipments_edit'), async (req, res) => {
   const id = Number(req.params.id);
+  if (store.db.get('SELECT blocked_at FROM shipments WHERE id = ?', id)?.blocked_at) {
+    flash(req, 'err', 'This file is blocked — unblock it from Tools first');
+    return res.redirect(`/shipments/${id}`);
+  }
   const addedCustomer = require('../extract/party').fromForm(req.body, 'customer_id');
   if (req.body.accept_delivery_request) {
     const cur = store.db.get('SELECT delivery_request_date, delivery_request_time FROM shipments WHERE id = ?', id);
@@ -230,6 +240,36 @@ router.post('/shipments/:id', auth.requirePerm('shipments_edit'), async (req, re
   const miss = S.missingRequired(S.find(id, null));
   flash(req, 'ok', `${changes.length ? `Saved (${changes.length} field${changes.length > 1 ? 's' : ''} changed)` : 'Saved'}${addedCustomer ? ` · ${addedCustomer} added to Parties as a new customer` : ''}${miss.length ? ` · still required: ${miss.join(', ')}` : ''}`);
   res.redirect(`/shipments/${id}`);
+});
+
+// ---------- Tools: copy / move / block, memo log ----------
+router.post('/shipments/:id/copy', auth.requirePerm('shipments_edit'), (req, res) => {
+  const nid = require('../fileTools').copy(Number(req.params.id), { userId: req.user.id });
+  flash(req, 'ok', `Copy created (${store.db.get('SELECT ref_no FROM shipments WHERE id = ?', nid).ref_no}) — parties and lane copied; add the B/L, containers and dates`);
+  res.redirect(`/shipments/${nid}#edit`);
+});
+router.post('/shipments/:id/move', auth.requirePerm('shipments_edit'), (req, res) => {
+  const id = Number(req.params.id);
+  try {
+    require('../fileTools').move(id, Number(req.body.master_id), { userId: req.user.id });
+    flash(req, 'ok', 'Moved to the other master — carrier leg updated from it');
+  } catch (e) { flash(req, 'err', e.message); }
+  res.redirect(`/shipments/${id}`);
+});
+router.post('/shipments/:id/block', auth.requirePerm('shipments_edit'), (req, res) => {
+  const id = Number(req.params.id);
+  require('../fileTools').block(id, req.body.on === '1', { reason: req.body.reason, userId: req.user.id });
+  flash(req, 'ok', req.body.on === '1' ? 'File blocked — nobody can change it until it is unblocked' : 'File unblocked');
+  res.redirect(`/shipments/${id}`);
+});
+router.post('/shipments/:id/memos', auth.requireInternal, (req, res) => {
+  require('../fileTools').addMemo(Number(req.params.id), req.body, { userId: req.user.id });
+  res.redirect(`/shipments/${req.params.id}#memos`);
+});
+router.post('/memos/:id/delete', auth.requireInternal, (req, res) => {
+  const m = store.db.get('SELECT * FROM shipment_memos WHERE id = ?', Number(req.params.id));
+  if (m && (m.user_id === req.user.id || req.user.role === 'admin')) store.db.run('DELETE FROM shipment_memos WHERE id = ?', m.id);
+  res.redirect(m ? `/shipments/${m.shipment_id}#memos` : '/shipments');
 });
 
 // ---------- accounting inside the file ----------
@@ -309,6 +349,47 @@ router.post('/shipments/:id/issue/:type', auth.requirePerm('send_notices'), asyn
   const d = await notify.generateDocument(Number(req.params.id), type, { userId: req.user.id });
   flash(req, 'ok', `${d.filename} issued`);
   res.redirect(`/shipments/${req.params.id}#docs`);
+});
+
+// ---------- send window (review recipients, subject, attachments, text before sending) ----------
+const addrList = (v) => [...new Set(String(v || '').split(/[,;\s]+/).map((e) => e.trim().toLowerCase()).filter((e) => /^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(e)))];
+router.get('/shipments/:id/email/:kind', auth.requirePerm('send_notices'), (req, res) => {
+  const d = notify.composeDefaults(req.params.kind.toUpperCase(), Number(req.params.id));
+  if (!d) return res.status(404).render('error', { title: 'Not found', message: 'Unknown email.' });
+  res.render('shipments/compose', { title: `Send email · ${d.s.ref_no}`, d, me: req.user, mailbox: config.mailTransport === 'outlook' ? config.graph.mailbox : config.mailTransport === 'smtp' ? config.smtp.from : null });
+});
+router.post('/shipments/:id/email/:kind', auth.requirePerm('send_notices'), upload.array('files', 10), auth.checkCsrf, async (req, res) => {
+  const id = Number(req.params.id);
+  const kind = req.params.kind.toUpperCase();
+  const b = req.body;
+  const arr = (v) => (Array.isArray(v) ? v : v == null ? [] : [v]);
+  const me = req.user.email && b.include_me ? [req.user.email.toLowerCase()] : [];
+  // Files added in the window go on the file too (so the paper trail is complete).
+  const extraDocs = [];
+  for (const f of req.files || []) {
+    const r = store.db.run(`INSERT INTO documents (shipment_id, doc_type, filename, stored_path, mime, size, uploaded_by) VALUES (?, 'OTHER', ?, ?, ?, ?, ?)`,
+      id, f.originalname, f.path, f.mimetype, f.size, req.user.id);
+    extraDocs.push(store.db.get('SELECT * FROM documents WHERE id = ?', Number(r.lastInsertRowid)));
+  }
+  try {
+    await notify.sendComposed({
+      kind, shipmentId: id, to: addrList(b.to), cc: addrList([b.cc, ...me].join(',')), bcc: addrList(b.bcc), replyTo: addrList(b.reply_to),
+      subject: String(b.subject || '').trim().slice(0, 300), html: String(b.html || ''), generate: arr(b.generate), docIds: arr(b.doc_ids).map(Number).filter(Boolean), extraDocs,
+    }, { userId: req.user.id });
+    flash(req, 'ok', `Email sent — a copy is on the file${config.mailTransport === 'outlook' ? ' and in Outlook Sent Items' : ''}`);
+    res.redirect(`/shipments/${id}#emails`);
+  } catch (e) {
+    flash(req, 'err', e.message);
+    res.redirect(`/shipments/${id}/email/${kind}`);
+  }
+});
+
+// Document viewer with a toolbar (print, issue PDF, email) around the preview.
+router.get('/shipments/:id/doc/:type', auth.requireInternal, (req, res) => {
+  const type = req.params.type.toUpperCase();
+  const s = S.find(Number(req.params.id), null);
+  if (!['AN', 'DO', 'ATME'].includes(type) || !s) return res.status(404).render('error', { title: 'Not found', message: 'Unknown document.' });
+  res.render('shipments/docview', { title: `${{ AN: 'Arrival notice', DO: 'Delivery order', ATME: 'ATME' }[type]} · ${s.ref_no}`, s, type });
 });
 
 // ---------- documents ----------

@@ -299,6 +299,17 @@ CREATE TABLE IF NOT EXISTS settings (
   value TEXT
 );
 
+-- Memo log on a file (who wrote what, when) — replaces notes lost in email threads.
+CREATE TABLE IF NOT EXISTS shipment_memos (
+  id INTEGER PRIMARY KEY,
+  shipment_id INTEGER NOT NULL REFERENCES shipments(id) ON DELETE CASCADE,
+  subject TEXT,
+  body TEXT,
+  user_id INTEGER REFERENCES users(id),
+  created_at TEXT NOT NULL DEFAULT (datetime('now')),
+  updated_at TEXT
+);
+
 CREATE TABLE IF NOT EXISTS sessions (
   sid TEXT PRIMARY KEY,
   data TEXT NOT NULL,
@@ -310,6 +321,8 @@ CREATE TABLE IF NOT EXISTS sessions (
 const MIGRATIONS = {
   shipments: {
     title: 'TEXT', // name of an "Other" (non-shipment) file
+    bill_to_id: 'INTEGER', sales_id: 'INTEGER', // invoice party when not the customer; sales rep
+    blocked_at: 'TEXT', blocked_by: 'INTEGER', block_reason: 'TEXT', // file locked (Tools › Block)
     profit_remark: 'TEXT', profit_ignore: 'INTEGER NOT NULL DEFAULT 0', // dashboard: negative-profit review
     pierpass_paid: 'INTEGER NOT NULL DEFAULT 0', // ocean: PierPass TMF / Clean Truck Fee paid
     master_id: 'INTEGER', // house file → its master B/L (masters)
@@ -339,6 +352,7 @@ const MIGRATIONS = {
   companies: { lost_ignored: 'INTEGER NOT NULL DEFAULT 0', types: 'TEXT', qbo_customer_id: 'TEXT', qbo_vendor_id: 'TEXT', billing_emails: 'TEXT', terms_days: 'INTEGER', short_name: 'TEXT', default_pic_id: 'INTEGER', report_frequency: 'TEXT', report_emails: 'TEXT', report_last: 'TEXT' },
   invoices: { document_id: 'INTEGER', reviewed_at: 'TEXT', reviewed_by: 'INTEGER',
     qbo_id: 'TEXT', qbo_type: 'TEXT', qbo_hash: 'TEXT', qbo_synced_at: 'TEXT', qbo_error: 'TEXT' }, // QuickBooks Online sync
+  emails: { bcc_addr: 'TEXT', reply_to: 'TEXT' },
   payments: { qbo_id: 'TEXT', qbo_synced_at: 'TEXT', qbo_error: 'TEXT' },
   documents: { invoice_id: 'INTEGER', company_id: 'INTEGER', master_id: 'INTEGER' },
   masters: { containers: 'TEXT' }, // container nos. on the MB/L (comma list) — finds the master of a house B/L without MB/L no.

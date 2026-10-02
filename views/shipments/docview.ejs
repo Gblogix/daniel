@@ -1,0 +1,13 @@
+<%- include('../partials/head') %>
+<div class="docview-bar">
+  <b><%= title %></b>
+  <span class="muted small"><%= S.fileName(s) %></span>
+  <div class="actions" style="margin-left:auto">
+    <button type="button" class="btn secondary small" onclick="document.getElementById('docframe').contentWindow.print()">🖨 Print</button>
+    <% if (can('send_notices')) { %><form method="post" action="/shipments/<%= s.id %>/issue/<%= type %>"><input type="hidden" name="_csrf" value="<%= csrf %>"><button class="btn secondary small" title="Save the PDF on the file">📄 Issue PDF</button></form>
+    <% if (type !== 'ATME') { %><a class="btn small" href="/shipments/<%= s.id %>/email/<%= type %>">✉ Email</a><% } %><% } %>
+    <a class="btn secondary small" href="/shipments/<%= s.id %>">← File</a>
+  </div>
+</div>
+<iframe id="docframe" class="docframe" src="/shipments/<%= s.id %>/preview/<%= type %>" title="<%= title %>"></iframe>
+<%- include('../partials/foot') %>

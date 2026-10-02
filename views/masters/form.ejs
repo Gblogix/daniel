@@ -10,6 +10,7 @@
 </div>
   <div class="actions"><a class="btn secondary" href="/masters">Master list</a></div>
 </div>
+<div class="<%= isNew ? '' : 'master-layout' %>"><div>
 <form method="post" action="<%= isNew ? '/masters' : `/masters/${m.id}` %>">
   <input type="hidden" name="_csrf" value="<%= csrf %>">
   <script type="application/json" id="required-fields"><%- JSON.stringify(Object.fromEntries(['FCL', 'LCL', 'AIR'].map((x) => [x, S.MASTER_REQUIRED.map(([k]) => k)]))) %></script>
@@ -36,6 +37,39 @@
   <% if (can('shipments_edit')) { %><div class="actions"><button class="btn"><%= isNew ? 'Create master' : 'Save master' %></button>
     <% if (!isNew) { %><span class="muted small">Carrier, vessel / voyage, ETD / ETA and POL / POD are copied to every house B/L below.</span><% } %></div><% } %>
 </form>
+</div>
+<% if (!isNew) { %>
+<aside class="hcards" aria-label="House B/Ls">
+  <div class="hcards-head">
+    <% if (can('shipments_edit')) { %><a class="btn small" href="/shipments/new?master=<%= m.id %>">＋ Add <%= air ? 'HAWB' : 'HB/L' %></a><% } %>
+    <select data-hsort aria-label="Sort houses"><option value="hbl">Sort: <%= air ? 'HAWB' : 'HB/L' %> no.</option><option value="customer">Sort: customer</option><option value="ar">Sort: A/R open</option></select>
+  </div>
+  <% if (!m.houses.length) { %><p class="muted small">No house yet.</p><% } %>
+  <div data-hlist>
+  <% m.houses.forEach((h, i) => { %>
+    <a class="hcard c<%= i % 4 %>" href="/shipments/<%= h.id %>" data-hbl="<%= h.hbl_no || '' %>" data-customer="<%= h.customer_name || '' %>" data-ar="<%= h.ar_open || 0 %>">
+      <div class="hc-no mono"><%= h.hbl_no || h.ref_no %></div>
+      <div class="hc-line"><%= h.shipper_name || '—' %></div>
+      <div class="hc-line"><b><%= h.customer_name || 'no customer' %></b></div>
+      <div class="hc-meta"><span class="badge <%= h.status %>"><%= S.statusLabel(h.status) %></span>
+        <% if (canAccounting) { %><span class="hc-bal" title="Open A/R / open A/P">A/R $<%= fmtNum(h.ar_open, 2) %> · A/P $<%= fmtNum(h.ap_open, 2) %></span><% } %></div>
+    </a>
+  <% }) %>
+  </div>
+</aside>
+<% } %>
+</div>
+<script>
+(() => {
+  const sel = document.querySelector('[data-hsort]'); const list = document.querySelector('[data-hlist]');
+  if (!sel || !list) return;
+  sel.addEventListener('change', () => {
+    const k = sel.value; const cards = [...list.children];
+    cards.sort((a, b) => (k === 'ar' ? Number(b.dataset.ar) - Number(a.dataset.ar) : String(a.dataset[k]).localeCompare(String(b.dataset[k]))));
+    cards.forEach((c) => list.appendChild(c));
+  });
+})();
+</script>
 
 <% if (!isNew) { %>
 <div class="card flush" style="margin-top:14px">

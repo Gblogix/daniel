@@ -26,10 +26,11 @@
         <input name="new_party_email" value="<%= nc.email || '' %>" placeholder="Notice / billing email (optional)">
         <input type="hidden" name="new_party_phone" value="<%= nc.phone || '' %>"><input type="hidden" name="new_party_type" value="customer"></div></div>
     <% } else { %><%- sel('customer_id', 'Customer (CNEE)', customers) %><% } %>
+    <%- sel('bill_to_id', 'Bill to (if not the customer)', customers) %>
     <%- ship(sel('agent_id', 'Overseas agent', agents)) %>
     <%- ship(sel('broker_id', 'Customs broker', brokers)) %>
     <%- ship(sel('trucker_id', 'Trucker', truckers)) %>
-    <% if (locals.staffUsers) { %><%- sel('owner_id', 'Person in charge (PIC) — gets the heads-up', staffUsers) %><% } %>
+    <% if (locals.staffUsers) { %><%- sel('owner_id', 'Person in charge (PIC) — gets the heads-up', staffUsers) %><%- sel('sales_id', 'Sales', staffUsers) %><% } %>
   </div>
   <% const ta = (k, label) => `<div class="field"><label for="f_${k}">${label}${src(k)}</label><textarea id="f_${k}" name="${k}" rows="2">${e(s[k])}</textarea></div>`; %>
   <div class="grid g3" data-ship-only <%= misc ? 'hidden' : '' %>>

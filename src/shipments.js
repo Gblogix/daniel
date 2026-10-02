@@ -62,9 +62,9 @@ const EDITABLE_FIELDS = [
   'picked_up_at', 'pallets', 'pod_received', 'empty_returned_at', 'tracking_enabled', 'vessel_imo', 'vessel_mmsi',
   'master_id', 'ams_bl_no', 'customer_ref', 'sub_bl_no', 'it_no', 'it_place', 'it_date', 'devan_location', 'freight_location_tel',
   'available_date', 'go_date', 'final_destination', 'service_term', 'release_type', 'consignee_address', 'notify_address',
-  'marks', 'agent_ref', 'owner_id',
+  'marks', 'agent_ref', 'owner_id', 'bill_to_id', 'sales_id',
 ];
-const NUMERIC_FIELDS = new Set(['owner_id', 'customer_id', 'agent_id', 'broker_id', 'trucker_id', 'delivery_company_id',
+const NUMERIC_FIELDS = new Set(['owner_id', 'bill_to_id', 'sales_id', 'customer_id', 'agent_id', 'broker_id', 'trucker_id', 'delivery_company_id',
   'packages', 'weight_kg', 'cbm', 'chargeable_weight', 'service_price', 'invoice_amount', 'cargo_value', 'pallets']);
 const BOOL_FIELDS = new Set(['isf_filed', 'paid', 'direct_shipment', 'telex_release', 'freight_paid', 'pierpass_paid', 'carrier_released',
   'pod_received', 'tracking_enabled']);
@@ -150,6 +150,7 @@ const RECEIVABLE = "i.status <> 'VOID' AND (i.kind = 'AR' OR (i.kind = 'DN' AND 
 const BASE_SELECT = `
   SELECT s.*, c.name AS customer_name, a.name AS agent_name, b.name AS broker_name, t.name AS trucker_name,
          d.name AS delivery_company_name, o.name AS owner_name,
+         (SELECT name FROM companies WHERE id = s.bill_to_id) AS bill_to_name, (SELECT name FROM users WHERE id = s.sales_id) AS sales_name,
          (SELECT k.container_no FROM containers k WHERE k.shipment_id = s.id ORDER BY k.id LIMIT 1) AS first_ctn,
          (SELECT COUNT(*) FROM containers k WHERE k.shipment_id = s.id) AS ctn_count,
          (SELECT COUNT(*) FROM invoices i WHERE i.shipment_id = s.id AND ${RECEIVABLE}) AS bill_count,

@@ -102,10 +102,10 @@ function latestDocs(shipmentId, types, db = store.db) {
   return out;
 }
 
-async function queueEmail({ shipmentId = null, kind, to, cc = [], subject, html, documents = [] }, { db = store.db } = {}) {
+async function queueEmail({ shipmentId = null, kind, to, cc = [], bcc = [], replyTo = [], subject, html, documents = [] }, { db = store.db } = {}) {
   const attachments = documents.map((d) => ({ id: d.id, filename: d.filename, path: d.stored_path }));
-  const res = db.run(`INSERT INTO emails (shipment_id, kind, to_addr, cc_addr, subject, body_html, attachments_json)
-    VALUES (?, ?, ?, ?, ?, ?, ?)`, shipmentId, kind, to.join(', '), cc.join(', '), subject, html, JSON.stringify(attachments));
+  const res = db.run(`INSERT INTO emails (shipment_id, kind, to_addr, cc_addr, bcc_addr, reply_to, subject, body_html, attachments_json)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`, shipmentId, kind, to.join(', '), cc.join(', '), bcc.join(', ') || null, replyTo.join(', ') || null, subject, html, JSON.stringify(attachments));
   const id = Number(res.lastInsertRowid);
   await deliver(id, { db });
   return id;
@@ -122,13 +122,15 @@ async function deliver(emailId, { db = store.db } = {}) {
       .filter((a) => a.path && fs.existsSync(a.path)).map((a) => ({ filename: a.filename, path: a.path }));
     const to = e.to_addr.split(/,\s*/).filter(Boolean);
     const cc = (e.cc_addr || '').split(/,\s*/).filter(Boolean);
+    const bcc = (e.bcc_addr || '').split(/,\s*/).filter(Boolean);
+    const replyTo = (e.reply_to || '').split(/,\s*/).filter(Boolean);
     if (config.mailTransport === 'outlook') {
       await require('./graph').sendMail({
-        to, cc, subject: e.subject, html: e.body_html,
+        to, cc, bcc, replyTo, subject: e.subject, html: e.body_html,
         attachments: files.map((f) => ({ filename: f.filename, content: fs.readFileSync(f.path) })),
       });
     } else {
-      await getTransport().sendMail({ from: config.smtp.from, to, cc: cc.length ? cc : undefined, subject: e.subject, html: e.body_html, attachments: files });
+      await getTransport().sendMail({ from: config.smtp.from, to, cc: cc.length ? cc : undefined, bcc: bcc.length ? bcc : undefined, replyTo: replyTo.length ? replyTo.join(', ') : undefined, subject: e.subject, html: e.body_html, attachments: files });
     }
     db.run("UPDATE emails SET status = 'SENT', error = NULL, sent_at = datetime('now') WHERE id = ?", emailId);
   } catch (err) {
@@ -273,7 +275,50 @@ async function onShipmentChanged(shipmentId, changes, { db = store.db, userId = 
   if (notify && reasons.length) await sendCustomerUpdate(shipmentId, reasons.join(' · '), { db, userId });
 }
 
-module.exports = {
+// ---------- compose (review before sending: GoFreight-style send window) ----------
+const COMPOSE = {
+  AN: { label: 'Arrival notice & documents → broker', party: 'broker_id', generate: (s) => (s.mode === 'AIR' ? ['AN', 'ATME'] : ['AN']), attach: ['HBL', 'MBL', 'PL', 'CI', 'ISF'], subject: 'A/N', emailKind: 'BROKER_PACKET',
+    intro: (s) => `Dear ${esc(s.broker_name || '')},<br>Please find attached the arrival notice${s.mode === 'AIR' ? ', authority to make entry' : ''} and shipping documents for customs clearance.` },
+  DO: { label: 'Delivery order → trucker', party: 'trucker_id', generate: (s) => (s.mode === 'AIR' ? ['DO', 'ATME'] : ['DO']), attach: [], subject: 'D/O', emailKind: 'DELIVERY_ORDER',
+    intro: (s) => `Dear ${esc(s.trucker_name || '')},<br>Please find attached the delivery order. Pick up at <b>${esc(s.cfs_location || s.pod || '')}</b> and deliver to <b>${esc(s.delivery_address || '')}</b>.` },
+  UPDATE: { label: 'Status update → customer', party: 'customer_id', generate: () => [], attach: [], subject: 'Shipment status update', emailKind: 'CUSTOMER_UPDATE',
+    intro: (s) => `Dear ${esc(s.customer_name || '')},<br>Shipment status update for your shipment ${esc(s.ref_no)}.` },
+  BLANK: { label: 'New email', party: 'customer_id', generate: () => [], attach: [], subject: '', emailKind: 'MANUAL', intro: (s) => `Dear ${esc(s.customer_name || '')},<br>` },
+};
+
+/** Everything the send window starts with. */
+function composeDefaults(kind, shipmentId, { db = store.db } = {}) {
+  const c = COMPOSE[kind];
+  if (!c) return null;
+  const s = S.find(shipmentId, null, { db });
+  const latest = latestDocs(s.id, c.attach, db).map((d) => d.id);
+  const docs = db.all(`SELECT id, doc_type, filename, created_at FROM documents WHERE shipment_id = ? AND doc_type NOT IN ('VINV') ORDER BY id DESC`, s.id);
+  // Addresses used before on this file and of every party on it — suggestions for To / CC / BCC.
+  const used = db.all('SELECT to_addr, cc_addr FROM emails WHERE shipment_id = ? ORDER BY id DESC LIMIT 50', s.id).flatMap((e) => `${e.to_addr},${e.cc_addr || ''}`.split(/[,;\s]+/));
+  const partyMails = ['customer_id', 'broker_id', 'trucker_id', 'agent_id', 'delivery_company_id', 'bill_to_id'].flatMap((k) => recipients(s[k], db));
+  const suggestions = [...new Set([...partyMails, ...used].map((e) => e.trim().toLowerCase()).filter((e) => /.+@.+\..+/.test(e)))];
+  return {
+    kind, label: c.label, s, to: recipients(s[c.party], db), cc: [], subject: subjectLine(s, c.subject), html: summaryHtml(s, c.intro(s)),
+    generate: c.generate(s), docs: docs.map((d) => ({ ...d, checked: latest.includes(d.id) })), suggestions, partyMissing: !s[c.party],
+  };
+}
+
+/** Send what the person reviewed: generate the notices ticked, attach the files ticked, then the usual follow-ups. */
+async function sendComposed({ kind, shipmentId, to, cc = [], bcc = [], replyTo = [], subject, html, generate = [], docIds = [], extraDocs = [] }, { db = store.db, userId = null } = {}) {
+  const c = COMPOSE[kind];
+  const s = S.find(shipmentId, null, { db });
+  if (!to.length) throw new Error('Add at least one recipient');
+  const made = [];
+  for (const t of generate.filter((x) => c.generate(s).includes(x))) made.push(await generateDocument(s.id, t, { db, userId }));
+  const picked = docIds.length ? db.all(`SELECT * FROM documents WHERE shipment_id = ? AND id IN (${docIds.map(() => '?').join(',')})`, s.id, ...docIds) : [];
+  const id = await queueEmail({ shipmentId: s.id, kind: c.emailKind, to, cc, bcc, replyTo, subject, html, documents: [...made, ...picked, ...extraDocs] }, { db });
+  if (kind === 'AN') { db.run("UPDATE shipments SET an_sent_at = datetime('now') WHERE id = ?", s.id); S.addEvent(s.id, 'AN_SENT', `Arrival notice & documents sent (${to.join(', ')})`, { db, userId }); }
+  else if (kind === 'DO') { db.run("UPDATE shipments SET do_sent_at = datetime('now') WHERE id = ?", s.id); S.addEvent(s.id, 'DO_SENT', `Delivery order sent (${to.join(', ')})`, { db, userId }); }
+  else S.addEvent(s.id, 'EMAIL_SENT', `Email sent: ${subject}`, { db, userId, customerVisible: false });
+  return id;
+}
+
+module.exports = { COMPOSE, composeDefaults, sendComposed,
   docContext, storeGenerated, subjectLine, recipients, generateDocument, queueEmail, deliver, summaryHtml,
   sendBrokerPacket, sendCustomerUpdate, sendDeliveryOrder, onDocumentsApplied, onShipmentChanged,
 };

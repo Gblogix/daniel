@@ -40,12 +40,14 @@ async function graph(path, { method = 'GET', body, fetchImpl = fetch, headers = 
 const recipients = (list) => list.filter(Boolean).map((address) => ({ emailAddress: { address } }));
 
 /** Send an email from the configured mailbox (saved to its Sent Items). attachments: [{filename, content: Buffer}] */
-async function sendMail({ to, cc = [], subject, html, attachments = [] }, { fetchImpl } = {}) {
+async function sendMail({ to, cc = [], bcc = [], replyTo = [], subject, html, attachments = [] }, { fetchImpl } = {}) {
   const message = {
     subject,
     body: { contentType: 'HTML', content: html },
     toRecipients: recipients(to),
     ccRecipients: recipients(cc),
+    ...(bcc.length ? { bccRecipients: recipients(bcc) } : {}),
+    ...(replyTo.length ? { replyTo: recipients(replyTo) } : {}),
     attachments: attachments.map((a) => ({
       '@odata.type': '#microsoft.graph.fileAttachment', name: a.filename, contentBytes: a.content.toString('base64'),
     })),

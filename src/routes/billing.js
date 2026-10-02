@@ -48,7 +48,7 @@ router.get('/invoices/new', auth.requireAccounting, (req, res) => {
   const inv = { kind, shipment_id: s?.id || null, invoice_date: new Date().toISOString().slice(0, 10), currency: 'USD', lines: [] };
   if (s) {
     if (kind === 'AR') {
-      inv.company_id = S.guessCustomer(s); inv.guessed_party = !s.customer_id && Boolean(inv.company_id);
+      inv.company_id = s.bill_to_id || S.guessCustomer(s); inv.guessed_party = !s.customer_id && !s.bill_to_id && Boolean(inv.company_id);
       // Consignee on the B/L that is not on Parties yet → "＋ New customer" pre-picked.
       if (!inv.company_id && s.consignee_name && !/^(TO\s+(THE\s+)?ORDER|SAME\s+AS)/i.test(s.consignee_name) && !require('../extract/party').findParty(s.consignee_name)) {
         inv.new_party = { name: s.consignee_name, address: s.consignee_address };
