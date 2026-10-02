@@ -30,7 +30,7 @@ const MENU = [
   ] },
   { key: 'documents', label: 'Documents', icon: '📄', cols: [
     { head: 'Intake', items: [
-      { id: 'intake', label: 'Document intake (review)', href: '/intakes' },
+      { id: 'intake', label: 'Document hub (review uploads)', href: '/intakes' },
       { id: 'upload', label: 'Upload documents', href: '/portal' },
     ] },
     { head: 'Email', items: [{ id: 'outbox', label: 'Outbox / sent notices', href: '/outbox' }] },
@@ -118,7 +118,7 @@ const RAIL = [
   ] },
   { key: 'docs', label: 'Documents', icon: 'doc', groups: [
     { head: 'Documents', items: [
-      { label: 'Document intake (review)', href: '/intakes' },
+      { label: 'Document hub (review uploads)', href: '/intakes' },
       { label: 'Upload documents', href: '/portal' },
       { label: 'Outbox / sent emails', href: '/outbox' },
       { label: 'Shipment history (closed)', href: '/history' },

@@ -96,15 +96,17 @@ function findMatch(draft, db = store.db) {
 
 // ---------- staff review ----------
 router.get('/intakes', auth.requireInternal, (req, res) => {
-  const status = req.query.status || 'PENDING';
-  const rows = store.db.all(`SELECT i.*, a.name AS agent_name, u.name AS uploader, s.ref_no FROM intakes i
+  // Ongoing = waiting for review; Done = applied or rejected (older names PENDING / APPLIED / REJECTED still work).
+  const tab = req.query.status === 'APPLIED' || req.query.status === 'REJECTED' || req.query.tab === 'done' ? 'done' : 'ongoing';
+  const rows = store.db.all(`SELECT i.*, a.name AS agent_name, u.name AS uploader, s.ref_no, s.hbl_no AS s_hbl FROM intakes i
     LEFT JOIN companies a ON a.id = i.agent_id LEFT JOIN users u ON u.id = i.uploaded_by LEFT JOIN shipments s ON s.id = i.shipment_id
-    WHERE i.status = ? ORDER BY i.id DESC LIMIT 200`, status);
+    WHERE ${tab === 'done' ? "i.status IN ('APPLIED', 'REJECTED')" : "i.status = 'PENDING'"} ORDER BY i.id DESC LIMIT 200`);
   for (const r of rows) {
     r.draft = JSON.parse(r.extracted_json || '{}').draft || {};
-    r.docs = store.db.all('SELECT id, doc_type, filename FROM documents WHERE intake_id = ?', r.id);
+    r.docs = store.db.all('SELECT id, doc_type, filename, mime FROM documents WHERE intake_id = ?', r.id);
   }
-  res.render('intakes/list', { title: 'Document intake', rows, status });
+  const counts = store.db.get("SELECT SUM(status = 'PENDING') AS ongoing, SUM(status IN ('APPLIED', 'REJECTED')) AS done FROM intakes");
+  res.render('intakes/list', { title: 'Document hub', rows, tab, status: tab === 'done' ? 'APPLIED' : 'PENDING', counts });
 });
 
 router.get('/intakes/:id', auth.requireInternal, (req, res) => {
@@ -165,6 +167,12 @@ router.post('/intakes/:id/apply', auth.requirePerm('intake'), async (req, res) =
   const intake = db.get("SELECT * FROM intakes WHERE id = ? AND status = 'PENDING'", Number(req.params.id));
   if (!intake) return res.status(404).render('error', { title: 'Not found', message: 'Intake not found or already processed.' });
   if (req.body.plan === 'master' || req.body.plan === 'multi') return applyPlan(req, res, intake);
+  return applySingle(req, res, intake);
+});
+
+/** One file from the upload: create it, or update the chosen one with the form (in-entry or side-by-side review). */
+async function applySingle(req, res, intake) {
+  const db = store.db;
   const targetId = req.body.target === 'new' ? null : Number(req.body.target) || null;
   let id;
   require('./shipments').stripAccounting(req);
@@ -195,8 +203,100 @@ router.post('/intakes/:id/apply', auth.requirePerm('intake'), async (req, res) =
   require('../tracking').refreshSoon(id, { userId: req.user.id });
   if (req.body.send_notices) await notify.onDocumentsApplied(id, { userId: req.user.id });
   else S.addEvent(id, 'DOCS_RECEIVED', 'Shipping documents received from origin agent', { userId: req.user.id });
-  req.session.flash = { type: 'ok', msg: `Documents applied to shipment${req.body.send_notices ? ' — notices sent' : ''}${added ? ` · ${added} added to Parties as a new customer` : ''}` };
+  req.session.flash = { type: 'ok', msg: `Documents ${targetId ? `applied to ${db.get('SELECT ref_no FROM shipments WHERE id = ?', id).ref_no}` : 'saved as a new file'}${req.body.send_notices ? ' — notices sent' : ''}${added ? ` · ${added} added to Parties as a new customer` : ''}` };
   res.redirect(`/shipments/${id}`);
+}
+
+// ---------- side-by-side review: the document on the left, field by field on the right ----------
+const SIDE_STEPS = [
+  { key: 'master', title: 'Audit MB/L · carrier leg', fields: [['mode', 'Mode'], ['mbl_no', 'MB/L · MAWB no.'], ['carrier', 'Carrier / airline'], ['scac', 'SCAC'],
+    ['vessel', 'Vessel'], ['voyage', 'Voyage'], ['flight_no', 'Flight'], ['etd', 'ETD'], ['eta', 'ETA'], ['pol', 'Port of loading'], ['pod', 'Port of discharge'],
+    ['place_of_delivery', 'Place of delivery'], ['service_term', 'Service term'], ['containers', 'Containers']] },
+  { key: 'house', title: 'Audit HB/L · parties & cargo', fields: [['hbl_no', 'HB/L · HAWB no.'], ['sub_bl_no', 'Sub B/L'], ['agent_ref', 'Agent filing no.'], ['ams_bl_no', 'AMS B/L'],
+    ['customer_id', 'Customer (CNEE)'], ['shipper_name', 'Shipper'], ['shipper_address', 'Shipper address'], ['consignee_name', 'Consignee'], ['consignee_address', 'Consignee address'],
+    ['notify_party', 'Notify party'], ['packages', 'Packages'], ['package_unit', 'Package unit'], ['weight_kg', 'Weight (KG)'], ['cbm', 'CBM'], ['chargeable_weight', 'Chargeable weight'],
+    ['commodity', 'Commodity'], ['ci_invoice_no', 'Invoice no.'], ['items', 'Cargo lines (P/L)']] },
+  { key: 'docs', title: 'Documents', fields: [] },
+];
+
+function sideRows(draft, target, customers) {
+  const name = (id) => customers.find((c) => String(c.id) === String(id))?.name || '';
+  const show = (k, v, s) => {
+    if (k === 'containers') return (v || []).map((c) => c.container_no).join(', ');
+    if (k === 'items') return (v || []).length ? `${v.length} line(s)${s ? '' : ''}` : '';
+    if (k === 'customer_id') return name(v);
+    return v == null ? '' : String(v);
+  };
+  return SIDE_STEPS.map((st) => ({ ...st, rows: st.fields.map(([k, label]) => {
+    const cur = target ? (k === 'items' ? target.items : target[k]) : null;
+    const ext = draft[k];
+    const curT = show(k, cur); const extT = show(k, ext);
+    const differs = extT !== '' && extT.toUpperCase().replace(/\s+/g, ' ') !== curT.toUpperCase().replace(/\s+/g, ' ');
+    return { k, label, cur: curT, ext: extT, value: k === 'customer_id' ? (ext || cur || '') : (extT || curT), differs, list: ['containers', 'items'].includes(k) };
+  }) }));
+}
+
+router.get('/intakes/:id/side', auth.requireInternal, (req, res) => {
+  const db = store.db;
+  const intake = db.get('SELECT i.*, a.name AS agent_name FROM intakes i LEFT JOIN companies a ON a.id = i.agent_id WHERE i.id = ?', Number(req.params.id));
+  if (!intake) return res.status(404).render('error', { title: 'Not found', message: 'Intake not found.' });
+  const docs = db.all('SELECT * FROM documents WHERE intake_id = ?', intake.id);
+  if (intake.status === 'PENDING' && require('../intakePlan').plan(docs).kind !== 'single') return res.redirect(`/intakes/${intake.id}`);
+  const { draft = {} } = JSON.parse(intake.extracted_json || '{}');
+  const customers = db.all(`SELECT id, name FROM companies WHERE ${PT.sql(['customer', 'importer'])} ORDER BY name`);
+  // Customer read from the B/L (consignee, or notify when "to order").
+  if (!draft.customer_id) {
+    const nm = /^TO\s+(THE\s+)?ORDER/i.test(draft.consignee_name || '') ? draft.notify_party : draft.consignee_name;
+    const hit = nm ? Party.findParty(nm, { types: ['customer', 'importer'] }) : null;
+    if (hit) draft.customer_id = hit.id;
+  }
+  const mode = req.query.target === 'new' ? 'new' : req.query.target ? 'update' : intake.shipment_id ? 'update' : 'new';
+  const targetId = mode === 'update' ? Number(req.query.target) || intake.shipment_id : null;
+  const target = targetId ? S.find(targetId, null) : null;
+  const openShipments = db.all("SELECT id, ref_no, mbl_no, hbl_no FROM shipments WHERE closed_at IS NULL AND mode <> 'OTHER' ORDER BY id DESC LIMIT 300");
+  const docId = Number(req.query.doc) || docs.find((d) => d.mime === 'application/pdf')?.id || docs[0]?.id;
+  res.render('intakes/side', { title: `Review #${intake.id}`, intake, docs, docId, draft, target, mode: target ? 'update' : 'new', openShipments, customers,
+    steps: sideRows(draft, target, customers), matched: intake.shipment_id });
+});
+
+router.post('/intakes/:id/side', auth.requirePerm('intake'), async (req, res) => {
+  const db = store.db;
+  const intake = db.get("SELECT * FROM intakes WHERE id = ? AND status = 'PENDING'", Number(req.params.id));
+  if (!intake) return res.status(404).render('error', { title: 'Not found', message: 'Intake not found or already processed.' });
+  const { draft = {} } = JSON.parse(intake.extracted_json || '{}');
+  const b = req.body;
+  const isNew = b.target === 'new';
+  const P = require('../intakePlan');
+  const full = P.bodyFromDraft(draft);
+  const body = isNew ? { ...full, agent_id: intake.agent_id || '' } : {};
+  for (const st of SIDE_STEPS) {
+    for (const [k] of st.fields) {
+      const use = isNew || b[`use_${k}`];
+      if (!use) continue;
+      if (k === 'containers') { for (const c of Object.keys(full).filter((x) => x.startsWith('ctn_'))) body[c] = full[c]; continue; }
+      if (k === 'items') {
+        const cur = isNew ? [] : S.find(Number(b.target), null)?.items || [];
+        const merged = S.mergeItems(cur, draft.items || []);
+        const col = (x) => merged.map((i) => i[x] ?? '');
+        Object.assign(body, { item_buyer: col('buyer'), item_inv: col('invoice_no'), item_po: col('po_no'), item_desc: col('description'), item_hs: col('hs_code'), item_qty: col('quantity'),
+          item_unit: col('unit'), item_pkgs: col('packages'), item_kg: col('weight_kg'), item_cbm: col('cbm'), item_price: col('unit_price'), item_amount: col('amount') });
+        continue;
+      }
+      if (`u_${k}` in b) body[k] = b[`u_${k}`];
+    }
+  }
+  body.target = isNew ? 'new' : String(Number(b.target) || '');
+  if (!isNew && !Number(b.target)) { req.session.flash = { type: 'err', msg: 'Pick the file to update' }; return res.redirect(`/intakes/${intake.id}/side`); }
+  if (b.send_notices) body.send_notices = '1';
+  req.body = body;
+  return applySingle(req, res, intake);
+});
+
+/** "How was the reading?" — 👎 uploads are kept for improving the reader. */
+router.post('/intakes/:id/feedback', auth.requireInternal, (req, res) => {
+  store.db.run('UPDATE intakes SET feedback = ?, feedback_note = ? WHERE id = ?', req.body.good === '1' ? 1 : 0, String(req.body.note || '').slice(0, 500) || null, Number(req.params.id));
+  if (req.get('accept')?.includes('json')) return res.json({ ok: true });
+  res.redirect(req.get('referer') || `/intakes/${req.params.id}/side`);
 });
 
 /** Apply a master-only or multi-house upload: master (created / filled), then one house file per HB/L. */

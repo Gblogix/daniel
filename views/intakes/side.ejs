@@ -1,0 +1,85 @@
+<%- include('../partials/head') %>
+<% const doc = docs.find((d) => d.id === docId); const isPdf = doc && (doc.mime === 'application/pdf' || /\.pdf$/i.test(doc.filename)); const isImg = doc && /^image\//.test(doc.mime || ''); %>
+<div class="pagehead"><div><h1 style="margin-bottom:4px">Document preview &amp; data review <span class="badge <%= intake.status %>">#<%= intake.id %></span></h1>
+  <div class="muted small">From <%= intake.agent_name || 'unknown sender' %> · <%= fmtDateTime(intake.created_at) %> UTC</div></div>
+  <div class="actions"><a class="btn secondary" href="/intakes/<%= intake.id %>">In-entry review</a><a class="btn secondary" href="/intakes">← Document hub</a></div></div>
+<% if ((draft.warnings || []).length) { %><div class="warnbox"><b>Please check</b><ul><% draft.warnings.forEach((w) => { %><li><%= w %></li><% }) %></ul></div><% } %>
+<div class="side">
+  <div class="side-doc card">
+    <form method="get" class="side-doc-head"><label class="small muted" for="docsel">File preview</label>
+      <input type="hidden" name="target" value="<%= mode === 'new' ? 'new' : target.id %>">
+      <select id="docsel" name="doc" onchange="this.form.submit()"><% docs.forEach((d) => { %><option value="<%= d.id %>" <%= d.id === docId ? 'selected' : '' %>><%= d.doc_type %> — <%= d.filename %></option><% }) %></select>
+      <% if (doc) { %><a class="btn secondary small" href="/documents/<%= doc.id %>" target="_blank" rel="noopener">Open ↗</a><% } %></form>
+    <% if (isPdf) { %><iframe class="side-frame" src="/documents/<%= doc.id %>#view=FitH" title="<%= doc.filename %>"></iframe>
+    <% } else if (isImg) { %><div class="side-frame side-img"><img src="/documents/<%= doc.id %>" alt="<%= doc.filename %>"></div>
+    <% } else { %><div class="side-frame side-none"><p class="muted">No preview for this file type — use <b>Open ↗</b>.</p></div><% } %>
+    <form method="post" action="/intakes/<%= intake.id %>/feedback" class="side-fb"><input type="hidden" name="_csrf" value="<%= csrf %>">
+      <span class="small muted">How was the reading?</span>
+      <button class="btn secondary small <%= intake.feedback === 0 ? 'on' : '' %>" name="good" value="0" title="Keep this upload to improve the reader">👎 Bad</button>
+      <button class="btn secondary small <%= intake.feedback === 1 ? 'on' : '' %>" name="good" value="1">👍 Good</button>
+      <input name="note" class="small" placeholder="What was wrong? (optional)" value="<%= intake.feedback_note || '' %>"></form>
+  </div>
+
+  <div class="side-data card">
+    <form method="get" class="side-target" id="targetform">
+      <input type="hidden" name="doc" value="<%= docId %>">
+      <label class="check"><input type="radio" name="target" value="new" <%= mode === 'new' ? 'checked' : '' %> onchange="this.form.submit()"> Create new shipment</label>
+      <label class="check"><input type="radio" name="tmode" value="update" <%= mode === 'update' ? 'checked' : '' %> onchange="document.getElementById('tsel').disabled=false;document.getElementById('tsel').focus()"> Update existing shipment</label>
+      <select id="tsel" name="target" <%= mode === 'update' ? '' : 'disabled' %> onchange="this.form.submit()" aria-label="File to update">
+        <option value="">— pick the file —</option>
+        <% openShipments.forEach((o) => { %><option value="<%= o.id %>" <%= target && target.id === o.id ? 'selected' : '' %>><%= o.ref_no %> · <%= o.hbl_no || '' %> · <%= o.mbl_no || '' %><%= matched === o.id ? ' (matched)' : '' %></option><% }) %>
+      </select>
+      <div class="side-file"><span class="muted small">File no.</span> <b><%= target ? target.ref_no : 'New shipment' %></b></div>
+    </form>
+    <ol class="stepper" id="stepper"><% steps.forEach((st, i) => { %><li data-step="<%= i %>" class="<%= i === 0 ? 'on' : '' %>"><span><%= i + 1 %></span><%= st.title %></li><% }) %></ol>
+    <form method="post" action="/intakes/<%= intake.id %>/side" id="sideform">
+      <input type="hidden" name="_csrf" value="<%= csrf %>"><input type="hidden" name="target" value="<%= mode === 'new' ? 'new' : target.id %>">
+      <% steps.forEach((st, i) => { %>
+      <section class="side-step" data-step="<%= i %>" <%= i === 0 ? '' : 'hidden' %>>
+        <% if (st.rows.length) { %>
+        <table class="t side-table">
+          <thead><tr><th>Field</th><% if (mode === 'update') { %><th>Current data</th><% } %><th>Extracted</th><th>Update data</th><% if (mode === 'update') { %><th title="Apply this field">✓</th><% } %></tr></thead>
+          <% st.rows.forEach((r) => { %><tr class="<%= mode === 'update' && r.differs ? 'diff' : '' %>">
+            <th scope="row"><%= r.label %></th>
+            <% if (mode === 'update') { %><td class="small cur"><%= r.cur || '—' %></td><% } %>
+            <td class="small ext"><%= r.ext || '—' %></td>
+            <td><% if (r.list) { %><span class="small"><%= r.ext || r.cur || '—' %></span><% } else if (r.k === 'customer_id') { %>
+                <select name="u_customer_id" data-use="customer_id"><option value="">—</option><% customers.forEach((c) => { %><option value="<%= c.id %>" <%= String(r.value) === String(c.id) ? 'selected' : '' %>><%= c.name %></option><% }) %></select>
+              <% } else if (r.k === 'mode') { %><select name="u_mode" data-use="mode"><% Object.entries(S.MODES).filter(([k]) => k !== 'OTHER').forEach(([k, m]) => { %><option value="<%= k %>" <%= r.value === k ? 'selected' : '' %>><%= m.label %></option><% }) %></select>
+              <% } else if (/address/.test(r.k)) { %><textarea name="u_<%= r.k %>" rows="2" data-use="<%= r.k %>"><%= r.value %></textarea>
+              <% } else { %><input name="u_<%= r.k %>" value="<%= r.value %>" data-use="<%= r.k %>" <%= ['etd', 'eta'].includes(r.k) ? 'type=date' : '' %>><% } %></td>
+            <% if (mode === 'update') { %><td><input type="checkbox" name="use_<%= r.k %>" value="1" <%= r.differs ? 'checked' : '' %> aria-label="Apply <%= r.label %>"></td><% } %>
+          </tr><% }) %>
+        </table>
+        <% } else { %>
+          <p class="small">These documents go on <b><%= target ? target.ref_no : 'the new file' %></b>:</p>
+          <ul class="side-docs"><% docs.forEach((d) => { %><li><span class="badge"><%= d.doc_type %></span> <%= d.filename %></li><% }) %></ul>
+          <label class="check"><input type="checkbox" name="send_notices" value="1"> Send notices now (A/N + documents → broker, shipment details → customer)</label>
+          <% if (mode === 'update') { %><p class="muted small">Only the ticked fields change on <%= target.ref_no %>; everything else stays as it is.</p><% } %>
+        <% } %>
+      </section>
+      <% }) %>
+      <div class="side-nav">
+        <a class="btn secondary" href="/intakes">Cancel</a>
+        <button type="button" class="btn secondary" data-prev disabled>Previous</button>
+        <button type="button" class="btn" data-next>Next</button>
+        <% if (can('intake')) { %><button class="btn" data-save hidden><%= mode === 'new' ? '✔ Create shipment' : `✔ Update ${target.ref_no}` %></button><% } %>
+      </div>
+    </form>
+  </div>
+</div>
+<script>
+(() => {
+  const steps = [...document.querySelectorAll('.side-step')]; const marks = [...document.querySelectorAll('#stepper li')];
+  const prev = document.querySelector('[data-prev]'); const next = document.querySelector('[data-next]'); const save = document.querySelector('[data-save]');
+  let at = 0;
+  const go = (i) => { at = Math.max(0, Math.min(steps.length - 1, i)); steps.forEach((s, k) => { s.hidden = k !== at; });
+    marks.forEach((m, k) => { m.classList.toggle('on', k === at); m.classList.toggle('done', k < at); });
+    prev.disabled = at === 0; next.hidden = at === steps.length - 1; if (save) save.hidden = at !== steps.length - 1; };
+  prev.onclick = () => go(at - 1); next.onclick = () => go(at + 1);
+  marks.forEach((m, k) => { m.onclick = () => go(k); });
+  // Editing a value ticks its "apply" box.
+  document.querySelectorAll('[data-use]').forEach((el) => el.addEventListener('input', () => { const c = document.querySelector(`[name="use_${el.dataset.use}"]`); if (c) c.checked = true; }));
+})();
+</script>
+<%- include('../partials/foot') %>

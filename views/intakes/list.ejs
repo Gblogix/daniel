@@ -1,34 +1,39 @@
 <%- include('../partials/head') %>
-<div class="pagehead"><h1>Document intake</h1>
+<div class="pagehead"><h1>Document hub</h1>
   <div class="actions">
-    <div class="seg"><% ['PENDING', 'APPLIED', 'REJECTED'].forEach((st) => { %><a class="<%= status === st ? 'on' : '' %>" href="?status=<%= st %>"><%= st[0] + st.slice(1).toLowerCase() %></a><% }) %></div>
-    <a class="btn" href="/portal">+ Upload documents</a>
+    <a class="btn" href="/portal">⬆ Upload file</a>
+    <% if (canAccounting) { %><a class="btn secondary" href="/vendor-bills">⬆ Upload invoice</a><% } %>
   </div>
 </div>
-<% const canDel = can('intake'); %>
+<p class="muted small" style="margin-top:-8px">Drop a pre-alert, MB/L, HB/L, AWB, C/I or P/L — the system reads it, then you review it here: <b>In-entry review</b> (the full file form) or <b>Side-by-side review</b> (the document next to each field, to create a file or update an existing one).</p>
+<div class="filters">
+  <div class="seg"><a class="<%= tab === 'ongoing' ? 'on' : '' %>" href="?tab=ongoing">Ongoing <span class="count"><%= counts.ongoing || 0 %></span></a><a class="<%= tab === 'done' ? 'on' : '' %>" href="?tab=done">Done <span class="count"><%= counts.done || 0 %></span></a></div>
+</div>
+<% const canDel = can('intake'); const fmt = (r) => { const t = new Set(r.docs.map((d) => /pdf/.test(d.mime || '') ? 'PDF' : /sheet|excel/.test(d.mime || '') ? 'Excel' : /image/.test(d.mime || '') ? 'Image' : 'File')); return r.docs.length > 1 ? `Multiple files (${r.docs.length})` : [...t][0] || '—'; }; %>
 <form method="post" action="/intakes/delete" data-bulk>
 <input type="hidden" name="_csrf" value="<%= csrf %>"><input type="hidden" name="status" value="<%= status %>">
 <% if (canDel && rows.length) { %><div class="actions" style="margin-bottom:8px">
   <button class="btn danger small" data-bulk-btn disabled data-confirm="Delete the checked uploads? Documents not applied to a file are removed.">🗑 Delete selected (<span data-bulk-count>0</span>)</button>
   <span class="muted small">Documents already applied to a file stay on the file.</span></div><% } %>
 <div class="tablewrap"><table class="t">
-  <thead><tr><% if (canDel) { %><th style="width:28px"><input type="checkbox" data-bulk-all title="Select all"></th><% } %><th>#</th><th>Received</th><th>Agent</th><th>Documents</th><th>MBL / HBL</th><th>Containers</th><th>ETA</th><th>Match</th><th>Method</th><th></th></tr></thead>
+  <thead><tr><% if (canDel) { %><th style="width:28px"><input type="checkbox" data-bulk-all title="Select all"></th><% } %><th>File name</th><th>Related shipment</th><th>Uploaded at</th><th>Format</th><th>Status</th><th>Action</th></tr></thead>
   <tbody>
-  <% if (!rows.length) { %><tr><td colspan="11" class="muted">Nothing here.</td></tr><% } %>
+  <% if (!rows.length) { %><tr><td colspan="7" class="muted"><%= tab === 'ongoing' ? '✔ Nothing waiting for review.' : 'Nothing here yet.' %></td></tr><% } %>
   <% rows.forEach((r) => { %>
     <tr>
       <% if (canDel) { %><td><input type="checkbox" name="ids" value="<%= r.id %>" data-bulk-item></td><% } %>
-      <td><%= r.id %></td>
-      <td class="nowrap small"><%= fmtDateTime(r.created_at) %><br><span class="muted"><%= r.uploader %></span></td>
-      <td><%= r.agent_name || '—' %></td>
-      <td><% r.docs.forEach((d) => { %><span class="badge" title="<%= d.filename %>"><%= d.doc_type %></span> <% }) %></td>
-      <td class="mono small"><%= r.draft.mbl_no || '—' %><br><%= r.draft.hbl_no || '—' %></td>
-      <td class="mono small"><%= (r.draft.containers || []).map((c) => c.container_no).join(', ') %></td>
-      <td><%= r.draft.eta || '' %></td>
-      <td><%= r.ref_no ? r.ref_no : 'New' %></td>
-      <td class="small"><%= { ai: 'AI', ocr: 'OCR', rules: 'Text' }[r.extraction_method] || 'Text' %><% if ((r.draft.warnings || []).length) { %> <span class="badge ARRIVED">⚠ <%= r.draft.warnings.length %></span><% } %></td>
-      <td class="nowrap"><a class="btn small <%= r.status === 'PENDING' ? '' : 'secondary' %>" href="/intakes/<%= r.id %>"><%= r.status === 'PENDING' ? 'Review' : 'View' %></a>
-        <% if (canDel) { %><button class="btn secondary small" name="one" value="<%= r.id %>" title="Delete this upload" data-confirm="Delete upload #<%= r.id %>?">🗑</button><% } %></td>
+      <td><% r.docs.slice(0, 3).forEach((d) => { %><div class="small"><span class="badge"><%= d.doc_type %></span> <%= d.filename %></div><% }) %>
+        <% if (r.docs.length > 3) { %><div class="muted small">+ <%= r.docs.length - 3 %> more</div><% } %>
+        <div class="muted small mono"><%= [r.draft.mbl_no && `MBL ${r.draft.mbl_no}`, r.draft.hbl_no && `HBL ${r.draft.hbl_no}`, (r.draft.containers || []).length && `${r.draft.containers.length} ctn`, r.draft.eta && `ETA ${r.draft.eta}`].filter(Boolean).join(' · ') %></div></td>
+      <td><% if (r.shipment_id) { %><a href="/shipments/<%= r.shipment_id %>"><b><%= r.ref_no %></b></a><br><span class="muted small"><%= r.s_hbl || '' %></span><% } else { %><span class="muted">New file</span><% } %></td>
+      <td class="nowrap small"><%= fmtDateTime(r.created_at) %><br><span class="muted"><%= r.uploader || r.agent_name || '' %></span></td>
+      <td class="small"><%= fmt(r) %></td>
+      <td><span class="badge <%= r.status === 'PENDING' ? 'ARRIVED' : r.status === 'APPLIED' ? 'paid' : 'unpaid' %>"><%= { PENDING: 'Pending review', APPLIED: 'Applied', REJECTED: 'Rejected' }[r.status] %></span>
+        <% if ((r.draft.warnings || []).length) { %><span class="badge EXAM" title="<%= r.draft.warnings.join(' · ') %>">⚠ <%= r.draft.warnings.length %></span><% } %>
+        <% if (r.feedback === 0) { %><span class="badge unpaid" title="<%= r.feedback_note || 'Marked as read badly' %>">👎 reading</span><% } %></td>
+      <td class="nowrap">
+        <% if (r.status === 'PENDING') { %><a class="btn small" href="/intakes/<%= r.id %>">In-entry review</a> <a class="btn small secondary" href="/intakes/<%= r.id %>/side">Side-by-side review</a><% } else { %><a class="btn small secondary" href="/intakes/<%= r.id %>">View</a><% } %>
+        <% if (canDel) { %><button class="btn secondary small" name="one" value="<%= r.id %>" title="Delete this upload" data-confirm="Delete upload #<%= r.id %>?">Delete</button><% } %></td>
     </tr>
   <% }) %>
   </tbody>
