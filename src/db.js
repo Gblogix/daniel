@@ -310,6 +310,7 @@ CREATE TABLE IF NOT EXISTS sessions (
 const MIGRATIONS = {
   shipments: {
     title: 'TEXT', // name of an "Other" (non-shipment) file
+    profit_remark: 'TEXT', profit_ignore: 'INTEGER NOT NULL DEFAULT 0', // dashboard: negative-profit review
     pierpass_paid: 'INTEGER NOT NULL DEFAULT 0', // ocean: PierPass TMF / Clean Truck Fee paid
     master_id: 'INTEGER', // house file → its master B/L (masters)
     bl_invoices: 'TEXT', // commercial invoice nos. the B/L names (UB005, EZVC_TGT_26-09…) — P/L expected for each
@@ -335,7 +336,7 @@ const MIGRATIONS = {
     empty_returned_at: 'TEXT', current_status: 'TEXT', location: 'TEXT', pickup_no: 'TEXT',
   },
   cargo_items: { unit_price: 'REAL', amount: 'REAL', source: 'TEXT', invoice_no: 'TEXT', buyer: 'TEXT' }, // buyer = final buyer (Target, Nordstrom…)
-  companies: { types: 'TEXT', qbo_customer_id: 'TEXT', qbo_vendor_id: 'TEXT', billing_emails: 'TEXT', terms_days: 'INTEGER', short_name: 'TEXT', default_pic_id: 'INTEGER', report_frequency: 'TEXT', report_emails: 'TEXT', report_last: 'TEXT' },
+  companies: { lost_ignored: 'INTEGER NOT NULL DEFAULT 0', types: 'TEXT', qbo_customer_id: 'TEXT', qbo_vendor_id: 'TEXT', billing_emails: 'TEXT', terms_days: 'INTEGER', short_name: 'TEXT', default_pic_id: 'INTEGER', report_frequency: 'TEXT', report_emails: 'TEXT', report_last: 'TEXT' },
   invoices: { document_id: 'INTEGER', reviewed_at: 'TEXT', reviewed_by: 'INTEGER',
     qbo_id: 'TEXT', qbo_type: 'TEXT', qbo_hash: 'TEXT', qbo_synced_at: 'TEXT', qbo_error: 'TEXT' }, // QuickBooks Online sync
   payments: { qbo_id: 'TEXT', qbo_synced_at: 'TEXT', qbo_error: 'TEXT' },

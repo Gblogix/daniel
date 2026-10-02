@@ -206,7 +206,7 @@ function etaOrder(alias, dir) {
   return `(COALESCE(${alias}.ata, ${alias}.eta) IS NULL OR COALESCE(${alias}.ata, ${alias}.eta) = ''), COALESCE(${alias}.ata, ${alias}.eta) ${d}, ${alias}.created_at ${d}, ${alias}.id ${d}`;
 }
 
-function list(user, { q, status, mode, active, stage, owner, sort, db = store.db } = {}) {
+function list(user, { q, status, mode, active, stage, owner, sort, noCustomer, db = store.db } = {}) {
   const scope = scopeFor(user);
   const where = [scope.where];
   const params = [...scope.params];
@@ -218,6 +218,7 @@ function list(user, { q, status, mode, active, stage, owner, sort, db = store.db
   }
   if (status) { where.push('s.status = ?'); params.push(status); }
   if (owner) { where.push('s.owner_id = ?'); params.push(owner); }
+  if (noCustomer) where.push("s.customer_id IS NULL AND s.mode <> 'OTHER'");
   if (mode) { where.push('s.mode = ?'); params.push(mode); }
   if (active) stage = 'active';
   if (active || user.role !== 'admin' && user.role !== 'staff') where.push("s.mode <> 'OTHER'");

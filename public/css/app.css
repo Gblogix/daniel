@@ -532,3 +532,26 @@ dialog.dup-dialog h3 { margin: 0 0 8px; color: #991b1b; }
 .type-pick input { width: auto; flex: none; margin: 0; }
 .type-pick input[type=radio] { accent-color: #1d4ed8; }
 .type-pick.on:has(input[type=radio]:checked)::after { content: 'main'; font-size: 11px; color: #1d4ed8; margin-left: -4px; }
+
+/* Management dashboard */
+.mgmt-head { display: flex; justify-content: space-between; align-items: center; gap: 10px; flex-wrap: wrap; margin-bottom: 12px; }
+.mgmt-filters { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+.mgmt-filters input[type=date] { width: auto; }
+.mgmt-kpis { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; }
+@media (max-width: 900px) { .mgmt-kpis { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+.mk { border: 1px solid var(--line); border-radius: var(--radius); padding: 12px 14px; text-align: center; }
+.mk-label { font-size: 11px; text-transform: uppercase; letter-spacing: .5px; color: var(--muted); font-weight: 700; }
+.mk-value { font-size: 30px; font-weight: 700; color: var(--ink); line-height: 1.2; margin-top: 4px; font-variant-numeric: tabular-nums; }
+.mk-change { margin-top: 4px; font-weight: 600; font-size: 13px; }
+.mk-change.up { color: var(--green); } .mk-change.down { color: var(--red); }
+.mb-title { font-size: 14px; margin: 0 0 8px; }
+.mb-row { display: grid; grid-template-columns: minmax(90px, 32%) 1fr auto; gap: 8px; align-items: center; padding: 3px 0; font-size: 13px; }
+.mb-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.mb-track { height: 14px; }
+.mb-bar { height: 100%; background: var(--blue); border-radius: 0 4px 4px 0; min-width: 2px; }
+.mb-bar.other { background: #b6c2d3; }
+.mb-row:hover .mb-bar { filter: brightness(.9); }
+.mb-val { font-variant-numeric: tabular-nums; white-space: nowrap; text-align: right; }
+td.neg { color: var(--red); font-weight: 600; font-variant-numeric: tabular-nums; }
+.warn-link { color: #b45309; margin-left: 6px; }
+@media print { .topbar, .tabs, .drawer, .filters, .actions, .btn { display: none !important; } }

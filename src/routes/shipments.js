@@ -52,7 +52,40 @@ router.get('/dashboard', auth.requireInternal, (req, res) => {
   kpi.lfd = lfdWatch.filter((x) => x.lfd.days <= 1).length;
   const F = require('../followups');
   const mineItems = F.forUser(req.user, { mine: true });
-  res.render('dashboard', { title: 'Dashboard', kpi, active, events, lfdWatch, followups: mineItems, fcount: F.counts(mineItems) });
+  // Management numbers (profit is accounting-only).
+  const mgmt = acct ? require('../insights').dashboard(req.query) : null;
+  res.render('dashboard', { title: 'Dashboard', kpi, active, events, lfdWatch, followups: mineItems, fcount: F.counts(mineItems), mgmt });
+});
+
+/** Customers with no file for 60+ days (sales follow-up); "ignore" hides one-off customers. */
+router.get('/insights/lost', auth.requireAccounting, (req, res) => {
+  const I = require('../insights');
+  const p = I.period(req.query);
+  const view = ['all', 'ignored'].includes(req.query.view) ? req.query.view : 'active';
+  res.render('insights/lost', { title: 'Lost customers', p, view, rows: I.lostCustomers(p.to, { view }), days: I.LOST_DAYS, q: req.query });
+});
+router.post('/insights/lost/:id', auth.requireAccounting, (req, res) => {
+  store.db.run('UPDATE companies SET lost_ignored = ? WHERE id = ?', req.body.ignore === '1' ? 1 : 0, Number(req.params.id));
+  if (req.get('accept')?.includes('json')) return res.json({ ok: true });
+  res.redirect(req.get('referer') || '/insights/lost');
+});
+
+/** Files that lost money in the period, by house B/L or by master B/L. */
+router.get('/insights/negative', auth.requireAccounting, (req, res) => {
+  const I = require('../insights');
+  const p = I.period(req.query);
+  const by = req.query.by === 'mbl' ? 'mbl' : 'hbl';
+  const status = ['ignored', 'all'].includes(req.query.status) ? req.query.status : 'notice';
+  res.render('insights/negative', { title: 'Negative profit files', p, by, status, neg: I.negative(p, { by, status }), q: req.query });
+});
+router.post('/shipments/:id/profit-note', auth.requireAccounting, (req, res) => {
+  const ids = String(req.body.ids || req.params.id).split(',').map(Number).filter(Boolean);
+  for (const id of ids) {
+    if ('remark' in req.body) store.db.run('UPDATE shipments SET profit_remark = ? WHERE id = ?', String(req.body.remark || '').slice(0, 300) || null, id);
+    if ('ignore' in req.body) store.db.run('UPDATE shipments SET profit_ignore = ? WHERE id = ?', req.body.ignore === '1' ? 1 : 0, id);
+  }
+  if (req.get('accept')?.includes('json')) return res.json({ ok: true });
+  res.redirect(req.get('referer') || '/insights/negative');
 });
 
 // ---------- list ----------
@@ -64,7 +97,8 @@ router.get('/shipments', auth.requireLogin, (req, res) => {
   const stage = internal && STAGES[req.query.stage] ? req.query.stage : internal ? 'open' : 'all';
   const mine = internal && req.query.mine === '1';
   const sort = ['asc', 'desc'].includes(req.query.sort) ? req.query.sort : '';
-  let rows = S.list(req.user, { q, status, mode, stage: stage === 'all' ? null : stage, owner: mine ? req.user.id : null, sort });
+  const noCustomer = req.query.nocust === '1';
+  let rows = S.list(req.user, { q, status, mode, stage: stage === 'all' ? null : stage, owner: mine ? req.user.id : null, sort, noCustomer });
   // Accounting follow-up filters on delivered files.
   const bill = auth.canAccounting(req.user) ? req.query.bill || '' : '';
   if (bill) {

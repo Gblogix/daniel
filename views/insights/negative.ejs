@@ -1,0 +1,28 @@
+<%- include('../partials/head') %>
+<% const qs = (o) => new URLSearchParams({ from: p.from, to: p.to, cmp: p.cmp, by, status, ...o }).toString(); %>
+<div class="pagehead"><h1>Negative profit files</h1>
+  <div class="actions"><button class="btn secondary" onclick="window.print()">🖨 Print</button></div></div>
+<form class="filters" method="get">
+  <input type="date" name="from" value="<%= p.from %>"> – <input type="date" name="to" value="<%= p.to %>"><span class="small muted">(by ETA)</span>
+  <input type="hidden" name="by" value="<%= by %>"><input type="hidden" name="status" value="<%= status %>">
+  <div class="seg"><a class="<%= by === 'mbl' ? 'on' : '' %>" href="?<%= qs({ by: 'mbl' }) %>">By MB/L</a><a class="<%= by === 'hbl' ? 'on' : '' %>" href="?<%= qs({ by: 'hbl' }) %>">By HB/L</a></div>
+  <select name="status" onchange="this.form.submit()"><% [['notice', 'Needs a look'], ['ignored', 'Ignored'], ['all', 'All']].forEach(([k, l]) => { %><option value="<%= k %>" <%= status === k ? 'selected' : '' %>><%= l %></option><% }) %></select>
+  <button class="btn secondary">↻ Refresh</button>
+</form>
+<div class="tablewrap"><table class="t">
+  <thead><tr><th>Type</th><th>File</th><th><%= by === 'mbl' ? 'MB/L · MAWB' : 'HB/L · HAWB' %></th><th>Customer</th><th>ETD</th><th>ETA</th><th class="right">Profit</th><th style="min-width:200px">Remarks</th><th>PIC</th><th>Ignore</th></tr></thead>
+  <% if (!neg.rows.length) { %><tr><td colspan="10" class="muted">✔ No file lost money in this period.</td></tr><% } %>
+  <% neg.rows.forEach((r) => { const ids = (r.files || [r]).map((f) => f.id).join(','); %><tr>
+    <td class="small"><%= S.MODES[r.mode]?.label || r.mode %></td>
+    <td><a href="/shipments/<%= r.id %>"><b><%= r.ref_no %></b></a><% if (r.files?.length > 1) { %><span class="muted small"> +<%= r.files.length - 1 %></span><% } %></td>
+    <td class="mono small"><%= by === 'mbl' ? (r.mbl_no || '—') : (r.hbl_no || '—') %><% if (by === 'mbl' && r.hbls) { %><br><span class="muted"><%= r.hbls.join(', ') %></span><% } %></td>
+    <td class="small"><%= r.customer_name || '—' %></td><td class="nowrap small"><%= r.etd || '' %></td><td class="nowrap small"><%= r.eta || '' %></td>
+    <td class="right neg nowrap">−$ <%= fmtNum(Math.abs(r.profit), 2) %></td>
+    <td><form method="post" action="/shipments/<%= r.id %>/profit-note"><input type="hidden" name="_csrf" value="<%= csrf %>"><input type="hidden" name="ids" value="<%= ids %>">
+      <input name="remark" value="<%= r.profit_remark || '' %>" placeholder="Why? (e.g. free storage for customer)" onchange="this.form.submit()" style="width:100%"></form></td>
+    <td class="small"><%= r.owner_name || '' %></td>
+    <td><form method="post" action="/shipments/<%= r.id %>/profit-note"><input type="hidden" name="_csrf" value="<%= csrf %>"><input type="hidden" name="ids" value="<%= ids %>"><input type="hidden" name="ignore" value="<%= r.profit_ignore ? '0' : '1' %>">
+      <input type="checkbox" <%= r.profit_ignore ? 'checked' : '' %> onchange="this.form.submit()" aria-label="Ignore"></form></td></tr><% }) %>
+  <% if (neg.rows.length) { %><tr><td colspan="6"><b>Total — <%= neg.rows.length %> file(s)</b></td><td class="right neg"><b>−$ <%= fmtNum(Math.abs(neg.total), 2) %></b></td><td colspan="3"></td></tr><% } %>
+</table></div>
+<%- include('../partials/foot') %>

@@ -2,6 +2,7 @@
 <div class="pagehead"><h1>Dashboard</h1>
   <div class="actions"><% if (can('shipments_edit')) { %><a class="btn" href="/shipments/new">+ New shipment</a><% } %><a class="btn secondary" href="/portal">Upload documents</a></div>
 </div>
+<% if (locals.mgmt) { %><%- include('partials/mgmt', { mgmt }) %><% } %>
 <div class="card summary">
   <div class="sum-group">
     <div class="sum-title">Operations</div>

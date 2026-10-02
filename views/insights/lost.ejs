@@ -1,0 +1,16 @@
+<%- include('../partials/head') %>
+<div class="pagehead"><h1>Lost customers</h1>
+  <div class="actions"><button class="btn secondary" onclick="window.print()">🖨 Print</button></div></div>
+<p class="muted small" style="margin-top:-8px">Customers with no file for <%= days %>+ days as of <%= p.to %> (last file within the past year). Ask sales why — or tick <b>Ignore</b> for one-off customers.</p>
+<div class="filters">
+  <div class="seg"><% [['all', 'All'], ['active', 'Active'], ['ignored', 'Ignored']].forEach(([k, l]) => { %><a class="<%= view === k ? 'on' : '' %>" href="?to=<%= p.to %>&view=<%= k %>"><%= l %></a><% }) %></div>
+</div>
+<div class="tablewrap"><table class="t">
+  <thead><tr><th>Customer</th><th class="right">Days without a shipment</th><th>Last shipment</th><th class="right">Files (past year)</th><th>Ignore</th></tr></thead>
+  <% if (!rows.length) { %><tr><td colspan="5" class="muted">No customers here.</td></tr><% } %>
+  <% rows.forEach((r) => { %><tr>
+    <td><a href="/billing/parties/<%= r.id %>"><b><%= r.name %></b></a></td><td class="right"><%= r.days %></td><td><%= r.last_date %></td><td class="right"><%= r.files %></td>
+    <td><form method="post" action="/insights/lost/<%= r.id %>"><input type="hidden" name="_csrf" value="<%= csrf %>"><input type="hidden" name="ignore" value="<%= r.ignored ? '0' : '1' %>">
+      <input type="checkbox" <%= r.ignored ? 'checked' : '' %> onchange="this.form.submit()" aria-label="Ignore <%= r.name %>"></form></td></tr><% }) %>
+</table></div>
+<%- include('../partials/foot') %>

@@ -1,0 +1,60 @@
+<%# Management dashboard (accounting users). locals: mgmt %>
+<%
+  const m = mgmt; const P = m.period;
+  const money = (v) => Math.round(v).toLocaleString('en-US');
+  const LABEL = { profit: 'Total profit', volume: 'Total volume', active: 'Active customers', lost: 'Lost customers' };
+  const SUB = { profit: 'USD', volume: 'files (B/L · AWB)', active: 'with a file in the period', lost: `no file for ${60}+ days` };
+  const qs = `from=${P.from}&to=${P.to}&cmp=${P.cmp}`;
+  const bars = (t, fmt, link) => t.rows.length ? t.rows.map((r) => {
+    const max = Math.max(...t.rows.map((x) => Math.abs(x.value)), 1);
+    const w = Math.max(2, Math.round((Math.max(r.value, 0) / max) * 100));
+    return `<div class="mb-row" title="${String(r.name).replace(/"/g, '&quot;')}: ${fmt(r.value)} (${r.share}%)">
+      <div class="mb-name">${r.other || !link ? r.name : `<a href="/billing/parties/${r.id}">${r.name}</a>`}</div>
+      <div class="mb-track"><div class="mb-bar${r.other ? ' other' : ''}" style="width:${w}%"></div></div>
+      <div class="mb-val">${fmt(r.value)} <span class="muted">${r.share}%</span></div></div>`;
+  }).join('') : '<p class="muted small">No files in this period.</p>';
+%>
+<div class="card mgmt" id="management">
+  <form class="mgmt-head" method="get" action="/dashboard">
+    <h2 style="margin:0">How the business is running</h2>
+    <div class="mgmt-filters">
+      <input type="date" name="from" value="<%= P.from %>" aria-label="From"> – <input type="date" name="to" value="<%= P.to %>" aria-label="To">
+      <span class="small muted">compare</span>
+      <div class="seg"><a class="<%= P.cmp === 'mm' ? 'on' : '' %>" href="?from=<%= P.from %>&to=<%= P.to %>&cmp=mm#management" title="With the same number of days just before">Previous period</a><a class="<%= P.cmp === 'yy' ? 'on' : '' %>" href="?from=<%= P.from %>&to=<%= P.to %>&cmp=yy#management" title="With the same dates last year">Last year</a></div>
+      <input type="hidden" name="cmp" value="<%= P.cmp %>">
+      <button class="btn secondary small">↻ Refresh</button>
+    </div>
+  </form>
+  <div class="mgmt-kpis">
+    <% m.kpi.forEach((k) => { const worse = k.key === 'lost' ? k.change > 0 : k.change < 0; %>
+      <div class="mk">
+        <div class="mk-label"><%= LABEL[k.key] %></div>
+        <div class="mk-value"><%= k.key === 'profit' ? '$ ' + money(k.value) : k.value %></div>
+        <div class="mk-sub muted small"><%= SUB[k.key] %></div>
+        <div class="mk-change <%= k.change == null || k.change === 0 ? '' : worse ? 'down' : 'up' %>">
+          <%= k.change == null ? '—' : `${k.change > 0 ? '▲' : k.change < 0 ? '▼' : '■'} ${Math.abs(k.change)}%` %>
+          <span class="muted small">prev. <%= k.key === 'profit' ? '$ ' + money(k.prev) : k.prev %></span></div>
+        <% if (k.key === 'lost') { %><a class="small" href="/insights/lost?<%= qs %>">Details →</a><% } %>
+      </div>
+    <% }) %>
+  </div>
+  <p class="muted small" style="margin:6px 0 0"><%= P.from %> – <%= P.to %> (by ETA) compared with <%= P.prev.from %> – <%= P.prev.to %>.
+    <% if (m.noCustomer) { %><a class="warn-link" href="/shipments?stage=all&nocust=1">⚠ <%= m.noCustomer %> file(s) in this period have no Customer — fix them for accurate numbers</a><% } %></p>
+  <div class="grid g2" style="margin-top:14px">
+    <div><h3 class="mb-title">Top 5 customers — profit <span class="muted small">USD · share of period profit</span></h3><%- bars(m.topProfit, (v) => '$ ' + money(v), true) %></div>
+    <div><h3 class="mb-title">Top 5 customers — volume <span class="muted small">files · share</span></h3><%- bars(m.topVolume, (v) => v, true) %></div>
+  </div>
+  <div style="margin-top:16px">
+    <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap">
+      <h3 class="mb-title" style="margin:0">Negative profit files <span class="muted small"><%= m.negative.rows.length %> file(s) · total −$ <%= money(Math.abs(m.negative.total)) %></span></h3>
+      <a class="btn secondary small" href="/insights/negative?<%= qs %>">Review all →</a>
+    </div>
+    <% if (!m.negative.rows.length) { %><p class="okbox" style="margin:8px 0 0">✔ No file lost money in this period.</p><% } else { %>
+    <div class="tablewrap" style="margin-top:8px"><table class="t">
+      <thead><tr><th>File</th><th>HB/L · HAWB</th><th>Customer</th><th>ETA</th><th class="right">Profit</th><th>Remarks</th></tr></thead>
+      <% m.negative.rows.slice(0, 5).forEach((r) => { %><tr>
+        <td><a href="/shipments/<%= r.id %>"><b><%= r.ref_no %></b></a></td><td class="mono small"><%= r.hbl_no || '' %></td><td class="small"><%= r.customer_name || '—' %></td>
+        <td class="nowrap small"><%= r.eta || '' %></td><td class="right neg">−$ <%= fmtNum(Math.abs(r.profit), 2) %></td><td class="small"><%= r.profit_remark || '' %></td></tr><% }) %>
+    </table></div><% } %>
+  </div>
+</div>
