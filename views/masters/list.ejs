@@ -1,7 +1,7 @@
 <%- include('../partials/head') %>
-<div class="pagehead"><h1>Master B/L list</h1>
+<div class="pagehead"><h1><%= title %></h1>
   <div class="actions">
-    <form method="get" action="/masters"><input name="q" value="<%= q %>" placeholder="MB/L, HB/L, vessel, ref…" style="width:220px">
+    <form method="get" action="/masters"><input name="q" value="<%= q %>" placeholder="MB/L, HB/L, vessel, ref…" style="width:220px"><input type="hidden" name="mode" value="<%= mode %>">
       <select name="sort" onchange="this.form.submit()" title="Order by ETA (actual arrival when known)">
     <option value="asc" <%= (sort || 'asc') === 'asc' ? 'selected' : '' %>>ETA ↑ next arrival first</option>
     <option value="desc" <%= (sort || 'asc') === 'desc' ? 'selected' : '' %>>ETA ↓ latest first</option></select></form>

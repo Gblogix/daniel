@@ -115,6 +115,24 @@
     };
     b.addEventListener('mouseenter', show); b.addEventListener('click', show);
   });
+  // ---------- left rail ----------
+  const rail = $('rail');
+  if (rail) {
+    let hideT;
+    const close = () => rail.querySelectorAll('.rail-item.open').forEach((x) => x.classList.remove('open'));
+    rail.querySelectorAll('.rail-item').forEach((it) => {
+      it.addEventListener('mouseenter', () => { clearTimeout(hideT); close(); it.classList.add('open'); });
+      it.addEventListener('mouseleave', () => { hideT = setTimeout(() => it.classList.remove('open'), 180); });
+    });
+    rail.addEventListener('click', (e) => {
+      const a = e.target.closest('a[data-open]');
+      const btn = e.target.closest('.rail-btn');
+      if (a) { e.preventDefault(); open(a.dataset.open, a.dataset.title); close(); return; }
+      if (btn) { e.preventDefault(); const it = btn.parentElement; const was = it.classList.contains('open'); close(); if (!was) it.classList.add('open'); }
+    });
+    document.addEventListener('keydown', (e) => { if (e.key === 'Escape') close(); });
+    document.addEventListener('click', (e) => { if (!rail.contains(e.target)) close(); });
+  }
   drawer.addEventListener('click', (e) => {
     const a = e.target.closest('a[data-open]');
     if (a) { e.preventDefault(); open(a.dataset.open, a.dataset.title); setDrawer(false); }

@@ -13,7 +13,7 @@ router.get('/', (req, res) => {
 router.get('/app', auth.requireInternal, (req, res) => {
   const menu = require('../menu');
   const open = typeof req.query.open === 'string' && /^\/(?!\/)/.test(req.query.open) && !req.query.open.startsWith('/app') ? req.query.open : '';
-  res.render('app', { title: 'GB Logix', menu: menu.menuFor(req.user), favorites: menu.favoritesFor(req.user), open });
+  res.render('app', { title: 'GB Logix', menu: menu.menuFor(req.user), rail: menu.railFor(req.user), favorites: menu.favoritesFor(req.user), open });
 });
 router.post('/me/favorites', auth.requireInternal, (req, res) => {
   const menu = require('../menu');

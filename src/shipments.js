@@ -219,7 +219,8 @@ function list(user, { q, status, mode, active, stage, owner, sort, noCustomer, d
   if (status) { where.push('s.status = ?'); params.push(status); }
   if (owner) { where.push('s.owner_id = ?'); params.push(owner); }
   if (noCustomer) where.push("s.customer_id IS NULL AND s.mode <> 'OTHER'");
-  if (mode) { where.push('s.mode = ?'); params.push(mode); }
+  if (mode === 'OCEAN') where.push("s.mode IN ('FCL', 'LCL')");
+  else if (mode) { where.push('s.mode = ?'); params.push(mode); }
   if (active) stage = 'active';
   if (active || user.role !== 'admin' && user.role !== 'staff') where.push("s.mode <> 'OTHER'");
   if (stage === 'active') where.push("s.status <> 'DELIVERED' AND s.closed_at IS NULL");

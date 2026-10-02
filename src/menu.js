@@ -73,6 +73,89 @@ const MENU = [
   ] },
 ];
 
+// Left icon rail (GoFreight / OPUS style): one icon per line of work; hover shows its pages.
+const RAIL = [
+  { key: 'home', label: 'Dashboard', icon: 'home', href: '/dashboard' },
+  { key: 'todo', label: 'Follow-ups (my to-do)', icon: 'flag', href: '/followups' },
+  { key: 'ocean', label: 'Ocean Import', icon: 'ship', groups: [
+    { head: 'New', items: [
+      { label: 'New house — FCL', href: '/shipments/new?mode=FCL', perm: 'shipments_edit' },
+      { label: 'New house — LCL', href: '/shipments/new?mode=LCL', perm: 'shipments_edit' },
+      { label: 'New ocean master (MB/L)', href: '/masters/new', perm: 'shipments_edit' },
+      { label: 'Upload B/L / pre-alert', href: '/portal' },
+    ] },
+    { head: 'Lists', items: [
+      { label: 'My shipments', href: '/shipments?mode=OCEAN&mine=1' },
+      { label: 'Master B/L list', href: '/masters?mode=OCEAN' },
+      { label: 'House B/L list', href: '/shipments?mode=OCEAN' },
+      { label: 'Tracking board', href: '/track' },
+      { label: 'Arrivals / LFD watch', href: '/dashboard#lfd' },
+    ] },
+  ] },
+  { key: 'air', label: 'Air Import', icon: 'plane', groups: [
+    { head: 'New', items: [
+      { label: 'New house — HAWB', href: '/shipments/new?mode=AIR', perm: 'shipments_edit' },
+      { label: 'New air master (MAWB)', href: '/masters/new?mode=AIR', perm: 'shipments_edit' },
+      { label: 'Upload AWB / pre-alert', href: '/portal' },
+    ] },
+    { head: 'Lists', items: [
+      { label: 'My shipments', href: '/shipments?mode=AIR&mine=1' },
+      { label: 'MAWB list', href: '/masters?mode=AIR' },
+      { label: 'HAWB list', href: '/shipments?mode=AIR' },
+    ] },
+  ] },
+  { key: 'truck', label: 'Truck', icon: 'truck', groups: [
+    { head: 'Truck', items: [
+      { label: 'New truck file', href: '/shipments/new?mode=TRUCK', perm: 'shipments_edit' },
+      { label: 'Truck files', href: '/shipments?mode=TRUCK' },
+    ] },
+  ] },
+  { key: 'misc', label: 'Other files', icon: 'folder', groups: [
+    { head: 'Other (non-shipment)', items: [
+      { label: 'New other file', href: '/shipments/new?mode=OTHER', perm: 'shipments_edit' },
+      { label: 'Other files', href: '/shipments?mode=OTHER' },
+    ] },
+  ] },
+  { key: 'docs', label: 'Documents', icon: 'doc', groups: [
+    { head: 'Documents', items: [
+      { label: 'Document intake (review)', href: '/intakes' },
+      { label: 'Upload documents', href: '/portal' },
+      { label: 'Outbox / sent emails', href: '/outbox' },
+      { label: 'Shipment history (closed)', href: '/history' },
+    ] },
+  ] },
+  { key: 'acct', label: 'Accounting', icon: 'calc', perm: 'accounting', fromMenu: 'accounting' },
+  { key: 'reports', label: 'Reports', icon: 'chart', perm: 'accounting', groups: [
+    { head: 'Management', items: [
+      { label: 'Business dashboard', href: '/dashboard#management' },
+      { label: 'Lost customers', href: '/insights/lost' },
+      { label: 'Negative profit files', href: '/insights/negative' },
+    ] },
+    { head: 'Accounting', items: [
+      { label: 'P&L by file', href: '/billing/profit' },
+      { label: 'Aging report', href: '/billing/aging' },
+      { label: 'Statement of account', href: '/billing/aging?side=all' },
+    ] },
+  ] },
+  { key: 'parties', label: 'Parties', icon: 'users', href: '/companies' },
+  { key: 'admin', label: 'Administration', icon: 'gear', fromMenu: 'admin' },
+];
+
+/** The rail this user may see (empty groups / sections dropped). */
+function railFor(user) {
+  const ok = (x) => !x.perm || auth.can(user, x.perm);
+  const menu = menuFor(user);
+  return RAIL.filter(ok).map((r) => {
+    if (r.fromMenu) {
+      const m = menu.find((x) => x.key === r.fromMenu);
+      return m ? { ...r, groups: m.cols.map((c) => ({ head: c.head, items: c.items })) } : null;
+    }
+    if (!r.groups) return r;
+    const groups = r.groups.map((g) => ({ ...g, items: g.items.filter(ok) })).filter((g) => g.items.length);
+    return groups.length ? { ...r, groups } : null;
+  }).filter(Boolean);
+}
+
 const DEFAULT_FAVORITES = ['dashboard', 'followups', 'ship-list', 'track', 'intake', 'vendor-bills', 'ar-entry', 'settle'];
 
 /** The menu this user may see: categories and pages filtered by their permissions; empty columns / categories dropped. */
@@ -96,4 +179,4 @@ function favoritesFor(user) {
   return ids.filter((id) => allowed.has(id));
 }
 
-module.exports = { MENU, DEFAULT_FAVORITES, menuFor, items, favoritesFor };
+module.exports = { MENU, RAIL, DEFAULT_FAVORITES, menuFor, railFor, items, favoritesFor };

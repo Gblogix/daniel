@@ -132,7 +132,7 @@ function get(id, { db = store.db } = {}) {
   return m;
 }
 
-function list({ q = '', sort = 'asc', db = store.db } = {}) {
+function list({ q = '', sort = 'asc', mode = '', db = store.db } = {}) {
   const like = `%${q}%`;
   return db.all(`SELECT m.*, a.name AS agent_name,
       (SELECT COUNT(*) FROM shipments s WHERE s.master_id = m.id) AS houses,
@@ -141,7 +141,8 @@ function list({ q = '', sort = 'asc', db = store.db } = {}) {
       (SELECT MIN(s.status = 'DELIVERED') FROM shipments s WHERE s.master_id = m.id) AS all_delivered
     FROM masters m LEFT JOIN companies a ON a.id = m.agent_id
     WHERE (? = '' OR m.mbl_no LIKE ? OR m.ref_no LIKE ? OR m.vessel LIKE ? OR EXISTS (SELECT 1 FROM shipments s WHERE s.master_id = m.id AND (s.hbl_no LIKE ? OR s.ref_no LIKE ?)))
-    ORDER BY ${require('./shipments').etaOrder('m', sort)} LIMIT 300`, q, like, like, like, like, like);
+      AND (? = '' OR (? = 'AIR' AND m.mode = 'AIR') OR (? = 'OCEAN' AND m.mode <> 'AIR'))
+    ORDER BY ${require('./shipments').etaOrder('m', sort)} LIMIT 300`, q, like, like, like, like, like, mode, mode, mode);
 }
 
 function missing(m) {

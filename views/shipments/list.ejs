@@ -1,12 +1,12 @@
 <%- include('../partials/head') %>
-<div class="pagehead"><h1><%= history ? 'Shipment history' : isInternal ? 'Shipments' : 'Assigned shipments' %></h1>
+<div class="pagehead"><h1><%= history ? 'Shipment history' : isInternal ? title : 'Assigned shipments' %></h1>
   <% if (isInternal && !history && can('shipments_edit')) { %><a class="btn" href="/shipments/new">+ New shipment</a><% } %>
 </div>
 <% if (history) { %><p class="muted small" style="margin-top:-8px">Closed files — the customer's invoices are paid. Kept here for look-up; reopen a file from its page if something comes up.</p><% } %>
 <form class="filters" method="get">
   <% if (isInternal && !history) { %>
     <div class="seg">
-      <% Object.entries(STAGES).forEach(([k, label]) => { %><a class="<%= stage === k && !bill ? 'on' : '' %>" href="?stage=<%= k %>"><%= label %></a><% }) %>
+      <% Object.entries(STAGES).forEach(([k, label]) => { %><a class="<%= stage === k && !bill ? 'on' : '' %>" href="?stage=<%= k %><%= mode ? `&mode=${mode}` : '' %><%= mine ? '&mine=1' : '' %>"><%= label %></a><% }) %>
       <a href="/history">History (closed)</a>
     </div>
     <label class="check small" style="margin:0"><input type="checkbox" name="mine" value="1" <%= mine ? 'checked' : '' %> onchange="this.form.submit()"> My files only</label>
@@ -14,7 +14,7 @@
   <% } %>
   <input name="q" value="<%= q %>" placeholder="Search shipper, container, MBL, HBL, customer, file no…">
   <% if (!history) { %><select name="status"><option value="">All statuses</option><% S.STATUSES.forEach((x) => { %><option value="<%= x.code %>" <%= status === x.code ? 'selected' : '' %>><%= x.label %></option><% }) %></select><% } %>
-  <select name="mode"><option value="">All modes</option><% Object.entries(S.MODES).forEach(([k, m]) => { %><option value="<%= k %>" <%= mode === k ? 'selected' : '' %>><%= m.label %></option><% }) %></select>
+  <select name="mode"><option value="">All modes</option><option value="OCEAN" <%= mode === 'OCEAN' ? 'selected' : '' %>>Ocean (FCL + LCL)</option><% Object.entries(S.MODES).forEach(([k, m]) => { %><option value="<%= k %>" <%= mode === k ? 'selected' : '' %>><%= m.label %></option><% }) %></select>
   <% if (canAccounting && !history) { %><select name="bill"><option value="">Any billing</option>
     <option value="not_invoiced" <%= bill === 'not_invoiced' ? 'selected' : '' %>>Delivered — not invoiced</option>
     <option value="unpaid" <%= bill === 'unpaid' ? 'selected' : '' %>>Invoiced — not paid</option>

@@ -10,7 +10,8 @@ const agents = () => store.db.all(`SELECT id, name FROM companies WHERE ${requir
 
 router.get('/masters', auth.requireInternal, (req, res) => {
   const sort = req.query.sort === 'desc' ? 'desc' : 'asc';
-  res.render('masters/list', { title: 'Master B/L list', rows: M.list({ q: String(req.query.q || '').trim(), sort }), q: req.query.q || '', sort });
+  const mode = ['AIR', 'OCEAN'].includes(req.query.mode) ? req.query.mode : '';
+  res.render('masters/list', { title: mode === 'AIR' ? 'MAWB list' : mode === 'OCEAN' ? 'Master B/L list (ocean)' : 'Master B/L list', rows: M.list({ q: String(req.query.q || '').trim(), sort, mode }), q: req.query.q || '', sort, mode });
 });
 
 router.get('/masters/new', auth.requirePerm('shipments_edit'), (req, res) => {

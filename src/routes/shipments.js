@@ -105,7 +105,7 @@ router.get('/shipments', auth.requireLogin, (req, res) => {
     rows = rows.filter((s) => (S.billingState(s)?.code || '') === bill || (bill === 'unpaid' && ['unsent', 'awaiting', 'overdue'].includes(S.billingState(s)?.code))
       || (['no_cost', 'to_book'].includes(bill) && S.costState(s)?.code === bill));
   }
-  res.render('shipments/list', { title: 'Shipments', rows, q, status, mode, stage, STAGES, bill, history: false, mine, sort });
+  res.render('shipments/list', { title: { OCEAN: 'House B/L list · Ocean', AIR: 'HAWB list · Air', TRUCK: 'Truck files', OTHER: 'Other files' }[mode] || 'Shipments', rows, q, status, mode, stage, STAGES, bill, history: false, mine, sort });
 });
 
 /** Shipment history: closed files (customer paid), kept for look-up later. */

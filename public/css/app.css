@@ -290,11 +290,24 @@ body.shell { height: 100vh; display: flex; flex-direction: column; overflow: hid
 .tab.home span::before { content: '🏠 '; }
 .tab .x { border: 0; background: transparent; color: #64748b; font-size: 15px; line-height: 1; width: 18px; height: 18px; border-radius: 4px; cursor: pointer; padding: 0; }
 .tab .x:hover { background: #e2e8f0; color: var(--red); }
+.workarea { flex: 1; min-height: 0; display: flex; flex-direction: column; margin-left: 56px; }
 .panes { flex: 1; position: relative; background: #fff; }
+/* Left icon rail */
+.rail { position: fixed; top: 50px; left: 0; bottom: 0; width: 56px; background: #12355f; z-index: 25; display: flex; flex-direction: column; padding: 6px 0; gap: 2px; }
+.rail-item { position: relative; }
+.rail-btn { display: flex; align-items: center; justify-content: center; height: 44px; margin: 0 6px; border-radius: 8px; color: #b9cbe6; }
+.rail-btn:hover, .rail-item.open .rail-btn { background: #1f6feb; color: #fff; text-decoration: none; }
+.rail-fly { display: none; position: absolute; left: 56px; top: 0; min-width: 230px; max-height: calc(100vh - 70px); overflow-y: auto; background: #fff; border: 1px solid #c7d4ea; border-radius: 0 10px 10px 0; box-shadow: 8px 6px 24px rgba(15,23,42,.18); padding: 6px 0 8px; z-index: 45; }
+.rail-item.open .rail-fly { display: block; }
+.rail-title { font-weight: 700; color: #fff; background: var(--navy); padding: 9px 14px; margin: -6px 0 4px; border-radius: 0 10px 0 0; font-size: 14px; }
+.rail-head { font-size: 11px; text-transform: uppercase; letter-spacing: .5px; color: var(--muted); font-weight: 700; padding: 8px 14px 3px; }
+.rail-fly a { display: block; padding: 7px 14px 7px 22px; color: #1e3a8a; font-size: 13.5px; }
+.rail-fly a:hover { background: var(--soft); text-decoration: none; }
 .pane { position: absolute; inset: 0; width: 100%; height: 100%; border: 0; display: none; background: var(--bg); }
 .pane.on { display: block; }
 
 @media (max-width: 760px) {
+  .rail { display: none; } .workarea { margin-left: 0; }
   .shell-top { gap: 8px; padding: 0 8px; }
   .shell-top .brand, .shell-top .who > span { display: none; }
   .drawer { right: 0; flex-direction: column; overflow-y: auto; }
