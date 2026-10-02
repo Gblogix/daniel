@@ -28,7 +28,8 @@ router.get('/dashboard', auth.requireInternal, (req, res) => {
   const active = S.list(req.user, { active: true });
   const in7 = new Date(Date.now() + 7 * 86400000).toISOString().slice(0, 10);
   const today = new Date().toISOString().slice(0, 10);
-  const acct = auth.canAccounting(req.user);
+  // Profit / billing summary on the dashboard: admins only (accounting staff use the accounting pages).
+  const acct = req.user.role === 'admin';
   const delivered = acct ? S.list(req.user, { stage: 'delivered' }).map((s) => S.billingState(s)) : [];
   const kpi = {
     active: active.length,
@@ -39,7 +40,7 @@ router.get('/dashboard', auth.requireInternal, (req, res) => {
     arriving: active.filter((s) => s.eta && s.eta >= today && s.eta <= in7).length,
     intakes: db.get("SELECT COUNT(*) AS n FROM intakes WHERE status = 'PENDING'").n,
     exam: active.filter((s) => s.customs_status === 'EXAM' || s.customs_status === 'HOLD').length,
-    unpaid: auth.canAccounting(req.user) ? db.get("SELECT COUNT(*) AS n FROM invoices WHERE kind = 'AR' AND status = 'OPEN'").n : null,
+    unpaid: acct ? db.get("SELECT COUNT(*) AS n FROM invoices WHERE kind = 'AR' AND status = 'OPEN'").n : null,
     failedEmails: db.get("SELECT COUNT(*) AS n FROM emails WHERE status = 'FAILED'").n,
   };
   const events = db.all(`SELECT e.*, s.ref_no, s.shipper_name, s.hbl_no, s.mbl_no,
@@ -52,33 +53,33 @@ router.get('/dashboard', auth.requireInternal, (req, res) => {
   kpi.lfd = lfdWatch.filter((x) => x.lfd.days <= 1).length;
   const F = require('../followups');
   const mineItems = F.forUser(req.user, { mine: true });
-  // Management numbers (profit is accounting-only).
+  // Management numbers: admins only.
   const mgmt = acct ? require('../insights').dashboard(req.query) : null;
   res.render('dashboard', { title: 'Dashboard', kpi, active, events, lfdWatch, followups: mineItems, fcount: F.counts(mineItems), mgmt });
 });
 
 /** Customers with no file for 60+ days (sales follow-up); "ignore" hides one-off customers. */
-router.get('/insights/lost', auth.requireAccounting, (req, res) => {
+router.get('/insights/lost', auth.requireRole('admin'), (req, res) => {
   const I = require('../insights');
   const p = I.period(req.query);
   const view = ['all', 'ignored'].includes(req.query.view) ? req.query.view : 'active';
   res.render('insights/lost', { title: 'Lost customers', p, view, rows: I.lostCustomers(p.to, { view }), days: I.LOST_DAYS, q: req.query });
 });
-router.post('/insights/lost/:id', auth.requireAccounting, (req, res) => {
+router.post('/insights/lost/:id', auth.requireRole('admin'), (req, res) => {
   store.db.run('UPDATE companies SET lost_ignored = ? WHERE id = ?', req.body.ignore === '1' ? 1 : 0, Number(req.params.id));
   if (req.get('accept')?.includes('json')) return res.json({ ok: true });
   res.redirect(req.get('referer') || '/insights/lost');
 });
 
 /** Files that lost money in the period, by house B/L or by master B/L. */
-router.get('/insights/negative', auth.requireAccounting, (req, res) => {
+router.get('/insights/negative', auth.requireRole('admin'), (req, res) => {
   const I = require('../insights');
   const p = I.period(req.query);
   const by = req.query.by === 'mbl' ? 'mbl' : 'hbl';
   const status = ['ignored', 'all'].includes(req.query.status) ? req.query.status : 'notice';
   res.render('insights/negative', { title: 'Negative profit files', p, by, status, neg: I.negative(p, { by, status }), q: req.query });
 });
-router.post('/shipments/:id/profit-note', auth.requireAccounting, (req, res) => {
+router.post('/shipments/:id/profit-note', auth.requireRole('admin'), (req, res) => {
   const ids = String(req.body.ids || req.params.id).split(',').map(Number).filter(Boolean);
   for (const id of ids) {
     if ('remark' in req.body) store.db.run('UPDATE shipments SET profit_remark = ? WHERE id = ?', String(req.body.remark || '').slice(0, 300) || null, id);

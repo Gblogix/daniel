@@ -61,9 +61,12 @@ test('accounting pages: admin and accounting staff only', async () => {
   const staffPage = await (await staff(`/shipments/${s.id}`)).text();
   assert.doesNotMatch(staffPage, /id="accounting"|bill-(warn|bad)|Not invoiced|AR_INV\.pdf|href="\/billing"|Service price/);
   assert.doesNotMatch(await (await staff('/dashboard')).text(), /not invoiced|awaiting payment|How the business is running/i);
-  assert.match(await (await acct('/dashboard')).text(), /How the business is running/);
-  assert.match(await (await acct('/dashboard')).text(), /Delivered — not invoiced/);
-  for (const p of ['/billing/profit', `/billing/parties/${ids.ctc}`, '/billing/aging', `/billing/parties/${ids.unlockt}/statement?basis=eta`, '/billing/aging?format=xlsx', '/vendor-bills', '/billing/quickbooks', '/insights/lost', '/insights/negative']) {
+  // Profit / billing summary on the dashboard: admin only — not accounting staff.
+  assert.doesNotMatch(await (await acct('/dashboard')).text(), /How the business is running|Delivered — not invoiced/);
+  assert.match(await (await admin('/dashboard')).text(), /How the business is running/);
+  assert.match(await (await admin('/dashboard')).text(), /Delivered — not invoiced/);
+  for (const p of ['/insights/lost', '/insights/negative']) assert.equal((await acct(p)).status, 403, p);
+  for (const p of ['/billing/profit', `/billing/parties/${ids.ctc}`, '/billing/aging', `/billing/parties/${ids.unlockt}/statement?basis=eta`, '/billing/aging?format=xlsx', '/vendor-bills', '/billing/quickbooks']) {
     assert.equal((await admin(p)).status, 200, p);
     assert.equal((await acct(p)).status, 200, p);
     assert.equal((await staff(p)).status, 403, p);

@@ -126,7 +126,7 @@ const RAIL = [
   ] },
   { key: 'acct', label: 'Accounting', icon: 'calc', perm: 'accounting', fromMenu: 'accounting' },
   { key: 'reports', label: 'Reports', icon: 'chart', perm: 'accounting', groups: [
-    { head: 'Management', items: [
+    { head: 'Management', admin: true, items: [
       { label: 'Business dashboard', href: '/dashboard#management' },
       { label: 'Lost customers', href: '/insights/lost' },
       { label: 'Negative profit files', href: '/insights/negative' },
@@ -151,7 +151,7 @@ function railFor(user) {
       return m ? { ...r, groups: m.cols.map((c) => ({ head: c.head, items: c.items })) } : null;
     }
     if (!r.groups) return r;
-    const groups = r.groups.map((g) => ({ ...g, items: g.items.filter(ok) })).filter((g) => g.items.length);
+    const groups = r.groups.filter((g) => !g.admin || user.role === 'admin').map((g) => ({ ...g, items: g.items.filter(ok) })).filter((g) => g.items.length);
     return groups.length ? { ...r, groups } : null;
   }).filter(Boolean);
 }
