@@ -335,8 +335,10 @@ const MIGRATIONS = {
     empty_returned_at: 'TEXT', current_status: 'TEXT', location: 'TEXT', pickup_no: 'TEXT',
   },
   cargo_items: { unit_price: 'REAL', amount: 'REAL', source: 'TEXT', invoice_no: 'TEXT', buyer: 'TEXT' }, // buyer = final buyer (Target, Nordstrom…)
-  companies: { types: 'TEXT', billing_emails: 'TEXT', terms_days: 'INTEGER', short_name: 'TEXT', default_pic_id: 'INTEGER', report_frequency: 'TEXT', report_emails: 'TEXT', report_last: 'TEXT' },
-  invoices: { document_id: 'INTEGER', reviewed_at: 'TEXT', reviewed_by: 'INTEGER' },
+  companies: { types: 'TEXT', qbo_customer_id: 'TEXT', qbo_vendor_id: 'TEXT', billing_emails: 'TEXT', terms_days: 'INTEGER', short_name: 'TEXT', default_pic_id: 'INTEGER', report_frequency: 'TEXT', report_emails: 'TEXT', report_last: 'TEXT' },
+  invoices: { document_id: 'INTEGER', reviewed_at: 'TEXT', reviewed_by: 'INTEGER',
+    qbo_id: 'TEXT', qbo_type: 'TEXT', qbo_hash: 'TEXT', qbo_synced_at: 'TEXT', qbo_error: 'TEXT' }, // QuickBooks Online sync
+  payments: { qbo_id: 'TEXT', qbo_synced_at: 'TEXT', qbo_error: 'TEXT' },
   documents: { invoice_id: 'INTEGER', company_id: 'INTEGER', master_id: 'INTEGER' },
   masters: { containers: 'TEXT' }, // container nos. on the MB/L (comma list) — finds the master of a house B/L without MB/L no.
   intakes: { master_id: 'INTEGER' },

@@ -47,6 +47,7 @@ const MENU = [
       { id: 'settle', label: 'Check & settle (vendors)', href: '/billing#payables' },
       { id: 'payment', label: 'Record payment', href: '/billing#pay' },
       { id: 'soa', label: 'Agent statement (SOA)', href: '/billing#agents' },
+      { id: 'qbo', label: 'QuickBooks Online — connect & sync', href: '/billing/quickbooks' },
     ] },
     { head: 'Report', items: [
       { id: 'aging', label: 'Aging report (A/R · A/P · D/N · C/N)', href: '/billing/aging' },

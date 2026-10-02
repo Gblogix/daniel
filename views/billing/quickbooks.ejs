@@ -1,0 +1,77 @@
+<%- include('../partials/head') %>
+<%
+  const sel = (name, label, options, hint) => `<div class="field"><label>${label}</label><select name="${name}"><option value="">${hint || '— automatic —'}</option>${(options || []).map((o) => `<option value="${o.id}" ${String(opts[name]) === String(o.id) ? 'selected' : ''}>${String(o.name).replace(/</g, '&lt;')}</option>`).join('')}</select></div>`;
+  const KIND = { AR: 'A/R invoice', DN: 'D/N', AP: 'Vendor bill' };
+%>
+<div class="pagehead"><h1>QuickBooks Online</h1>
+  <% if (connected) { %><span class="badge paid">✔ Connected<%= companyName ? ` — ${companyName}` : '' %><%= env === 'sandbox' ? ' (sandbox)' : '' %></span><% } else { %><span class="badge unpaid">Not connected</span><% } %>
+</div>
+<p class="muted small" style="margin-top:-8px;max-width:900px">One way, this system → QuickBooks: A/R invoices and D/Ns to agents become QBO <b>Invoices</b>; vendor bills and C/Ns (net due to the agent) become QBO <b>Bills</b>;
+  payments recorded here become <b>Payments / Bill Payments</b> linked to them. Customers and vendors are matched by name or created. Edits are updated, voids are voided. The memo carries the file no., HBL and MBL.</p>
+
+<div class="grid g2" style="align-items:start">
+<div>
+<% if (!connected) { %>
+  <div class="card">
+    <h2>1. Connect</h2>
+    <% if (!configured) { %>
+      <p class="small"><b>One-time setup (about 10 minutes):</b></p>
+      <ol class="small" style="padding-left:18px;line-height:1.6">
+        <li>Sign in at <b>developer.intuit.com</b> with the QuickBooks admin login → <b>Dashboard › Create an app › QuickBooks Online and Payments</b> (name: "GB Logix"). Scope: <b>Accounting</b>.</li>
+        <li>App › <b>Keys &amp; credentials</b> (Production) → copy <b>Client ID</b> and <b>Client Secret</b>.</li>
+        <li>Under <b>Redirect URIs</b> add: <code><%= redirectUri %></code></li>
+        <li>Put them in the <code>.env</code> file next to start-windows.bat and restart:<br>
+          <code>QBO_CLIENT_ID=…</code><br><code>QBO_CLIENT_SECRET=…</code><br><code>QBO_ENV=production</code> (or <code>sandbox</code> to try with Intuit's test company first)</li>
+      </ol>
+    <% } else { %>
+      <p class="small">App keys found (<%= env %>). Click Connect, sign in to QuickBooks and pick the GlobalBridge company.</p>
+      <a class="btn" href="/billing/quickbooks/connect" target="_top">Connect to QuickBooks</a>
+      <details style="margin-top:14px"><summary class="small">Intuit won't accept <code><%= redirectUri %></code> as a redirect address? Connect with a token instead</summary>
+        <p class="small muted">Intuit's production keys only accept HTTPS addresses. Use the <b>OAuth 2.0 Playground</b> (developer.intuit.com › Tools): pick this app and the Accounting scope, sign in, then copy
+          the <b>Realm ID</b> (company ID) and the <b>Refresh token</b> here. Add the Playground's redirect URI to the app first.</p>
+        <form method="post" action="/billing/quickbooks/manual"><input type="hidden" name="_csrf" value="<%= csrf %>">
+          <div class="field"><label>Company ID (Realm ID)</label><input name="realm_id" inputmode="numeric" autocomplete="off" required></div>
+          <div class="field"><label>Refresh token</label><input name="refresh_token" autocomplete="off" required></div>
+          <button class="btn secondary">Connect with token</button></form>
+      </details>
+    <% } %>
+  </div>
+<% } else { %>
+  <form class="card" method="post" action="/billing/quickbooks/settings"><input type="hidden" name="_csrf" value="<%= csrf %>">
+    <h2>Where things post</h2>
+    <% if (listError) { %><p class="small" style="color:var(--bad, #b91c1c)">Could not read the QuickBooks lists: <%= listError %></p><% } %>
+    <%- sel('item_id', 'Product / service on invoice lines', lists?.items, '— "Logistics Services" (created if missing) —') %>
+    <%- sel('income_account', 'Income account (only used when that service is created)', lists?.income) %>
+    <%- sel('expense_account', 'Expense account for vendor bills / C/N', lists?.expense, '— first Cost of Goods Sold account —') %>
+    <%- sel('deposit_account', 'Payments received go to', lists?.deposit, '— Undeposited Funds (QBO default) —') %>
+    <%- sel('bank_account', 'Bill payments are paid from (bank)', lists?.bank, '— pick one to send bill payments —') %>
+    <label class="check"><input type="checkbox" name="reviewed_only" value="1" <%= opts.reviewed_only !== '0' ? 'checked' : '' %>> Send A/R invoices and D/N · C/N only after they are marked ✔ reviewed (vendor bills go when booked)</label>
+    <label class="check"><input type="checkbox" name="payments" value="1" <%= opts.payments !== '0' ? 'checked' : '' %>> Send payments (received / paid) too</label>
+    <label class="check"><input type="checkbox" name="auto" value="1" <%= opts.auto === '1' ? 'checked' : '' %>> Sync automatically every 30 minutes</label>
+    <button class="btn">Save</button>
+  </form>
+  <form method="post" action="/billing/quickbooks/disconnect" style="margin-top:8px"><input type="hidden" name="_csrf" value="<%= csrf %>">
+    <button class="btn secondary small" data-confirm="Disconnect from QuickBooks? Nothing is deleted in QuickBooks.">Disconnect</button></form>
+<% } %>
+</div>
+
+<div>
+  <div class="card">
+    <h2>Sync</h2>
+    <% if (last) { %><p class="small muted">Last sync <%= fmtDateTime(last.at) %> UTC — <%= last.created %> new, <%= last.updated %> updated<%= last.voided ? `, ${last.voided} voided` : '' %>, <%= last.payments %> payment(s)<%= last.errors?.length ? `, ${last.errors.length} problem(s)` : '' %></p>
+      <% if (last.errors?.length) { %><ul class="small" style="color:var(--bad, #b91c1c);padding-left:18px"><% last.errors.slice(0, 10).forEach((e) => { %><li><%= e %></li><% }) %></ul><% } %><% } %>
+    <form method="post" action="/billing/quickbooks/sync"><input type="hidden" name="_csrf" value="<%= csrf %>">
+      <button class="btn" <%= connected ? '' : 'disabled' %>>↻ Sync now</button></form>
+    <h3 style="margin-top:16px">Waiting to go to QuickBooks (<%= pending.length %>)</h3>
+    <% if (!pending.length) { %><p class="muted small">Nothing waiting.</p><% } else { %>
+    <div class="tablewrap"><table class="t">
+      <thead><tr><th>No.</th><th>Type</th><th>Party</th><th class="right">Amount</th><th>Note</th></tr></thead>
+      <% pending.slice(0, 100).forEach((d) => { %><tr>
+        <td><a href="/invoices/<%= d.id %>"><%= d.number %></a></td><td class="small"><%= d.kind === 'DN' && d.total < 0 ? 'C/N' : KIND[d.kind] %></td>
+        <td class="small"><%= d.company_name || '' %></td><td class="right"><%= Math.abs(d.total).toFixed(2) %></td>
+        <td class="small"><%= d.status === 'VOID' ? 'void in QB' : d.qbo_error ? `✗ ${d.qbo_error}` : 'new' %></td></tr><% }) %>
+    </table></div><% } %>
+  </div>
+</div>
+</div>
+<%- include('../partials/foot') %>

@@ -6,6 +6,7 @@
     <% if (!isNew) { %><div class="chips"><span class="badge <%= inv.status === 'PAID' ? 'paid' : inv.status === 'VOID' ? 'FAILED' : 'unpaid' %>"><%= inv.status %></span>
       <span class="badge">Total <%= m(inv.total) %></span><span class="badge">Paid <%= m(inv.paid_amount) %></span>
       <% if (inv.sent_at) { %><span class="badge SENT">sent <%= fmtDate(inv.sent_at) %></span><% } %>
+      <% if (inv.qbo_id) { %><span class="badge paid" title="QuickBooks <%= inv.qbo_type %> #<%= inv.qbo_id %>">QB ✓ <%= inv.qbo_type %></span><% } else if (inv.qbo_error) { %><span class="badge unpaid" title="<%= inv.qbo_error %>">QB ✗ not sent</span><% } %>
       <% if (k !== 'AP') { %><span class="badge <%= inv.reviewed_at ? 'paid' : 'unpaid' %>"><%= inv.reviewed_at ? `✔ reviewed ${fmtDate(inv.reviewed_at)}` : 'not reviewed' %></span><% } %></div><% } %></div>
   <div class="actions">
     <% if (s) { %><a class="btn secondary" href="/shipments/<%= s.id %>#accounting">← <%= S.fileName(s) %></a><% } %>
@@ -18,6 +19,8 @@
         <button class="btn" data-confirm="Email <%= inv.number %> to <%= inv.company_name %>?" <%= inv.reviewed_at ? '' : 'disabled title="Mark reviewed first"' %>>✉ Email to <%= k === 'AR' ? 'customer' : 'agent' %></button></form>
     <% } %>
     <% if (!isNew && inv.document_id) { %><a class="btn secondary" href="/documents/<%= inv.document_id %>" target="_blank">📄 PDF</a><% } %>
+    <% if (!isNew && locals.qbo && inv.status !== 'DRAFT') { %><form method="post" action="/invoices/<%= inv.id %>/quickbooks"><input type="hidden" name="_csrf" value="<%= csrf %>">
+      <button class="btn secondary" title="Create / update this <%= k === 'AP' || inv.total < 0 ? 'bill' : 'invoice' %> in QuickBooks Online"><%= inv.qbo_id ? '↻ Update in QuickBooks' : '→ QuickBooks' %></button></form><% } %>
   </div>
 </div>
 <form method="post" action="<%= isNew ? '/invoices' : `/invoices/${inv.id}` %>">

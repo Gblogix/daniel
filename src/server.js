@@ -62,6 +62,7 @@ function createApp() {
   app.use(require('./routes/customer'));
   app.use(require('./routes/admin'));
   app.use(require('./routes/billing'));
+  app.use(require('./routes/quickbooks'));
   app.use(require('./routes/vendorbills'));
   app.use(require('./routes/followups'));
   app.use(require('./routes/masters'));
@@ -87,6 +88,7 @@ if (require.main === module) {
   require('./mailin').start();
   require('./alerts').start();
   if (require('./smartsheet').start()) console.log('Smartsheet sync on');
+  if (require('./quickbooks').start()) console.log(`QuickBooks Online: ${require('./quickbooks').connected() ? 'connected' : 'app keys set — connect from Accounting › QuickBooks Online'}`);
   const t = require('./tracking').start();
   console.log(`Tracking: ${t.any ? [t.terminal49 && 'Terminal49', t.shipsgo && 'ShipsGo', t.dcsa.length && `carrier APIs (${t.dcsa.join(', ')})`].filter(Boolean).join(', ') : 'no provider configured'}${t.datalastic || t.aisstream ? ' · vessel GPS on' : ''}`);
 }

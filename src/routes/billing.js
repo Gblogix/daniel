@@ -70,7 +70,7 @@ router.get('/invoices/:id', auth.requireAccounting, (req, res) => {
   const s = inv.shipment_id ? S.find(inv.shipment_id, null) : null;
   const allocations = store.db.all(`SELECT a.amount, p.paid_on, p.method, p.reference, p.direction FROM payment_allocations a
     JOIN payments p ON p.id = a.payment_id WHERE a.invoice_id = ? ORDER BY p.paid_on`, inv.id);
-  res.render('billing/invoice', { title: inv.number, inv, s, parties: parties(), codes: A.CHARGE_CODES, allocations });
+  res.render('billing/invoice', { title: inv.number, inv, s, parties: parties(), codes: A.CHARGE_CODES, allocations, qbo: require('../quickbooks').connected() });
 });
 
 function linesFromBody(b) {
