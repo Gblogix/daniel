@@ -32,6 +32,11 @@ router.post('/companies', auth.requirePerm('parties'), (req, res) => {
   const freq = ['daily', 'weekly'].includes(req.body.report_frequency) ? req.body.report_frequency : null;
   store.db.run('UPDATE companies SET default_pic_id = ?, report_frequency = ?, report_emails = ? WHERE id = ?',
     Number(req.body.default_pic_id) || null, freq, (req.body.report_emails || '').trim() || null, cid);
+  {
+    const opts = Object.keys(require('../portal').HIDE_OPTIONS);
+    const hide = [].concat(req.body.portal_hide || []).filter((k) => opts.includes(k));
+    if ('name' in req.body) store.db.run('UPDATE companies SET portal_hide = ? WHERE id = ?', hide.join(',') || null, cid);
+  }
   if ('credit_limit' in req.body) {
     const lim = String(req.body.credit_limit || '').replace(/[$,\s]/g, '');
     store.db.run('UPDATE companies SET credit_limit = ?, credit_hold = ?, credit_note = ? WHERE id = ?', lim === '' ? null : Number(lim) || null, req.body.credit_hold ? 1 : 0, (req.body.credit_note || '').trim().slice(0, 200) || null, cid);

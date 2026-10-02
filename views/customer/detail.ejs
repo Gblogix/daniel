@@ -19,8 +19,15 @@
   <%- include('../partials/trackbar', { s, tr, big: true }) %>
   <%- include('../partials/steps', { tr }) %>
   <% if (s.original_eta && s.eta && s.original_eta !== s.eta) { %><p class="small" style="margin:10px 0 0">ETA updated by the carrier: <s><%= s.original_eta %></s> → <b><%= s.eta %></b></p><% } %>
-  <%- include('../partials/vesselmap', { s }) %>
+  <% const hide = locals.portalHide || new Set(); if (!hide.has('vessel')) { %><%- include('../partials/vesselmap', { s }) %><% } %>
 </div>
+<% if (s.mode !== 'OTHER') { const ST = locals.stagesFor; const units = s.mode === 'FCL' && s.containers.length ? s.containers : [null]; %>
+<div class="card"><h2>Journey</h2>
+  <% units.forEach((c) => { const st = ST(s, c || {}); const list = st.list.filter((x) => !(hide.has('empty') && x.key === 'empty') && !(hide.has('lfd') && ['lfd', 'appt'].includes(x.key))); %>
+    <div class="journey"><div class="j-head"><b class="mono"><%= c ? `${c.container_no}${c.size_type ? ' ' + c.size_type : ''}` : (s.hbl_no || s.ref_no) %></b> <span class="muted small"><%= st.current %></span></div>
+      <ol class="j-steps"><% list.forEach((x) => { %><li class="<%= x.done ? 'done' : '' %>"><span class="j-dot"></span><span class="j-label"><%= x.label %></span><% if (x.date) { %><span class="j-date"><%= String(x.date).slice(0, 10) %></span><% } %></li><% }) %></ol></div>
+  <% }) %>
+</div><% } %>
 
 <div class="grid g2" style="align-items:start">
   <div class="card">
@@ -41,7 +48,7 @@
     <h2>Delivery</h2>
     <div class="deliv" style="font-size:14px">📍 <div><b><%= s.delivery_company_name || s.customer_name || 'Delivery' %></b><br><%= s.delivery_address || 'Address to be confirmed' %></div></div>
     <p style="font-size:16px;margin:14px 0 6px">🗓 <b><%= s.delivery_date || 'Date TBA' %></b> <%= s.delivery_time || '' %></p>
-    <% if (s.cfs_location) { %><p class="muted small">Pick-up: <%= s.cfs_location %></p><% } %>
+    <% if (s.cfs_location && !(locals.portalHide || new Set()).has('pickup')) { %><p class="muted small">Pick-up: <%= s.cfs_location %></p><% } %>
     <% if (s.status !== 'DELIVERED' && (user.role === 'customer')) { %>
     <form method="post" action="/shipments/<%= s.id %>/delivery-request" class="reqbox" id="request">
       <input type="hidden" name="_csrf" value="<%= csrf %>">
@@ -70,9 +77,12 @@
 </div>
 
 <div class="grid g2" style="align-items:start">
-  <div class="card"><h2>Documents</h2>
-    <% if (!docs.length) { %><p class="muted small">No documents shared yet.</p><% } %>
-    <% docs.forEach((d) => { %><div style="padding:4px 0"><span class="badge"><%= d.doc_type %></span> <a href="/documents/<%= d.id %>" target="_blank"><%= d.filename %></a></div><% }) %>
+  <div class="card"><h2>Document info</h2>
+    <% if (!docs.length) { %><p class="muted small">No documents shared yet.</p><% } else { const NAMES = { AN: 'Arrival notice', DO: 'Delivery order', HBL: 'House B/L', MBL: 'Master B/L', PL: 'Packing list', CI: 'Commercial invoice', ISF: 'ISF', AWB: 'Air waybill', ATME: 'Authority to make entry', POD: 'Proof of delivery' }; %>
+    <div class="tablewrap"><table class="t"><thead><tr><th>Name</th><th>Type</th><th>Date</th><th>Action</th></tr></thead>
+      <% docs.forEach((d) => { %><tr><td class="small"><%= d.filename %></td><td class="small"><%= NAMES[d.doc_type] || d.doc_type %></td><td class="nowrap small"><%= fmtDate(d.created_at) %></td>
+        <td class="nowrap"><a class="btn secondary small" href="/documents/<%= d.id %>" target="_blank" title="View">👁</a> <a class="btn secondary small" href="/documents/<%= d.id %>?download" title="Download">⬇</a></td></tr><% }) %>
+    </table></div><% } %>
   </div>
   <div class="card"><h2>Updates</h2>
     <ul class="timeline"><% events.forEach((e) => { %><li><%= e.message %><br><span class="when"><%= fmtDateTime(e.created_at) %> UTC</span></li><% }) %></ul>

@@ -2,6 +2,17 @@
 <div class="pagehead"><h1>Dashboard</h1>
   <div class="actions"><% if (can('shipments_edit')) { %><a class="btn" href="/shipments/new">+ New shipment</a><% } %><a class="btn secondary" href="/portal">Upload documents</a></div>
 </div>
+<div class="tiles">
+  <% [
+    ['t-ocean', 'Ocean Import', '🚢', [['My shipments', '/shipments?mode=OCEAN&mine=1'], ['MB/L list', '/masters?mode=OCEAN'], ['HB/L list', '/shipments?mode=OCEAN']]],
+    ['t-air', 'Air Import', '✈', [['My shipments', '/shipments?mode=AIR&mine=1'], ['MAWB list', '/masters?mode=AIR'], ['HAWB list', '/shipments?mode=AIR']]],
+    ['t-ctn', 'Containers', '📦', [['My containers', '/containers'], ['To pick up', '/containers?tab=pickup'], ['Overdue', '/containers?tab=overdue']]],
+    ['t-docs', 'Documents', '📄', [['Document hub', '/intakes'], ['Upload', '/portal'], ['Outbox', '/outbox']]],
+    ['t-misc', 'Truck · Other', '🚚', [['Truck files', '/shipments?mode=TRUCK'], ['Other files', '/shipments?mode=OTHER'], ['History', '/history']]],
+  ].forEach(([cls, label, ico, links]) => { %><div class="tile <%= cls %>"><div class="tile-name"><%= ico %> <%= label %></div><% links.forEach(([l, h]) => { %><a href="<%= h %>">› <%= l %></a><% }) %></div><% }) %>
+  <a class="tile tile-sm t-party" href="/companies">👥 Trade partner list</a>
+  <% if (canAccounting) { %><a class="tile tile-sm t-inv" href="/billing">🧾 Invoice list</a><a class="tile tile-sm t-pay" href="/billing#pay">💵 Payment received / made</a><% } %>
+</div>
 <% if (locals.mgmt) { %><%- include('partials/mgmt', { mgmt }) %><% } %>
 <div class="card summary">
   <div class="sum-group">

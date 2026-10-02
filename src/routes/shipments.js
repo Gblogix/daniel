@@ -217,7 +217,8 @@ router.get('/shipments/:id', auth.requireLogin, (req, res) => {
     credit: require('../credit').forShipment(s),
     tasks: db.all("SELECT t.*, u.name AS assignee FROM tasks t LEFT JOIN users u ON u.id = t.assignee_id WHERE t.shipment_id = ? AND t.status = 'OPEN' ORDER BY t.due_date", s.id),
   } : {};
-  res.render(view, { title: S.fileName(s), s, trackLink, tools, newCustomer, nextActions, tr: S.tracking(s), docs, events, emails, trackEvents, invoices, profit, plLines, acctParties, outgoing, vendorPending, autoSend: db.setting('auto_send_reviewed') === '1',
+  const portalHide = internal ? null : require('../portal').hiddenFor(s.customer_id);
+  res.render(view, { title: S.fileName(s), s, trackLink, tools, portalHide, newCustomer, nextActions, tr: S.tracking(s), docs, events, emails, trackEvents, invoices, profit, plLines, acctParties, outgoing, vendorPending, autoSend: db.setting('auto_send_reviewed') === '1',
     codes: A.CHARGE_CODES, billing: acct ? S.billingState(s) : null, trackingStatus: require('../tracking').status(), ...(internal ? partyLists() : {}) });
 });
 

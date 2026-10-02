@@ -7,6 +7,48 @@
     <span class="badge">⏳ Awaiting departure: <%= counts.waiting %></span>
   </div>
 </div>
+<% const P = portal; const RAMP = ['#dbe7fb', '#b3cdf6', '#7fa9ee', '#4f86e3', '#2563d4', '#1b3f8f']; const link = (o) => '?' + new URLSearchParams({ m: P.m, wk: P.wk, ...o }).toString(); %>
+<div class="seg portal-tabs" role="tablist">
+  <a class="<%= tab !== 'invoice' && !P.m ? 'on' : '' %>" href="?">All shipments</a><a class="<%= tab !== 'invoice' && P.m === 'ocean' ? 'on' : '' %>" href="?m=ocean">🚢 Ocean</a><a class="<%= tab !== 'invoice' && P.m === 'air' ? 'on' : '' %>" href="?m=air">✈ Air</a>
+  <% if (user.role === 'customer') { %><a class="<%= tab === 'invoice' ? 'on' : '' %>" href="?tab=invoice">💲 Invoices</a><% } %>
+</div>
+<% if (tab === 'invoice') { %>
+  <div class="card"><h2>Invoices</h2>
+    <% if (!invoices.length) { %><p class="muted small">No invoices yet.</p><% } else { %>
+    <div class="tablewrap"><table class="t"><thead><tr><th>Invoice</th><th>Shipment</th><th>Date</th><th>Due</th><th class="right">Amount</th><th class="right">Open</th><th>Status</th><th></th></tr></thead>
+      <% invoices.forEach((i) => { const open = Math.abs(i.total) - i.paid_amount; const late = i.status === 'OPEN' && i.due_date && i.due_date < new Date().toISOString().slice(0, 10); %><tr>
+        <td><b><%= i.number %></b></td><td class="small"><%= i.hbl_no || i.ref_no || '' %></td><td class="nowrap"><%= i.invoice_date %></td><td class="nowrap <%= late ? 'late' : '' %>"><%= i.due_date || '' %></td>
+        <td class="right">$<%= fmtNum(i.total, 2) %></td><td class="right">$<%= fmtNum(open, 2) %></td><td><span class="badge <%= i.status === 'PAID' ? 'paid' : late ? 'unpaid' : '' %>"><%= i.status === 'PAID' ? 'Paid' : late ? 'Past due' : 'Open' %></span></td>
+        <td><a class="btn secondary small" href="/portal/invoices/<%= i.id %>" target="_blank">📄 PDF</a></td></tr><% }) %>
+    </table></div><% } %>
+  </div>
+<% } else { %>
+<div class="grid g2 portal-top" style="align-items:start">
+  <div class="card">
+    <div style="display:flex;justify-content:space-between;align-items:baseline"><h2 style="margin:0">Active <%= P.m === 'air' ? 'air' : P.m === 'ocean' ? 'ocean' : '' %> shipments</h2><% if (P.phase) { %><a class="small" href="<%= link({}) %>">Clear filter ✕</a><% } %></div>
+    <div class="pt-big"><%= P.phases.active %></div>
+    <div class="pt-bar" role="img" aria-label="Shipments by phase"><% P.phases.counts.forEach((p, i) => { if (!p.n) return; %><a href="<%= link({ phase: p.key }) %>" style="flex:<%= p.n %>;background:<%= RAMP[i] %>" title="<%= p.label %>: <%= p.n %>"></a><% }) %></div>
+    <div class="pt-legend"><% P.phases.counts.forEach((p, i) => { %><a class="<%= P.phase && P.phase.key === p.key ? 'on' : '' %>" href="<%= link({ phase: p.key }) %>"><span class="sw" style="background:<%= RAMP[i] %>"></span><%= p.label %>: <b><%= p.n %></b></a><% }) %></div>
+  </div>
+  <div class="card">
+    <div style="display:flex;justify-content:space-between;align-items:center"><h2 style="margin:0">Estimated arrival</h2>
+      <div class="seg"><a href="<%= link({ wk: P.wk - 1 }) %>" aria-label="Previous week">‹</a><a class="<%= P.wk === 0 ? 'on' : '' %>" href="<%= link({ wk: 0 }) %>"><%= P.week[0].day.slice(5) %> – <%= P.week[6].day.slice(5) %></a><a href="<%= link({ wk: P.wk + 1 }) %>" aria-label="Next week">›</a></div></div>
+    <div class="pt-week"><% P.week.forEach((d) => { const dt = new Date(d.day + 'T00:00:00Z'); %><div class="pt-day <%= d.day === new Date().toISOString().slice(0, 10) ? 'today' : '' %>">
+      <div class="pt-dh"><%= dt.toLocaleDateString('en-US', { timeZone: 'UTC', month: 'short', day: '2-digit' }) %> <span><%= dt.toLocaleDateString('en-US', { timeZone: 'UTC', weekday: 'short' }) %></span></div>
+      <% if (!d.list.length) { %><div class="pt-none">—</div><% } %>
+      <% d.list.slice(0, 4).forEach((s) => { %><a class="pt-ship" href="/shipments/<%= s.id %>" title="<%= S.fileName(s) %>"><%= s.mode === 'AIR' ? '✈' : '🚢' %> <%= s.hbl_no || s.ref_no %></a><% }) %>
+      <% if (d.list.length > 4) { %><div class="pt-none">+<%= d.list.length - 4 %></div><% } %></div><% }) %></div>
+  </div>
+</div>
+<% if (P.phaseList) { %>
+  <div class="card"><h2><%= P.phase.label %> <span class="muted small">(<%= P.phaseList.length %>)</span></h2>
+    <div class="tablewrap"><table class="t"><thead><tr><th>B/L no.</th><th>P.O. no.</th><th>Type</th><th>ETD</th><th>ETA</th><th>Journey</th><th>Origin</th><th>Arrival port</th></tr></thead>
+      <% P.phaseList.forEach(({ s, st }) => { %><tr><td><a href="/shipments/<%= s.id %>"><b><%= s.hbl_no || s.mbl_no || s.ref_no %></b></a></td><td class="small"><%= s.customer_ref || '' %></td><td class="small"><%= s.mode === 'AIR' ? 'Air import' : 'Ocean import' %></td>
+        <td class="nowrap small"><%= s.atd || s.etd || '' %></td><td class="nowrap small"><%= s.ata || s.eta || '' %></td>
+        <td><span class="small"><%= st.current %></span><div class="dots" aria-label="<%= st.n %> of <%= st.total %> stages"><% st.list.forEach((x) => { %><i class="<%= x.done ? 'on' : '' %>" title="<%= x.label %>"></i><% }) %></div></td>
+        <td class="small"><%= s.pol || '' %></td><td class="small"><%= s.pod || '' %></td></tr><% }) %>
+    </table></div></div>
+<% } %>
 <form class="filters" method="get">
   <div class="seg">
     <a class="<%= filter === 'active' ? 'on' : '' %>" href="?filter=active">Active</a>
@@ -53,4 +95,5 @@
   </a>
 <% }) %>
 </div>
+<% } %>
 <%- include('../partials/foot') %>

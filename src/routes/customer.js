@@ -13,13 +13,39 @@ router.get('/track', auth.requireLogin, (req, res) => {
   const sort = ['asc', 'desc'].includes(req.query.sort) ? req.query.sort : '';
   let rows = S.list(req.user, { q: req.query.q || '', stage, sort });
   if (filter === 'delivered' && !internal) rows = rows.filter((s) => s.status === 'DELIVERED');
+  // Portal dashboard: Ocean / Air tab, phase counts (click one to list it), arrivals this week.
+  const P = require('../portal');
+  const m = ['ocean', 'air'].includes(req.query.m) ? req.query.m : '';
+  const all = S.list(req.user, { stage: internal ? 'open' : null });
+  const inMode = all.filter((s) => s.mode !== 'OTHER' && (!m || (m === 'air' ? s.mode === 'AIR' : s.mode !== 'AIR')));
+  const wk = Math.max(-26, Math.min(26, Number(req.query.wk) || 0));
+  const phase = P.PHASES.find((p) => p.key === req.query.phase) || null;
+  const portal = { m, wk, phase, phases: P.phases(inMode), week: P.week(inMode, wk),
+    phaseList: phase ? inMode.filter((s) => P.phaseOf(s) === phase.key).map((s) => ({ s, st: require('../stages').stages(s, s.containers[0] || {}) })) : null };
+  if (m) rows = rows.filter((s) => (m === 'air' ? s.mode === 'AIR' : s.mode !== 'AIR'));
+  // Invoices tab (customers): invoices we sent them.
+  const invoices = req.user.role === 'customer' && req.query.tab === 'invoice'
+    ? require('../db').db.all(`SELECT i.id, i.number, i.invoice_date, i.due_date, i.total, i.paid_amount, i.status, s.ref_no, s.hbl_no FROM invoices i LEFT JOIN shipments s ON s.id = i.shipment_id
+        WHERE i.company_id = ? AND i.kind = 'AR' AND i.sent_at IS NOT NULL AND i.status <> 'VOID' ORDER BY i.invoice_date DESC LIMIT 200`, req.user.company_id) : null;
   const cards = rows.map((s) => ({ s, tr: S.tracking(s) }));
   const counts = {
     sailing: cards.filter((c) => ['sailing', 'delayed'].includes(c.tr.phase)).length,
     arrived: cards.filter((c) => c.tr.phase === 'arrived' && c.s.status !== 'DELIVERED').length,
     waiting: cards.filter((c) => ['waiting', 'unscheduled'].includes(c.tr.phase)).length,
   };
-  res.render('customer/track', { title: 'Shipment tracking', cards, counts, filter, sort, q: req.query.q || '' });
+  res.render('customer/track', { title: 'Shipment tracking', cards, counts, filter, sort, q: req.query.q || '', portal, invoices, tab: invoices ? 'invoice' : 'shipments' });
+});
+
+/** A customer opens one of their invoices (the issued PDF). */
+router.get('/portal/invoices/:id', auth.requireLogin, (req, res) => {
+  const db = require('../db').db;
+  const i = db.get("SELECT * FROM invoices WHERE id = ? AND kind = 'AR' AND sent_at IS NOT NULL", Number(req.params.id));
+  const mine = i && (auth.INTERNAL.includes(req.user.role) || (req.user.role === 'customer' && i.company_id === req.user.company_id));
+  const d = mine && i.document_id ? db.get('SELECT * FROM documents WHERE id = ?', i.document_id) : null;
+  if (!d || !d.stored_path || !require('fs').existsSync(d.stored_path)) return res.status(404).render('error', { title: 'Not found', message: 'Invoice PDF not available — please contact us.' });
+  res.type('application/pdf');
+  res.set('Content-Disposition', `inline; filename*=UTF-8''${encodeURIComponent(d.filename)}`);
+  require('fs').createReadStream(d.stored_path).pipe(res);
 });
 
 /** Customer asks for a delivery date / time window — lands on the PIC's follow-ups and in their inbox. */

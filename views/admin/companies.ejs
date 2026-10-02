@@ -36,6 +36,9 @@
     <div class="grid g2" style="gap:8px"><div class="field"><label>Credit limit (USD)</label><input name="credit_limit" inputmode="decimal" value="<%= c.credit_limit ?? '' %>" placeholder="e.g. 200000"></div>
       <div class="field"><label>&nbsp;</label><label class="check"><input type="checkbox" name="credit_hold" value="1" <%= c.credit_hold ? 'checked' : '' %>> Credit hold — no D/O release</label></div></div>
     <div class="field"><label>Credit note</label><input name="credit_note" value="<%= c.credit_note || '' %>" placeholder="e.g. bad credit — pay before release"></div>
+    <% const hid = new Set(String(c.portal_hide || '').split(',')); %>
+    <div class="field"><label>Hide on the customer portal</label><div class="small">
+      <% Object.entries(PORTAL_HIDE).forEach(([k, l]) => { %><label class="check" style="margin:2px 0"><input type="checkbox" name="portal_hide" value="<%= k %>" <%= hid.has(k) ? 'checked' : '' %>> <%= l %></label><% }) %></div></div>
     <div class="field"><label>Phone</label><input name="phone" value="<%= c.phone || '' %>"></div>
     <div class="field"><label>Default person in charge (new files)</label><select name="default_pic_id"><option value="">— whoever creates the file —</option>
       <% staffUsers.forEach((u) => { %><option value="<%= u.id %>" <%= c.default_pic_id === u.id ? 'selected' : '' %>><%= u.name %></option><% }) %></select></div>
