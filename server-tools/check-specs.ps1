@@ -29,7 +29,7 @@ $ok = $true
 function Check($good, $okish, $label, $msgGood, $msgOk, $msgBad) {
   if ($good) { Line "[OK]    $label - $msgGood" } elseif ($okish) { Line "[FAIR]  $label - $msgOk" } else { Line "[NO]    $label - $msgBad"; $script:ok = $false }
 }
-Check ($ram -ge 16) ($ram -ge 8) 'Memory' "$ram GB is plenty" "$ram GB works; close other programs" "$ram GB is too little (need 8 GB+)"
+Check ($ram -ge 15) ($ram -ge 7.5) 'Memory' "$ram GB is plenty" "$ram GB works; close other programs" "$ram GB is too little (need 8 GB+)"
 Check ($cpu.NumberOfCores -ge 4) ($cpu.NumberOfCores -ge 2) 'CPU' 'fast enough' 'works for a small team' 'too slow'
 Check ($free -ge 100) ($free -ge 30) 'Disk space' "$free GB free" "$free GB free - fine for a year or two of PDFs" "$free GB free - free up space first"
 Check ($media -eq 'SSD') ($media -ne 'HDD') 'Disk type' 'SSD' "$media" 'HDD (slow, wears out) - an SSD is much better'
