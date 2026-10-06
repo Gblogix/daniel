@@ -10,15 +10,21 @@ const config = require('../config');
 
 function findChromium() {
   const candidates = [config.chromiumPath];
-  for (const base of [process.env.PLAYWRIGHT_BROWSERS_PATH, '/opt/pw-browsers', path.join(os.homedir(), '.cache', 'ms-playwright')].filter(Boolean)) {
+  // Playwright's download folder: Linux ~/.cache, Windows %LOCALAPPDATA% (also the installing user's, for the service).
+  const winCache = [process.env.LOCALAPPDATA && path.join(process.env.LOCALAPPDATA, 'ms-playwright'), process.env.GB_USER_LOCALAPPDATA && path.join(process.env.GB_USER_LOCALAPPDATA, 'ms-playwright')];
+  for (const base of [process.env.PLAYWRIGHT_BROWSERS_PATH, '/opt/pw-browsers', path.join(os.homedir(), '.cache', 'ms-playwright'), ...winCache].filter(Boolean)) {
     try {
       for (const d of fs.readdirSync(base).filter((x) => /^chromium-\d+$/.test(x)).sort().reverse()) {
-        candidates.push(path.join(base, d, 'chrome-linux', 'chrome'), path.join(base, d, 'chrome-linux64', 'chrome'));
+        candidates.push(path.join(base, d, 'chrome-linux', 'chrome'), path.join(base, d, 'chrome-linux64', 'chrome'),
+          path.join(base, d, 'chrome-win', 'chrome.exe'), path.join(base, d, 'chrome-win64', 'chrome.exe'));
       }
     } catch { /* not present */ }
   }
   candidates.push('/usr/bin/chromium', '/usr/bin/chromium-browser', '/usr/bin/google-chrome', '/usr/bin/google-chrome-stable',
-    'C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe', '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome');
+    'C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe', 'C:\\Program Files (x86)\\Google\\Chrome\\Application\\chrome.exe',
+    // Every Windows PC has Edge (Chromium) — PDFs still work if the Playwright download is missing.
+    'C:\\Program Files (x86)\\Microsoft\\Edge\\Application\\msedge.exe', 'C:\\Program Files\\Microsoft\\Edge\\Application\\msedge.exe',
+    '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome');
   return candidates.find((p) => p && fs.existsSync(p)) || null;
 }
 

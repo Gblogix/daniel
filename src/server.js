@@ -89,6 +89,7 @@ if (require.main === module) {
   require('./mailin').start();
   require('./alerts').start();
   if (require('./smartsheet').start()) console.log('Smartsheet sync on');
+  console.log(require('./backup').start() ? `Backup: nightly to ${require('./backup').dir()}` : 'Backup: OFF — set BACKUP_DIR in .env (e.g. a OneDrive folder)');
   if (require('./quickbooks').start()) console.log(`QuickBooks Online: ${require('./quickbooks').connected() ? 'connected' : 'app keys set — connect from Accounting › QuickBooks Online'}`);
   const t = require('./tracking').start();
   console.log(`Tracking: ${t.any ? [t.terminal49 && 'Terminal49', t.shipsgo && 'ShipsGo', t.dcsa.length && `carrier APIs (${t.dcsa.join(', ')})`].filter(Boolean).join(', ') : 'no provider configured'}${t.datalastic || t.aisstream ? ' · vessel GPS on' : ''}`);

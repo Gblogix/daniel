@@ -3,3 +3,6 @@ data/
 uploads/
 .env
 *.log
+
+logs/
+server-tools/specs.txt

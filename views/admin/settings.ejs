@@ -9,6 +9,14 @@
     AI extraction: <b><%= config.ai.enabled ? `on (${config.ai.model})` : 'off — rule-based extraction' %></b></p>
   <button class="btn">Save</button>
 </form>
+<div class="card" style="max-width:760px" id="backup">
+  <h2>Backup</h2>
+  <% if (!backup.dir) { %><p class="small" style="color:var(--red)">⚠ Backup is OFF. Add <code>BACKUP_DIR=C:\Users\…\OneDrive\GB Logix Backup</code> to the <code>.env</code> file and restart — the database and uploaded files are then copied there every night.</p>
+  <% } else { %><p class="small">Every night after 2am to <code><%= backup.dir %></code> (database copies kept 30 days, uploaded files mirrored).</p><% } %>
+  <% if (backup.last) { %><p class="small muted">Last backup <%= fmtDateTime(backup.last.at) %> UTC — <%= Math.round(backup.last.size / 1024) %> KB database, <%= backup.last.files %> new file(s).</p><% } %>
+  <% if (backup.error) { %><p class="small" style="color:var(--red)">Last error: <%= backup.error %></p><% } %>
+  <form method="post" action="/admin/backup/run"><input type="hidden" name="_csrf" value="<%= csrf %>"><button class="btn secondary small" <%= backup.dir ? '' : 'disabled' %>>⤓ Back up now</button></form>
+</div>
 <div class="card" style="max-width:760px">
   <h2>Smartsheet</h2>
   <p class="small"><%= smartsheet.token ? '✔ API token set' : 'Not connected — set SMARTSHEET_TOKEN (Smartsheet › Personal settings › API access)' %>.
