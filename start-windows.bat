@@ -24,7 +24,7 @@ if not exist node_modules (
   call npm.cmd install
   if errorlevel 1 ( echo npm install failed. & pause & exit /b 1 )
   echo [2/2] Installing Chromium for PDF documents...
-  call npx.cmd playwright install chromium
+  call npx.cmd --yes playwright install chromium
   copy /y package.json node_modules\.gb-package.json >nul
 )
 
