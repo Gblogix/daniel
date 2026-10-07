@@ -69,6 +69,13 @@ BACKUP_DIR=C:\Users\(사용자이름)\OneDrive\GB Logix Backup
    화면에 나오는 명령 `cloudflared.exe service install eyJ…` 를 **관리자 PowerShell**에 붙여넣기 → 상태가 **Healthy** 가 되면 OK.
 3. **Public Hostname** 추가: Subdomain `app`, Domain `gblogix.com`, Service **HTTP** `localhost:3000` → 저장.
 4. 폰 Wi-Fi를 끄고 `https://app.gblogix.com` 접속 → 로그인 화면이 나오면 성공.
+5. 재부팅 후 **Error 1033**이 나오면 터널 서비스가 멈춘 것입니다. 관리자 cmd에서:
+   ```
+   sc config cloudflared start= delayed-auto
+   sc failure cloudflared reset= 86400 actions= restart/10000/restart/30000/restart/60000
+   sc start cloudflared
+   ```
+   (`server-tools\restart-server.bat`을 관리자 권한으로 실행해도 같은 설정이 됩니다.)
 
 ### 4-4. 고객에게 안내
 - Admin → Users에서 고객 계정 초대 → 고객은 `https://app.gblogix.com` 에서 자기 화물만 봅니다.

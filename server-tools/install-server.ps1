@@ -24,3 +24,11 @@ Register-ScheduledTask -TaskName 'GB Logix Server' -Action $action -Trigger $tri
 Get-CimInstance Win32_Process -Filter "Name='node.exe'" | Where-Object { $_.CommandLine -like '*src*server.js*' } | ForEach-Object { Invoke-CimMethod -InputObject $_ -MethodName Terminate | Out-Null }
 Start-ScheduledTask -TaskName 'GB Logix Server'
 Write-Host 'GB Logix Server task registered and started.'
+
+# Cloudflare Tunnel (if installed): start after the network is up and restart itself if it stops (avoids error 1033 after a reboot).
+if (Get-Service -Name cloudflared -ErrorAction SilentlyContinue) {
+  sc.exe config cloudflared start= delayed-auto | Out-Null
+  sc.exe failure cloudflared reset= 86400 actions= restart/10000/restart/30000/restart/60000 | Out-Null
+  Start-Service cloudflared -ErrorAction SilentlyContinue
+  Write-Host 'Cloudflare Tunnel service set to delayed start with automatic restart.'
+}
