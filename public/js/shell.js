@@ -34,12 +34,20 @@
         const x = document.createElement('button'); x.className = 'x'; x.textContent = '×'; x.title = 'Close';
         x.onclick = (e) => { e.stopPropagation(); close(t.id); }; el.appendChild(x);
       }
-      el.onclick = () => activate(t.id);
+      el.onclick = () => { if (t.home) home(t); else activate(t.id); };
       el.onauxclick = (e) => { if (e.button === 1 && !t.home) close(t.id); };
       el.ondblclick = () => reload(t);
       tabbar.appendChild(el);
     }
     save();
+  }
+
+  /** Main always shows the dashboard: if the page inside it moved on (a form, a list), bring it back. */
+  function home(t) {
+    let path = null;
+    try { path = t.frame.contentWindow.location.pathname; } catch (e) { /* not readable */ }
+    if (path !== HOME) { t.frame.src = HOME; t.url = HOME; }
+    activate(t.id);
   }
 
   function reload(t) { try { t.frame.contentWindow.location.reload(); } catch (e) { t.frame.src = t.url; } }
@@ -48,6 +56,7 @@
     const t = { id: `t${++seq}`, url, title: title || labelFor(url) || 'Loading…', home };
     const f = document.createElement('iframe');
     f.className = 'pane'; f.src = url; f.title = t.title;
+    if (home) f.dataset.home = '1';
     f.addEventListener('load', () => {
       try {
         const w = f.contentWindow;
@@ -125,6 +134,8 @@
       it.addEventListener('mouseleave', () => { hideT = setTimeout(() => it.classList.remove('open'), 180); });
     });
     rail.addEventListener('click', (e) => {
+      const star = e.target.closest('[data-star]');
+      if (star) { e.preventDefault(); toggleFavorite(star.dataset.star); return; }
       const a = e.target.closest('a[data-open]');
       const btn = e.target.closest('.rail-btn');
       if (a) { e.preventDefault(); open(a.dataset.open, a.dataset.title); close(); return; }
@@ -146,11 +157,12 @@
     for (const id of favorites) {
       const it = data.items.find((i) => i.id === id); if (!it) continue;
       const a = document.createElement('a'); a.href = it.href; a.textContent = it.label;
+      a.title = it.label;
       a.onclick = (e) => { e.preventDefault(); open(it.href, it.label); };
       bar.appendChild(a);
     }
-    if (!favorites.length) { const s = document.createElement('span'); s.className = 'empty'; s.textContent = '☰ → ☆ to add favorites'; bar.appendChild(s); }
-    drawer.querySelectorAll('[data-star]').forEach((b) => {
+    if (!favorites.length) { const s = document.createElement('span'); s.className = 'empty'; s.textContent = '☆ in the left menu adds favorites here'; bar.appendChild(s); }
+    document.querySelectorAll('[data-star]').forEach((b) => {
       const on = favorites.includes(b.dataset.star); b.textContent = on ? '★' : '☆'; b.classList.toggle('on', on);
     });
   }
@@ -211,6 +223,12 @@
   refreshBell(); setInterval(refreshBell, 120000);
   window.gbRefreshBell = refreshBell;
 
+  // ---------- header height (the favorites bar wraps onto more lines) ----------
+  const top = document.querySelector('.shell-top');
+  const setTop = () => document.documentElement.style.setProperty('--toph', `${top.offsetHeight}px`);
+  if (window.ResizeObserver) new ResizeObserver(setTop).observe(top);
+  window.addEventListener('resize', setTop);
+
   // ---------- start ----------
   let saved = null;
   try { saved = JSON.parse(localStorage.getItem(KEY) || 'null'); } catch (e) { saved = null; }
@@ -223,4 +241,5 @@
   if (data.open && norm(data.open) !== HOME) open(data.open); else if (data.open) activate(tabs[0].id);
   history.replaceState(null, '', '/app');
   renderFavorites();
+  setTop();
 })();

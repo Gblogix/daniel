@@ -76,6 +76,14 @@ if (document.documentElement.classList.contains('embedded') && window.top.gbOpen
     const here = location.pathname + location.search;
     const path = url.pathname + url.search;
     if (path === here) return; // in-page anchors
+    // The Main tab stays the dashboard: whatever it links to opens in its own tab.
+    let home = false;
+    try { home = window.frameElement && window.frameElement.dataset.home === '1'; } catch (err) { home = false; }
+    if (home && url.pathname !== '/dashboard' && !/\.xlsx|\.pdf|format=|\/logout/.test(path)) {
+      e.preventDefault();
+      window.top.gbOpenTab(path + url.hash, a.textContent.trim().replace(/\s+/g, ' ').slice(0, 40));
+      return;
+    }
     if (DETAIL.test(url.pathname + url.search) && !/\/preview|\.xlsx|format=/.test(path)) {
       e.preventDefault();
       window.top.gbOpenTab(path + url.hash, a.textContent.trim().slice(0, 40));

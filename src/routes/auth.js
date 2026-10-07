@@ -13,12 +13,12 @@ router.get('/', (req, res) => {
 router.get('/app', auth.requireInternal, (req, res) => {
   const menu = require('../menu');
   const open = typeof req.query.open === 'string' && /^\/(?!\/)/.test(req.query.open) && !req.query.open.startsWith('/app') ? req.query.open : '';
-  res.render('app', { title: 'GB Logix', menu: menu.menuFor(req.user), rail: menu.railFor(req.user), favorites: menu.favoritesFor(req.user), open });
+  res.render('app', { title: 'GB Logix', menu: menu.menuFor(req.user), rail: menu.railFor(req.user), favItems: menu.favItems(req.user), favorites: menu.favoritesFor(req.user), open });
 });
 router.post('/me/favorites', auth.requireInternal, (req, res) => {
   const menu = require('../menu');
-  const allowed = new Set(menu.items(req.user).map((i) => i.id));
-  const ids = (Array.isArray(req.body.ids) ? req.body.ids : []).filter((id) => allowed.has(id)).slice(0, 20);
+  const allowed = new Set(menu.favItems(req.user).map((i) => i.id));
+  const ids = (Array.isArray(req.body.ids) ? req.body.ids : []).filter((id) => allowed.has(id)).slice(0, 40);
   require('../db').db.run('UPDATE users SET favorites = ? WHERE id = ?', JSON.stringify([...new Set(ids)]), req.user.id);
   res.json({ ok: true, ids });
 });

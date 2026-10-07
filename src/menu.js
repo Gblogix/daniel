@@ -147,15 +147,29 @@ const RAIL = [
 function railFor(user) {
   const ok = (x) => !x.perm || auth.can(user, x.perm);
   const menu = menuFor(user);
+  // Every page in the rail can be a favorite: menu pages keep their menu id, the others are "r:<href>".
+  // Ocean / Air list names get the area added ("My shipments · Ocean Import") so the favorites bar stays clear.
+  const tag = (r, it) => ({ ...it, id: it.id || `r:${it.href}`, title: ['ocean', 'air'].includes(r.key) && !/^New|^Upload/.test(it.label) ? `${it.label} · ${r.label}` : it.label });
   return RAIL.filter(ok).map((r) => {
     if (r.fromMenu) {
       const m = menu.find((x) => x.key === r.fromMenu);
-      return m ? { ...r, groups: m.cols.map((c) => ({ head: c.head, items: c.items })) } : null;
+      return m ? { ...r, groups: m.cols.map((c) => ({ head: c.head, items: c.items.map((it) => tag(r, it)) })) } : null;
     }
-    if (!r.groups) return r;
-    const groups = r.groups.filter((g) => !g.admin || user.role === 'admin').map((g) => ({ ...g, items: g.items.filter(ok) })).filter((g) => g.items.length);
-    return groups.length ? { ...r, groups } : null;
+    const self = r.href ? { id: (items(user).find((i) => i.href === r.href) || {}).id || `r:${r.href}`, title: r.label } : {};
+    if (!r.groups) return { ...r, ...self };
+    const groups = r.groups.filter((g) => !g.admin || user.role === 'admin').map((g) => ({ ...g, items: g.items.filter(ok).map((it) => tag(r, it)) })).filter((g) => g.items.length);
+    return groups.length ? { ...r, ...self, groups } : null;
   }).filter(Boolean);
+}
+
+/** Everything that can sit on the favorites bar: menu pages plus the rail's pages (one entry per id). */
+function favItems(user) {
+  const out = new Map(items(user).map(({ id, label, href }) => [id, { id, label, href }]));
+  for (const r of railFor(user)) {
+    if (r.href && !out.has(r.id)) out.set(r.id, { id: r.id, label: r.title, href: r.href });
+    for (const g of r.groups || []) for (const it of g.items) if (!out.has(it.id)) out.set(it.id, { id: it.id, label: it.title, href: it.href });
+  }
+  return [...out.values()];
 }
 
 const DEFAULT_FAVORITES = ['dashboard', 'followups', 'ship-list', 'track', 'intake', 'vendor-bills', 'ar-entry', 'settle'];
@@ -177,8 +191,8 @@ function favoritesFor(user) {
   let ids = null;
   try { ids = JSON.parse(user.favorites || 'null'); } catch { ids = null; }
   if (!Array.isArray(ids)) ids = DEFAULT_FAVORITES;
-  const allowed = new Set(items(user).map((i) => i.id));
+  const allowed = new Set(favItems(user).map((i) => i.id));
   return ids.filter((id) => allowed.has(id));
 }
 
-module.exports = { MENU, RAIL, DEFAULT_FAVORITES, menuFor, railFor, items, favoritesFor };
+module.exports = { MENU, RAIL, DEFAULT_FAVORITES, menuFor, railFor, items, favItems, favoritesFor };

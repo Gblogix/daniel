@@ -14,6 +14,7 @@ const config = require('../config');
 const esc = (v) => String(v ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 const nl = (v) => esc(v).replace(/\n/g, '<br>');
 const n = (v, d = 2) => (v == null || v === '' ? '' : Number(v).toLocaleString('en-US', { minimumFractionDigits: d, maximumFractionDigits: d }));
+const lbs = (kg) => (kg == null || kg === '' ? '' : `${n(Number(kg) * 2.20462)} LBS`);
 const up = (v) => esc(String(v ?? '').toUpperCase());
 /** 2026-09-16 -> 09/16/2026 (forms use US dates) */
 const us = (d) => (d && /^\d{4}-\d{2}-\d{2}/.test(d) ? `${d.slice(5, 7)}/${d.slice(8, 10)}/${d.slice(0, 4)}` : esc(d || ''));
@@ -126,7 +127,7 @@ function arrivalNotice(s, { company: co, preparedBy = '', revision = 0, invoice 
   ${ctnRows.map((c, i) => `<tr><td><b>${esc(c.container_no || '')}${c.seal_no ? `/${esc(c.seal_no)}` : ''}</b></td>
     <td><b>${i === 0 ? `${n(s.packages, 0)} ${esc(s.package_unit || 'PACKAGE(S)')}` : ''}</b></td>
     <td><b>${i === 0 ? `${up(s.commodity || s.items.map((it) => it.description).slice(0, 4).join(', '))}<br>${n(s.packages, 0)} ${esc(s.package_unit || 'PACKAGE(S)')}` : ''}</b></td>
-    <td class="r"><b>${i === 0 ? `${n(s.weight_kg)} KGS` : ''}</b></td><td class="r"><b>${i === 0 ? (air && s.chargeable_weight ? `C/W ${n(s.chargeable_weight)} KGS` : `${n(s.cbm, 3)} CBM`) : ''}</b></td></tr>`).join('')}
+    <td class="r"><b>${i === 0 ? `${n(s.weight_kg)} KGS<br>${lbs(s.weight_kg)}` : ''}</b></td><td class="r"><b>${i === 0 ? (air && s.chargeable_weight ? `C/W ${n(s.chargeable_weight)} KGS<br>${lbs(s.chargeable_weight)}` : `${n(s.cbm, 3)} CBM`) : ''}</b></td></tr>`).join('')}
   <tr><td></td><td><b>${sizeText}</b></td><td>${nl(String(s.marks || '').toUpperCase())}</td>
     <td colspan="2" class="r"><b>${up(s.release_type || (s.telex_release ? 'EXPRESS RELEASE' : ''))}</b><br><br><b>${up(s.service_term)}</b></td></tr>
 </table>
@@ -184,13 +185,13 @@ function deliveryOrder(s, { company: co, preparedBy = '', revision = 0 } = {}) {
   <tr><td style="height:130px"><span class="lbl">Route</span>${nl(s.route_note || '')}</td>
     <td colspan="3" style="padding:0"><span class="lbl" style="padding:2px 4px">Container Information</span>
       <table class="small" style="font-size:8.5px"><tr style="border-bottom:1px solid #000"><td><i>CONTAINER No.</i></td><td><i>TYPE</i></td><td><i>SEAL No.</i></td><td><i>WEIGHT</i></td><td><i>PICKUP No.</i></td><td><i>LFD</i></td></tr>
-      ${s.containers.map((c) => `<tr><td>${esc(c.container_no)}</td><td>${esc(c.size_type || '')}</td><td>${esc(c.seal_no || '')}</td><td>${c.weight_kg ? `${n(c.weight_kg)} K` : ''}</td><td>${esc(c.pickup_no || '')}</td><td>${us(c.pickup_lfd)}</td></tr>`).join('')}
+      ${s.containers.map((c) => `<tr><td>${esc(c.container_no)}</td><td>${esc(c.size_type || '')}</td><td>${esc(c.seal_no || '')}</td><td>${c.weight_kg ? `${n(c.weight_kg)} K / ${n(c.weight_kg * 2.20462)} L` : ''}</td><td>${esc(c.pickup_no || '')}</td><td>${us(c.pickup_lfd)}</td></tr>`).join('')}
       ${!s.containers.length && s.pallets ? `<tr><td colspan="6">${n(s.pallets, 0)} PALLET(S)</td></tr>` : ''}</table></td></tr>
 </table>
 <table class="b" style="margin-top:6px">
   <tr style="background:#ccc"><th class="c" style="width:21%">MARK</th><th class="c">DESCRIPTION</th><th class="c" style="width:12%">PKGS</th><th class="c" style="width:14%">WEIGHT</th><th class="c" style="width:14%">MEASURMENT</th></tr>
   <tr style="height:130px"><td>${nl(String(s.marks || '').toUpperCase())}</td><td>${up(s.commodity || s.items.map((i) => i.description).join(', '))}</td>
-    <td class="r">${n(s.packages, 0)}<br>${esc(s.package_unit || 'PACKAGE(S)')}</td><td class="r">${n(s.weight_kg)} KGS</td><td class="r">${air && s.chargeable_weight ? `C/W ${n(s.chargeable_weight)} KGS` : `${n(s.cbm, 3)} CBM`}</td></tr>
+    <td class="r">${n(s.packages, 0)}<br>${esc(s.package_unit || 'PACKAGE(S)')}</td><td class="r">${n(s.weight_kg)} KGS<br>${lbs(s.weight_kg)}</td><td class="r">${air && s.chargeable_weight ? `C/W ${n(s.chargeable_weight)} KGS<br>${lbs(s.chargeable_weight)}` : `${n(s.cbm, 3)} CBM`}</td></tr>
 </table>
 <table style="margin-top:6px;table-layout:fixed"><tr>
   <td style="width:50%"><b>ORIGINAL DELIVERY ORDER</b><br><b>INLAND FREIGHT :</b> &nbsp; PREPAID

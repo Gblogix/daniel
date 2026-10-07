@@ -49,9 +49,9 @@
         <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><%- ICON[r.icon] || '' %></svg></a>
       <div class="rail-fly" role="menu">
         <div class="rail-title"><%= r.label %></div>
-        <% if (r.href) { %><a role="menuitem" href="<%= r.href %>" data-open="<%= r.href %>" data-title="<%= r.label %>">Open <%= r.label %></a><% } %>
+        <% if (r.href) { %><div class="rail-row"><a role="menuitem" href="<%= r.href %>" data-open="<%= r.href %>" data-title="<%= r.label %>">Open <%= r.label %></a><button type="button" class="star" data-star="<%= r.id %>" title="Add to / remove from favorites">☆</button></div><% } %>
         <% (r.groups || []).forEach((g) => { %><div class="rail-head"><%= g.head %></div>
-          <% g.items.forEach((it) => { %><a role="menuitem" href="<%= it.href %>" data-open="<%= it.href %>" data-title="<%= it.label %><%= r.groups && ['ocean', 'air'].includes(r.key) && !/^New|^Upload/.test(it.label) ? ` · ${r.label}` : '' %>"><%= it.label %></a><% }) %>
+          <% g.items.forEach((it) => { %><div class="rail-row"><a role="menuitem" href="<%= it.href %>" data-open="<%= it.href %>" data-title="<%= it.title %>"><%= it.label %></a><button type="button" class="star" data-star="<%= it.id %>" title="Add to / remove from favorites">☆</button></div><% }) %>
         <% }) %>
       </div>
     </div>
@@ -63,7 +63,7 @@
 </div>
 
 <script type="application/json" id="shell-data"><%- JSON.stringify({
-  items: menu.flatMap((m) => m.cols.flatMap((c) => c.items)).map(({ id, label, href }) => ({ id, label, href })),
+  items: favItems,
   favorites, open, csrf, userId: user.id,
 }).replace(/</g, '\\u003c') %></script>
 <script src="/js/shell.js?v=<%= v %>"></script>
