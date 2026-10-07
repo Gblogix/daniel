@@ -18,7 +18,7 @@
           <div class="field"><label>Email</label><input name="email" type="email" value="<%= u.email %>" required></div>
           <div class="field"><label>Role</label><select name="role"><% Object.entries(ROLES).forEach(([k, r]) => { %><option value="<%= k %>" <%= u.role === k ? 'selected' : '' %>><%= r.label %></option><% }) %></select></div>
           <div class="field"><label>Company</label><select name="company_id"><option value="">—</option><% companies.forEach((c) => { %><option value="<%= c.id %>" <%= u.company_id === c.id ? 'selected' : '' %>><%= c.name %></option><% }) %></select></div>
-          <div class="field"><label>New password (optional)</label><input name="password" type="password" minlength="8" autocomplete="new-password"></div>
+          <div class="field"><label>Reset password (optional, temporary)</label><input name="password" type="password" minlength="8" autocomplete="new-password"></div>
           <label class="check"><input type="checkbox" name="active" value="1" <%= u.active ? 'checked' : '' %>> Active</label>
           <button class="btn small" style="margin-top:8px">Save</button>
         </form></details></td></tr>
@@ -35,6 +35,7 @@
     <div class="field"><label>&nbsp;</label><label class="check"><input type="checkbox" name="can_accounting" value="1"> Accounting access (staff — e.g. James, Jay)</label></div>
     <div class="field"><label>Temporary password</label><input name="password" type="password" minlength="8" required autocomplete="new-password"></div>
   </div>
+  <p class="muted small" style="margin:0 0 8px">Give the person the temporary password. At their first sign-in they must choose their own; a password you reset later works the same way.</p>
   <button class="btn">Create user</button>
 </form>
 <%- include('../partials/foot') %>

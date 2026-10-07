@@ -763,3 +763,6 @@ form.inline { display: inline; }
 .lock-form { margin-left: auto; display: flex; gap: 6px; align-items: center; }
 .lock-form input { width: 260px; padding: 5px 8px; font-size: 13px; }
 fieldset.plainset { border: 0; padding: 0; margin: 0; min-width: 0; }
+
+.who .pwlink { color: #fff; opacity: .85; font-size: 13px; text-decoration: none; padding: 4px 6px; border-radius: 6px; }
+.who .pwlink:hover { opacity: 1; background: rgba(255,255,255,.14); }

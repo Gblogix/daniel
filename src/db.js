@@ -376,7 +376,7 @@ const MIGRATIONS = {
   documents: { invoice_id: 'INTEGER', company_id: 'INTEGER', master_id: 'INTEGER' },
   masters: { containers: 'TEXT' }, // container nos. on the MB/L (comma list) — finds the master of a house B/L without MB/L no.
   intakes: { master_id: 'INTEGER', feedback: 'INTEGER', feedback_note: 'TEXT' }, // feedback: reading quality 1 good / 0 bad
-  users: { can_accounting: 'INTEGER NOT NULL DEFAULT 0', favorites: 'TEXT', perms: 'TEXT' },
+  users: { can_accounting: 'INTEGER NOT NULL DEFAULT 0', favorites: 'TEXT', perms: 'TEXT', must_change_pw: 'INTEGER NOT NULL DEFAULT 0', pw_changed_at: 'TEXT' },
 };
 
 function migrate(db) {

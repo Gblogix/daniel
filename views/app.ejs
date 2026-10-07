@@ -17,6 +17,7 @@
   <div class="who">
     <span><%= user.name %></span>
     <span class="role-chip"><%= ROLES[user.role].label %></span>
+    <a class="pwlink" href="/account/password" title="Change my password">🔑</a>
     <form method="post" action="/logout"><input type="hidden" name="_csrf" value="<%= csrf %>"><button>Sign out</button></form>
   </div>
 </header>

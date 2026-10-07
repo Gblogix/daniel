@@ -37,6 +37,7 @@ class SqliteStore extends session.Store {
 }
 
 function hashPassword(pw) { return bcrypt.hashSync(pw, 10); }
+function checkPassword(pw, hash) { return Boolean(hash) && bcrypt.compareSync(String(pw || ''), hash); }
 
 function authenticate(email, password) {
   const u = store.db.get('SELECT * FROM users WHERE email = ? AND active = 1', String(email || '').trim());
@@ -49,7 +50,7 @@ function authenticate(email, password) {
 function loadUser(req, res, next) {
   const id = req.session?.userId;
   if (id) {
-    const u = store.db.get(`SELECT u.id, u.email, u.name, u.role, u.company_id, u.can_accounting, u.favorites, u.perms, c.name AS company_name
+    const u = store.db.get(`SELECT u.id, u.email, u.name, u.role, u.company_id, u.can_accounting, u.favorites, u.perms, u.must_change_pw, c.name AS company_name
       FROM users u LEFT JOIN companies c ON c.id = u.company_id WHERE u.id = ? AND u.active = 1`, id);
     if (u) { req.user = u; res.locals.user = u; }
   }
@@ -147,4 +148,4 @@ function checkCsrf(req, res, next) {
   next();
 }
 
-module.exports = { PERMISSIONS, PERM_KEYS, permsOf, can, requirePerm, canAccounting, requireAccounting, ACCOUNTING_DOCS, ACCOUNTING_EMAILS, ACCOUNTING_FIELDS, ROLES, INTERNAL, SqliteStore, hashPassword, authenticate, loadUser, requireLogin, requireRole, requireInternal, csrf, checkCsrf };
+module.exports = { PERMISSIONS, PERM_KEYS, permsOf, can, requirePerm, canAccounting, requireAccounting, ACCOUNTING_DOCS, ACCOUNTING_EMAILS, ACCOUNTING_FIELDS, ROLES, INTERNAL, SqliteStore, hashPassword, checkPassword, authenticate, loadUser, requireLogin, requireRole, requireInternal, csrf, checkCsrf };

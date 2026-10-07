@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="en"<%- locals.user && isInternal ? ' data-shell="1"' : '' %>>
+<html lang="en"<%- locals.user && isInternal && !locals.noShell ? ' data-shell="1"' : '' %>>
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
@@ -27,6 +27,7 @@
   <div class="who">
     <span><%= user.name %><% if (user.company_name) { %> · <%= user.company_name %><% } %></span>
     <span class="role-chip"><%= ROLES[user.role].label %></span>
+    <a class="pwlink" href="/account/password" title="Change my password">🔑 Password</a>
     <form method="post" action="/logout"><input type="hidden" name="_csrf" value="<%= csrf %>"><button>Sign out</button></form>
   </div>
 </header>

@@ -50,6 +50,12 @@ function createApp() {
     delete req.session.flash;
     next();
   });
+  // Signed in with a temporary password (new invite or a reset by an admin): choose a new one before anything else.
+  app.use((req, res, next) => {
+    if (!req.user?.must_change_pw || ['/account/password', '/logout'].includes(req.path)) return next();
+    if (req.method === 'GET') return res.redirect('/account/password');
+    return res.status(403).render('error', { title: 'Change your password', message: 'Please choose a new password first.' });
+  });
   // Mutating requests need a CSRF token (multipart routes check after parsing).
   app.use((req, res, next) => {
     if (req.method === 'POST' && !req.is('multipart/form-data')) return auth.checkCsrf(req, res, next);

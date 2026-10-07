@@ -87,10 +87,14 @@ router.post('/admin/users', auth.requirePerm('users'), (req, res) => {
       if (Number(id) === req.user.id && (role !== 'admin' || !active)) { flash(req, 'err', 'You cannot remove your own admin access'); return res.redirect('/admin/users'); }
       store.db.run('UPDATE users SET email = ?, name = ?, role = ?, company_id = ?, active = ? WHERE id = ?', email, name, role, companyId, active ? 1 : 0, Number(id));
       if (role !== 'staff') store.db.run('UPDATE users SET can_accounting = 0 WHERE id = ?', Number(id));
-      if (password) store.db.run('UPDATE users SET password_hash = ? WHERE id = ?', auth.hashPassword(password), Number(id));
+      // A password typed here is temporary: the user picks their own at the next sign-in (not when you change your own).
+      if (password) {
+        if (password.length < 8) { flash(req, 'err', 'Password must be at least 8 characters'); return res.redirect('/admin/users'); }
+        store.db.run('UPDATE users SET password_hash = ?, must_change_pw = ? WHERE id = ?', auth.hashPassword(password), Number(id) === req.user.id ? 0 : 1, Number(id));
+      }
     } else {
       if (!password || password.length < 8) { flash(req, 'err', 'Password must be at least 8 characters'); return res.redirect('/admin/users'); }
-      store.db.run('INSERT INTO users (email, name, role, company_id, password_hash, can_accounting) VALUES (?, ?, ?, ?, ?, ?)', email, name, role, companyId, auth.hashPassword(password), acct);
+      store.db.run('INSERT INTO users (email, name, role, company_id, password_hash, can_accounting, must_change_pw) VALUES (?, ?, ?, ?, ?, ?, 1)', email, name, role, companyId, auth.hashPassword(password), acct);
     }
     flash(req, 'ok', 'User saved');
   } catch (e) {

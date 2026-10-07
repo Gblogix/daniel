@@ -39,6 +39,24 @@ router.post('/login', (req, res, next) => {
   });
 });
 
+// ---------- my password (everyone: staff, customers, agents, brokers, truckers) ----------
+router.get('/account/password', auth.requireLogin, (req, res) => {
+  res.render('account-password', { title: 'Change password', noShell: true, forced: Boolean(req.user.must_change_pw), error: null });
+});
+router.post('/account/password', auth.requireLogin, (req, res) => {
+  const forced = Boolean(req.user.must_change_pw);
+  const fail = (error) => res.status(400).render('account-password', { title: 'Change password', noShell: true, forced, error });
+  const { current, password, confirm } = req.body;
+  const row = require('../db').db.get('SELECT password_hash FROM users WHERE id = ?', req.user.id);
+  if (!auth.checkPassword(current, row.password_hash)) return fail('Your current password is not correct');
+  if (!password || String(password).length < 8) return fail('The new password needs at least 8 characters');
+  if (password !== confirm) return fail('The two new passwords do not match');
+  if (password === current) return fail('Choose a password different from the current one');
+  require('../db').db.run("UPDATE users SET password_hash = ?, must_change_pw = 0, pw_changed_at = datetime('now') WHERE id = ?", auth.hashPassword(password), req.user.id);
+  req.session.flash = { type: 'ok', msg: 'Password changed' };
+  res.redirect('/');
+});
+
 router.post('/logout', (req, res) => {
   req.session.destroy(() => res.redirect('/login'));
 });
