@@ -71,6 +71,12 @@ function createApp() {
   app.use((req, res) => res.status(404).render('error', { title: 'Not found', message: 'The page you are looking for does not exist.' }));
   // eslint-disable-next-line no-unused-vars
   app.use((err, req, res, next) => {
+    // A change to a locked file: say so on the page the user came from.
+    if (err.code === 'LOCKED' && req.method === 'POST' && req.session) {
+      req.session.flash = { type: 'err', msg: err.message };
+      if (req.get('accept')?.includes('application/json') || req.xhr) return res.status(423).json({ error: err.message });
+      return res.redirect(req.get('referer') || '/');
+    }
     console.error(err);
     res.status(err.status || 500).render('error', { title: 'Error', message: err.expose ? err.message : 'Something went wrong. Please try again.' });
   });
@@ -88,6 +94,7 @@ if (require.main === module) {
   console.log(`Email: ${config.mailTransport}${config.graph.enabled && config.graph.intake ? ' · Outlook intake on' : ''}`);
   require('./mailin').start();
   require('./alerts').start();
+  require('./locks').start();
   if (require('./smartsheet').start()) console.log('Smartsheet sync on');
   console.log(require('./backup').start() ? `Backup: nightly to ${require('./backup').dir()}` : 'Backup: OFF — set BACKUP_DIR in .env (e.g. a OneDrive folder)');
   if (require('./quickbooks').start()) console.log(`QuickBooks Online: ${require('./quickbooks').connected() ? 'connected' : 'app keys set — connect from Accounting › QuickBooks Online'}`);

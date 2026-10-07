@@ -70,6 +70,12 @@ test('billing state, checkbox settlement and closing the file into history', () 
   assert.ok(!S.list(staff, { stage: 'delivered' }).some((x) => x.id === s.id));
   assert.ok(!S.list(staff, { active: true }).some((x) => x.id === s.id));
 
+  // Everything paid (vendor bill too) → the file locked itself: no new invoice until an admin unlocks it.
+  const L = require('../src/locks');
+  assert.ok(L.isLocked(s.id), 'locked once all invoices and bills are paid');
+  assert.throws(() => A.saveInvoice({ kind: 'AR', shipment_id: s.id, company_id: ids.leepop, lines: [{ description: 'X', amount: 1 }] }), { code: 'LOCKED' });
+  L.unlock(s.id, { userId: 1, reason: 'storage billed late' });
+
   // A new invoice on the file reopens it; voiding it closes it again.
   const extra = A.saveInvoice({ kind: 'AR', shipment_id: s.id, company_id: ids.leepop, lines: [{ description: 'STORAGE CHARGE', amount: 80 }] });
   assert.equal(S.list(staff, { stage: 'closed' }).some((x) => x.id === s.id), false);

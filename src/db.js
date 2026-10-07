@@ -340,6 +340,7 @@ const MIGRATIONS = {
     internal_note: 'TEXT', color_label: 'TEXT', flagged: 'INTEGER NOT NULL DEFAULT 0', // list work screen
     bill_to_id: 'INTEGER', sales_id: 'INTEGER', // invoice party when not the customer; sales rep
     blocked_at: 'TEXT', blocked_by: 'INTEGER', block_reason: 'TEXT', // file locked (Tools › Block)
+    locked_at: 'TEXT', locked_by: 'INTEGER', lock_released_at: 'TEXT', lock_released_by: 'INTEGER', lock_release_reason: 'TEXT', // accounting lock (src/locks.js)
     profit_remark: 'TEXT', profit_ignore: 'INTEGER NOT NULL DEFAULT 0', // dashboard: negative-profit review
     pierpass_paid: 'INTEGER NOT NULL DEFAULT 0', // ocean: PierPass TMF / Clean Truck Fee paid
     master_id: 'INTEGER', // house file → its master B/L (masters)

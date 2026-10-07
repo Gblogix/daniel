@@ -174,6 +174,7 @@ router.post('/intakes/:id/apply', auth.requirePerm('intake'), async (req, res) =
 async function applySingle(req, res, intake) {
   const db = store.db;
   const targetId = req.body.target === 'new' ? null : Number(req.body.target) || null;
+  if (targetId) require('../locks').assertUnlocked(targetId);
   let id;
   require('./shipments').stripAccounting(req);
   const added = Party.fromForm(req.body, 'customer_id');
@@ -266,6 +267,7 @@ router.post('/intakes/:id/side', auth.requirePerm('intake'), async (req, res) =>
   const { draft = {} } = JSON.parse(intake.extracted_json || '{}');
   const b = req.body;
   const isNew = b.target === 'new';
+  if (!isNew) require('../locks').assertUnlocked(Number(b.target));
   const P = require('../intakePlan');
   const full = P.bodyFromDraft(draft);
   const body = isNew ? { ...full, agent_id: intake.agent_id || '' } : {};

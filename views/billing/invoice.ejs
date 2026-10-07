@@ -1,5 +1,6 @@
 <%- include('../partials/head') %>
 <% const isNew = !inv.id; const k = inv.kind; const m = (v) => fmtNum(v, 2);
+   const locked = Boolean(s && s.locked_at);
    const title = { AR: 'Invoice (AR)', DN: inv.total < 0 ? 'Credit note (C/N)' : 'Debit note (D/N)', AP: 'Vendor bill (AP)' }[k]; %>
 <div class="pagehead">
   <div><h1 style="margin-bottom:4px"><%= isNew ? `New ${title}` : `${title} ${inv.number}` %></h1>
@@ -23,7 +24,10 @@
       <button class="btn secondary" title="Create / update this <%= k === 'AP' || inv.total < 0 ? 'bill' : 'invoice' %> in QuickBooks Online"><%= inv.qbo_id ? '↻ Update in QuickBooks' : '→ QuickBooks' %></button></form><% } %>
   </div>
 </div>
+<% if (locked) { %><div class="lockbar" role="status"><span class="blockicon">🔒</span><div><b>Locked — accounting finished</b>
+  <div class="small">This file and its invoices can't be changed. An admin can unlock it on the file page.</div></div></div><% } %>
 <form method="post" action="<%= isNew ? '/invoices' : `/invoices/${inv.id}` %>">
+  <fieldset class="plainset" <%= locked ? 'disabled' : '' %>>
   <input type="hidden" name="_csrf" value="<%= csrf %>"><input type="hidden" name="kind" value="<%= k %>">
   <input type="hidden" name="shipment_id" value="<%= inv.shipment_id || '' %>">
   <div class="card">
@@ -70,7 +74,8 @@
     <button type="button" class="btn secondary small" data-add-row="inv" style="margin-top:8px">+ Line</button>
     <p class="muted small">Leave Amount empty to use Rate × Qty.<% if (k === 'DN') { %> Debit = the agent owes us; Credit = we owe the agent. A negative balance prints as a CREDIT NOTE.<% } %></p>
   </div>
-  <button class="btn"><%= isNew ? 'Create' : 'Save' %></button>
+  <% if (!locked) { %><button class="btn"><%= isNew ? 'Create' : 'Save' %></button><% } %>
+  </fieldset>
 </form>
 <% if (!isNew) { %>
   <div class="card" style="margin-top:18px"><h2>Payments</h2>
@@ -84,7 +89,7 @@
         <input name="amount" type="number" step="0.01" value="<%= inv.balance %>" style="width:140px"><input name="paid_on" type="date" value="<%= new Date().toISOString().slice(0, 10) %>" style="width:160px">
         <select name="method" style="width:110px"><option>ACH</option><option>WIRE</option><option>CHECK</option></select><input name="reference" placeholder="Reference" style="width:180px">
         <button class="btn secondary">Record payment on this item</button></form>
-      <form method="post" action="/invoices/<%= inv.id %>/void" style="margin-top:10px"><input type="hidden" name="_csrf" value="<%= csrf %>"><button class="btn danger small" data-confirm="Void <%= inv.number %>?">Void</button></form>
+      <% if (!locked) { %><form method="post" action="/invoices/<%= inv.id %>/void" style="margin-top:10px"><input type="hidden" name="_csrf" value="<%= csrf %>"><button class="btn danger small" data-confirm="Void <%= inv.number %>?">Void</button></form><% } %>
     <% } %>
   </div>
 <% } %>

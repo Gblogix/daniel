@@ -118,6 +118,7 @@ const AUTOFILL_KEYS = ['mbl_no', 'mode', 'master_id', 'customer_id', 'consignee_
 function update(id, input, { db = store.db } = {}) {
   const current = db.get('SELECT * FROM shipments WHERE id = ?', id);
   if (!current) throw new Error('Shipment not found');
+  if (current.locked_at) return []; // accounting lock: tracking / sync / master changes leave a finished file alone
   const data = normalizeInput(input);
   if (!('status' in data) || data.status === current.status) {
     const next = inferStatus({ ...current, ...data }, db);
@@ -255,6 +256,7 @@ function find(id, user, { db = store.db } = {}) {
 
 /** Replace containers / cargo lines from the form's parallel arrays. */
 function saveLines(id, body, { db = store.db } = {}) {
+  if (require('./locks').isLocked(id, db)) return;
   const arr = (v) => (Array.isArray(v) ? v : v == null ? [] : [v]);
   const n = (v) => { if (v == null || String(v).trim() === '') return null; const x = Number(String(v).replace(/,/g, '')); return Number.isFinite(x) ? x : null; };
   if ('ctn_no' in body) {
@@ -573,6 +575,7 @@ function mergeItems(existing, incoming) {
 }
 
 function setClosed(id, closed, { db = store.db, userId = null } = {}) {
+  require('./locks').assertUnlocked(id, db);
   if (closed) db.run("UPDATE shipments SET closed_at = datetime('now'), closed_by = ? WHERE id = ?", userId || 0, id);
   else db.run('UPDATE shipments SET closed_at = NULL, closed_by = NULL WHERE id = ?', id);
   addEvent(id, closed ? 'CLOSED' : 'REOPENED', closed ? 'File closed manually' : 'File reopened', { db, userId, customerVisible: false });

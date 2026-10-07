@@ -96,6 +96,9 @@ function saveInvoice(data, { db = store.db, userId = null, id = null } = {}) {
   const blank = (v) => v === undefined || v === null || String(v).trim() === '';
   // Empty terms on the form = the customer's default terms (Unlockt 25 days, PGP 0 days), else the company default.
   const terms = Number(!blank(data.terms_days) ? data.terms_days : party?.terms_days ?? (kind === 'AR' ? db.setting('ar_terms_days') : 0)) || 0;
+  const L = require('./locks');
+  if (id) L.assertUnlocked(db.get('SELECT shipment_id FROM invoices WHERE id = ?', id)?.shipment_id, db);
+  if (data.shipment_id) L.assertUnlocked(data.shipment_id, db);
   const row = {
     shipment_id: data.shipment_id ? Number(data.shipment_id) : null,
     kind, company_id: party?.id ?? null,
@@ -188,10 +191,11 @@ function refreshStatus(id, db = store.db) {
 /** Customer paid in full → the file closes and moves to Shipment history. */
 function closeCheck(invoiceId, db) {
   const sid = db.get('SELECT shipment_id FROM invoices WHERE id = ?', invoiceId)?.shipment_id;
-  if (sid) require('./shipments').refreshClosed(sid, { db });
+  if (sid) { require('./shipments').refreshClosed(sid, { db }); require('./locks').autoLock(sid, { db }); }
 }
 
 function voidInvoice(id, db = store.db) {
+  require('./locks').assertUnlocked(db.get('SELECT shipment_id FROM invoices WHERE id = ?', id)?.shipment_id, db);
   db.run("UPDATE invoices SET status = 'VOID' WHERE id = ?", id);
   closeCheck(id, db);
 }

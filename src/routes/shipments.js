@@ -214,6 +214,8 @@ router.get('/shipments/:id', auth.requireLogin, (req, res) => {
     memos: FT.memos(s.id), badges: FT.badges(s),
     masters: db.all(`SELECT id, ref_no, mbl_no, eta FROM masters WHERE ${s.mode === 'AIR' ? "mode = 'AIR'" : "mode <> 'AIR'"} AND id IS NOT ? ORDER BY id DESC LIMIT 150`, s.master_id || null),
     blockedBy: s.blocked_by ? db.get('SELECT name FROM users WHERE id = ?', s.blocked_by)?.name : null,
+    lockedBy: s.locked_by ? db.get('SELECT name FROM users WHERE id = ?', s.locked_by)?.name : null,
+    releasedBy: s.lock_released_by ? db.get('SELECT name FROM users WHERE id = ?', s.lock_released_by)?.name : null,
     credit: require('../credit').forShipment(s),
     tasks: db.all("SELECT t.*, u.name AS assignee FROM tasks t LEFT JOIN users u ON u.id = t.assignee_id WHERE t.shipment_id = ? AND t.status = 'OPEN' ORDER BY t.due_date", s.id),
   } : {};
@@ -237,6 +239,7 @@ router.post('/shipments/:id', auth.requirePerm('shipments_edit'), async (req, re
     flash(req, 'err', 'This file is blocked — unblock it from Tools first');
     return res.redirect(`/shipments/${id}`);
   }
+  require('../locks').assertUnlocked(id);
   const addedCustomer = require('../extract/party').fromForm(req.body, 'customer_id');
   if (req.body.accept_delivery_request) {
     const cur = store.db.get('SELECT delivery_request_date, delivery_request_time FROM shipments WHERE id = ?', id);
@@ -263,6 +266,7 @@ router.post('/shipments/:id/copy', auth.requirePerm('shipments_edit'), (req, res
 });
 router.post('/shipments/:id/move', auth.requirePerm('shipments_edit'), (req, res) => {
   const id = Number(req.params.id);
+  require('../locks').assertUnlocked(id);
   try {
     require('../fileTools').move(id, Number(req.body.master_id), { userId: req.user.id });
     flash(req, 'ok', 'Moved to the other master — carrier leg updated from it');
@@ -286,6 +290,18 @@ router.post('/shipments/:id/credit-release', auth.requireRole('admin'), (req, re
   store.db.run('UPDATE shipments SET credit_released_at = ?, credit_released_by = ? WHERE id = ?', on ? new Date().toISOString() : null, on ? req.user.id : null, id);
   S.addEvent(id, 'CREDIT_RELEASE', on ? `Released despite credit hold by ${req.user.name}` : 'Credit release withdrawn', { userId: req.user.id, customerVisible: false });
   flash(req, 'ok', on ? 'This file may be released (D/O) despite the credit hold' : 'Credit hold applies to this file again');
+  res.redirect(`/shipments/${id}`);
+});
+
+// Accounting lock: only an admin locks or unlocks by hand; unlocking needs a reason (kept in the file history).
+router.post('/shipments/:id/lock', auth.requireRole('admin'), (req, res) => {
+  const id = Number(req.params.id);
+  const L = require('../locks');
+  if (req.body.on === '1') { L.lock(id, { userId: req.user.id }); flash(req, 'ok', 'File locked — nobody can change it or its invoices until an admin unlocks it'); }
+  else {
+    try { L.unlock(id, { userId: req.user.id, reason: req.body.reason }); flash(req, 'ok', 'File unlocked — lock it again when you are done (it will not lock itself again)'); }
+    catch (e) { flash(req, 'err', e.message); }
+  }
   res.redirect(`/shipments/${id}`);
 });
 
@@ -330,6 +346,7 @@ router.post('/shipments/:id/close', auth.requireAccounting, (req, res) => {
 });
 
 router.post('/shipments/:id/delete', auth.requirePerm('delete'), (req, res) => {
+  require('../locks').assertUnlocked(Number(req.params.id));
   store.db.run('DELETE FROM shipments WHERE id = ?', Number(req.params.id));
   flash(req, 'ok', 'Shipment deleted');
   res.redirect('/shipments');
