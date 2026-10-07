@@ -40,7 +40,7 @@
       <tr><th><%= s.mode === 'AIR' ? 'Flight' : 'Vessel / Voyage' %></th><td><%= s.mode === 'AIR' ? (s.flight_no || '—') : [s.vessel, s.voyage].filter(Boolean).join(' / ') || '—' %></td></tr>
       <tr><th>Route</th><td><%= s.pol || '?' %> → <%= s.pod || '?' %><%= s.place_of_delivery ? ` → ${s.place_of_delivery}` : '' %></td></tr>
       <tr><th>ETD / ETA</th><td><%= s.etd || 'TBA' %> / <b><%= s.eta || 'TBA' %></b></td></tr>
-      <tr><th>Cargo</th><td><%= s.packages ? `${fmtNum(s.packages)} ${s.package_unit || ''}` : '—' %> · <%= s.weight_kg ? `${fmtNum(s.weight_kg, 2)} KG` : '—' %> · <%= s.cbm ? `${s.cbm} CBM` : '—' %></td></tr>
+      <tr><th>Cargo</th><td><%= s.packages ? `${fmtNum(s.packages)} ${s.package_unit || ''}` : '—' %> · <%= s.weight_kg ? `${fmtNum(s.weight_kg, 2)} KG (${fmtNum(s.weight_kg * 2.20462, 2)} LBS)` : '—' %> · <%= s.cbm ? `${s.cbm} CBM (${fmtNum(s.cbm * 35.3147, 2)} FT³)` : '—' %></td></tr>
       <tr><th>A/N</th><td><%= s.an_sent_at ? `Issued ${fmtDate(s.an_sent_at)}` : 'Not yet issued' %></td></tr>
     </table>
   </div>

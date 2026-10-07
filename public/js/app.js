@@ -19,6 +19,24 @@ document.addEventListener('click', (e) => {
   if (confirmEl && !window.confirm(confirmEl.dataset.confirm)) e.preventDefault();
 });
 
+// KG ↔ LBS and CBM ↔ FT³: the imperial box is filled from the metric one; typing pounds / cubic feet fills KG / CBM.
+const CONV = { lbs: 2.20462, 'ft³': 35.3147 };
+const convPair = (el) => {
+  const scope = el.closest('tr') || el.closest('fieldset') || el.form || document;
+  if (el.dataset.conv) return scope.querySelector(`[name="${el.dataset.convOf}"]`);
+  return scope.querySelector(`[data-conv-of="${el.name}"]`);
+};
+document.addEventListener('input', (e) => {
+  const el = e.target;
+  if (!el.name && !el.dataset.conv) return;
+  const other = convPair(el);
+  if (!other) return;
+  const v = el.value.trim() === '' ? NaN : Number(el.value.replace(/,/g, ''));
+  if (Number.isNaN(v)) { other.value = ''; return; }
+  if (el.dataset.conv) other.value = Math.round((v / CONV[el.dataset.conv]) * (el.dataset.conv === 'lbs' ? 100 : 1000)) / (el.dataset.conv === 'lbs' ? 100 : 1000);
+  else other.value = Math.round(v * CONV[other.dataset.conv] * 100) / 100;
+});
+
 // Quick accounting entry on the shipment page: pick the usual party for the chosen type.
 document.querySelectorAll('[data-kind-select]').forEach((sel) => {
   const party = sel.form.querySelector('select[name="company_id"]');

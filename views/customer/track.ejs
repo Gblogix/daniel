@@ -81,7 +81,7 @@
       <div><span><%= s.mode === 'AIR' ? 'MAWB / HAWB' : 'MBL / HBL' %></span><span class="mono" style="color:inherit;font-size:12px"><%= s.mbl_no || '—' %> / <%= s.hbl_no || '—' %></span></div>
       <div><span><%= s.mode === 'AIR' ? 'Flight' : 'Vessel / Voy.' %></span><%= s.mode === 'AIR' ? (s.flight_no || '—') : [s.vessel, s.voyage].filter(Boolean).join(' / ') || '—' %></div>
       <div><span>Container</span><%= s.containers.map((c) => `${c.container_no}${c.size_type ? ' ' + c.size_type : ''}`).join(', ') || '—' %></div>
-      <div><span>Cargo</span><%= s.packages ? `${fmtNum(s.packages)} ${s.package_unit || ''}` : '—' %><%= s.weight_kg ? ` · ${fmtNum(s.weight_kg)} KG` : '' %><%= s.cbm ? ` · ${s.cbm} CBM` : '' %></div>
+      <div><span>Cargo</span><%= s.packages ? `${fmtNum(s.packages)} ${s.package_unit || ''}` : '—' %><%= s.weight_kg ? ` · ${fmtNum(s.weight_kg)} KG / ${fmtNum(s.weight_kg * 2.20462)} LBS` : '' %><%= s.cbm ? ` · ${s.cbm} CBM / ${fmtNum(s.cbm * 35.3147, 1)} FT³` : '' %></div>
       <div><span>Customs</span><span class="badge <%= s.customs_status %>"><%= s.customs_status %></span></div>
     </div>
     <% if (s.items.length) { %>
