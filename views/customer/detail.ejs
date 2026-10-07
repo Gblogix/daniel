@@ -71,8 +71,8 @@
   <h2>What's inside (packing list)</h2>
   <% if (!s.items.length) { %><p class="muted small">Packing list details will appear once received.</p><% } else { %>
   <div class="tablewrap"><table class="t">
-    <thead><tr><th>PO</th><th>Description</th><th class="right">Qty</th><th>Unit</th><th class="right">Pkgs</th><th class="right">KG</th><th class="right">CBM</th></tr></thead>
-    <% s.items.forEach((i) => { %><tr><td><%= i.po_no || '' %></td><td><%= i.description %></td><td class="right"><%= fmtNum(i.quantity) %></td><td><%= i.unit || '' %></td><td class="right"><%= fmtNum(i.packages) %></td><td class="right"><%= fmtNum(i.weight_kg, 1) %></td><td class="right"><%= i.cbm ?? '' %></td></tr><% }) %>
+    <thead><tr><th>PO</th><th>Description</th><th class="right">Qty</th><th>Unit</th><th class="right">Pkgs</th><th class="right">KG</th><th class="right">LBS</th><th class="right">CBM</th><th class="right">FT³</th></tr></thead>
+    <% s.items.forEach((i) => { %><tr><td><%= i.po_no || '' %></td><td><%= i.description %></td><td class="right"><%= fmtNum(i.quantity) %></td><td><%= i.unit || '' %></td><td class="right"><%= fmtNum(i.packages) %></td><td class="right"><%= fmtNum(i.weight_kg, 1) %></td><td class="right"><%= i.weight_kg != null ? fmtNum(i.weight_kg * 2.20462, 1) : '' %></td><td class="right"><%= i.cbm ?? '' %></td><td class="right"><%= i.cbm != null ? fmtNum(i.cbm * 35.3147, 2) : '' %></td></tr><% }) %>
   </table></div><% } %>
 </div>
 

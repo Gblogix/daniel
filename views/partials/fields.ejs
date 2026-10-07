@@ -198,10 +198,10 @@
   <div class="buyer-sum" data-buyer-filter>
     <button type="button" class="buyer-chip on" data-buyer="">All <span class="muted">(<%= items.filter((i) => i.description).length %>)</span></button>
     <% buyers.forEach((b) => { const g = groups[b]; %><button type="button" class="buyer-chip" data-buyer="<%= b === '—' ? '' : b %>" data-only="<%= b %>">
-      <b><%= b === '—' ? 'No buyer' : b %></b> <span class="muted small"><%= [...g.invoices].join(', ') || 'no invoice' %> · <%= g.lines %> line<%= g.lines === 1 ? "" : "s" %> · <%= g.pkgs || '—' %> pkgs · <%= g.kg ? fmtNum(g.kg, 1) : '—' %> kg · <%= g.cbm ? fmtNum(g.cbm, 3) : '—' %> cbm</span></button><% }) %>
+      <b><%= b === '—' ? 'No buyer' : b %></b> <span class="muted small"><%= [...g.invoices].join(', ') || 'no invoice' %> · <%= g.lines %> line<%= g.lines === 1 ? "" : "s" %> · <%= g.pkgs || '—' %> pkgs · <%= g.kg ? `${fmtNum(g.kg, 1)} kg (${fmtNum(g.kg * 2.20462, 1)} lbs)` : '— kg' %> · <%= g.cbm ? `${fmtNum(g.cbm, 3)} cbm (${fmtNum(g.cbm * 35.3147, 1)} ft³)` : '— cbm' %></span></button><% }) %>
   </div><% } %>
   <div class="tablewrap"><table class="t lines" data-lines="item">
-    <thead><tr><th>Final buyer</th><th>Invoice no.</th><th>PO / SKU</th><th style="min-width:220px">Description</th><th>HS code</th><th>Qty</th><th>Unit</th><th>Pkgs</th><th>KG</th><th>CBM</th><th></th></tr></thead>
+    <thead><tr><th>Final buyer</th><th>Invoice no.</th><th>PO / SKU</th><th style="min-width:220px">Description</th><th>HS code</th><th>Qty</th><th>Unit</th><th>Pkgs</th><th>KG</th><th>LBS</th><th>CBM</th><th>FT³</th><th></th></tr></thead>
     <tbody>
     <% items.forEach((i) => { %>
       <tr data-buyer-row="<%= i.buyer || '—' %>">
@@ -214,7 +214,9 @@
         <td><input name="item_unit" value="<%= i.unit || '' %>"></td>
         <td><input name="item_pkgs" value="<%= i.packages ?? '' %>"></td>
         <td><input name="item_kg" value="<%= i.weight_kg ?? '' %>"></td>
+        <td><input data-conv="lbs" data-conv-of="item_kg" value="<%= conv('lbs', i.weight_kg) %>" title="Pounds — converted from KG (typing here fills KG)"></td>
         <td><input name="item_cbm" value="<%= i.cbm ?? '' %>"></td>
+        <td><input data-conv="ft³" data-conv-of="item_cbm" value="<%= conv('ft³', i.cbm) %>" title="Cubic feet — converted from CBM (typing here fills CBM)"></td>
         <td><input type="hidden" name="item_price" value="<%= i.unit_price ?? '' %>"><input type="hidden" name="item_amount" value="<%= i.amount ?? '' %>">
           <button type="button" class="btn secondary small" data-remove-row>✕</button></td>
       </tr>
