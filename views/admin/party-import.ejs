@@ -1,0 +1,69 @@
+<%- include('../partials/head') %>
+<% const ROLE_OPTS = Object.entries(COMPANY_TYPES); const SHORT = PT.SHORT; %>
+<div class="pagehead"><h1>Import parties from Excel</h1><a class="btn secondary" href="/companies">← Parties</a></div>
+
+<% if (!token) { %>
+<div class="card" style="max-width:760px">
+  <h2>1. Upload the list</h2>
+  <p class="small">The vendor / forwarder / customer lists exported from OPUS (or any Excel / CSV list). One file can have several sheets — each sheet gets its own role.
+    Parties already in the system (same code, else same name) are <b>completed, never overwritten</b>: empty fields are filled and the new role is added.</p>
+  <form method="post" action="/companies/import?_csrf=<%= csrf %>" enctype="multipart/form-data" class="dropzone" data-drop data-autosubmit>
+    <label class="drop-hint"><span class="ico">📊</span><span><b>Drag the Excel file here</b> or <span class="pick">choose file</span> <span data-drop-files class="small"></span><br><span class="small muted">.xlsx or .csv · an old .xls file: open it in Excel and Save As .xlsx first</span></span>
+      <input type="file" name="file" accept=".xlsx,.csv,.txt,.xls" required></label>
+    <button class="btn" style="margin-top:10px">Read the file</button>
+  </form>
+  <p class="muted small" style="margin-top:12px">Next you check which column is the name, address, email… and which role each sheet is (Vendor, Forwarder…). Nothing is saved until you press Import.</p>
+</div>
+<% } else { %>
+<form method="post" action="/companies/import/<%= token %>">
+  <input type="hidden" name="_csrf" value="<%= csrf %>">
+  <div class="card import-sum">
+    <div><b><%= data.filename %></b> <span class="muted small">· <%= data.sheets.length %> sheet(s) · <%= data.sheets.reduce((a, s) => a + s.rows.length, 0) %> row(s)</span></div>
+    <div class="chips">
+      <span class="badge paid">＋ <%= counts.new %> new</span>
+      <span class="badge">↻ <%= counts.update %> already in the system — fill empty fields / add role</span>
+      <% if (counts.duplicate) { %><span class="badge">⧉ <%= counts.duplicate %> repeated in the file — merged</span><% } %>
+      <% if (counts.noRole) { %><span class="badge unpaid">⚠ <%= counts.noRole %> without a role — pick the sheet's role</span><% } %>
+    </div>
+    <div class="actions"><button class="btn secondary" name="go" value="preview">↻ Update preview</button>
+      <button class="btn" name="go" value="import" data-confirm="Import <%= counts.new %> new and complete <%= counts.update %> existing parties?">Import</button></div>
+  </div>
+
+  <% state.forEach((sh) => { const si = sh.si; %>
+  <div class="card">
+    <div class="import-head">
+      <label class="check"><input type="checkbox" name="include_<%= si %>" value="1" <%= sh.include ? 'checked' : '' %>> <b>Sheet: <%= sh.name %></b></label>
+      <span class="muted small"><%= sh.rows.length %> row(s)</span>
+      <label class="small">Role for this sheet
+        <select name="role_<%= si %>"><option value="">— from the Type column only —</option><% ROLE_OPTS.forEach(([k, v]) => { %><option value="<%= k %>" <%= sh.role === k ? 'selected' : '' %>><%= v %></option><% }) %></select></label>
+    </div>
+    <p class="muted small" style="margin:4px 0 8px">Check what each column is. Several columns can be Address (joined in order), Email or Phone. A Y/N column like "Is Trucker" can add that role.</p>
+    <div class="tablewrap"><table class="t small import-map">
+      <thead>
+        <tr><% sh.headers.forEach((h, ci) => { %><th><%= h %><br>
+          <select name="map_<%= si %>_<%= ci %>" class="<%= sh.mapping[ci] ? 'on' : '' %>"><option value="">— ignore —</option>
+            <% Object.entries(FIELDS).forEach(([k, v]) => { %><option value="<%= k %>" <%= sh.mapping[ci] === k ? 'selected' : '' %>><%= v %></option><% }) %>
+            <optgroup label="Y / N column adds role"><% ROLE_OPTS.forEach(([k]) => { %><option value="flag:<%= k %>" <%= sh.mapping[ci] === `flag:${k}` ? 'selected' : '' %>>= <%= SHORT[k] %> when Y</option><% }) %></optgroup>
+          </select></th><% }) %></tr>
+      </thead>
+      <tbody><% sh.rows.slice(0, 5).forEach((r) => { %><tr><% r.forEach((v) => { %><td><%= v %></td><% }) %></tr><% }) %></tbody>
+    </table></div>
+  </div>
+  <% }) %>
+
+  <div class="card">
+    <h2>Preview — what will be saved <span class="muted small" style="font-weight:400">(first 200)</span></h2>
+    <div class="tablewrap"><table class="t small">
+      <thead><tr><th></th><th>Name</th><th>Role(s)</th><th>Code</th><th>Address</th><th>Country</th><th>Phone</th><th>Email</th><th>Contact</th></tr></thead>
+      <% plan.slice(0, 200).forEach((p) => { %><tr class="<%= p.action === 'duplicate' ? 'muted' : '' %>">
+        <td class="nowrap"><%- { new: '<span class="badge paid">new</span>', update: '<span class="badge" title="Already in the system — only empty fields are filled">exists</span>', duplicate: '<span class="badge">repeat</span>', 'no-role': '<span class="badge unpaid">no role</span>' }[p.action] %></td>
+        <td><b><%= p.name %></b><% if (p.existing && p.existing.name !== p.name) { %><br><span class="muted">= <%= p.existing.name %></span><% } %></td>
+        <td><%= p.roles.map((r) => SHORT[r] || r).join(' · ') %></td><td><%= p.code || '' %></td><td><%= p.address %></td><td><%= p.country %></td>
+        <td class="nowrap"><%= p.phone %><%= p.fax ? ` · F ${p.fax}` : '' %></td><td><%= p.emails %></td><td><%= p.contact || '' %></td></tr><% }) %>
+    </table></div>
+    <div class="actions" style="margin-top:10px"><button class="btn secondary" name="go" value="preview">↻ Update preview</button>
+      <button class="btn" name="go" value="import" data-confirm="Import <%= counts.new %> new and complete <%= counts.update %> existing parties?">Import</button></div>
+  </div>
+</form>
+<% } %>
+<%- include('../partials/foot') %>

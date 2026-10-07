@@ -1,5 +1,6 @@
 <%- include('../partials/head') %>
-<div class="pagehead"><h1>Parties</h1></div>
+<div class="pagehead"><h1>Parties <span class="muted small" style="font-weight:400"><%= rows.length %></span></h1>
+  <% if (can('parties')) { %><a class="btn secondary" href="/companies/import">⇪ Import from Excel (OPUS list)</a><% } %></div>
 <div class="grid" style="grid-template-columns: minmax(0, 2fr) minmax(300px, 1fr); align-items:start">
   <div class="tablewrap"><table class="t">
     <thead><tr><th>Name</th><th>Type</th><th>Country</th><th>Notice emails</th><th>Users</th><th></th></tr></thead>
@@ -39,7 +40,11 @@
     <% const hid = new Set(String(c.portal_hide || '').split(',')); %>
     <div class="field"><label>Hide on the customer portal</label><div class="small">
       <% Object.entries(PORTAL_HIDE).forEach(([k, l]) => { %><label class="check" style="margin:2px 0"><input type="checkbox" name="portal_hide" value="<%= k %>" <%= hid.has(k) ? 'checked' : '' %>> <%= l %></label><% }) %></div></div>
-    <div class="field"><label>Phone</label><input name="phone" value="<%= c.phone || '' %>"></div>
+    <div class="grid g2" style="gap:8px"><div class="field"><label>Phone</label><input name="phone" value="<%= c.phone || '' %>"></div>
+      <div class="field"><label>Fax</label><input name="fax" value="<%= c.fax || '' %>"></div>
+      <div class="field"><label>Contact person</label><input name="contact" value="<%= c.contact || '' %>"></div>
+      <div class="field"><label>Code (OPUS)</label><input name="code" value="<%= c.code || '' %>"></div></div>
+    <div class="field"><label>Tax ID / EIN</label><input name="tax_id" value="<%= c.tax_id || '' %>"></div>
     <div class="field"><label>Default person in charge (new files)</label><select name="default_pic_id"><option value="">— whoever creates the file —</option>
       <% staffUsers.forEach((u) => { %><option value="<%= u.id %>" <%= c.default_pic_id === u.id ? 'selected' : '' %>><%= u.name %></option><% }) %></select></div>
     <div class="grid g2" style="gap:8px"><div class="field"><label>Shipment report to customer</label><select name="report_frequency">

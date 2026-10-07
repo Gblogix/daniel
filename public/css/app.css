@@ -766,3 +766,11 @@ fieldset.plainset { border: 0; padding: 0; margin: 0; min-width: 0; }
 
 .who .pwlink { color: #fff; opacity: .85; font-size: 13px; text-decoration: none; padding: 4px 6px; border-radius: 6px; }
 .who .pwlink:hover { opacity: 1; background: rgba(255,255,255,.14); }
+
+/* Party import */
+.import-sum { display: flex; flex-wrap: wrap; gap: 10px 16px; align-items: center; justify-content: space-between; }
+.import-head { display: flex; flex-wrap: wrap; gap: 8px 18px; align-items: center; }
+.import-head select { width: auto; margin-left: 6px; }
+.import-map th { vertical-align: top; min-width: 130px; }
+.import-map select { margin-top: 4px; font-size: 12px; padding: 3px 4px; width: 100%; }
+.import-map select.on { border-color: #1f6feb; background: #eef4ff; }

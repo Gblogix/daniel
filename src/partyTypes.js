@@ -4,10 +4,10 @@
  * `types` existed fall back to `type`.
  */
 const LABELS = {
-  customer: 'Customer (CNEE / bill-to)', agent: 'Overseas agent', broker: 'Customs broker', trucker: 'Trucker', importer: 'Importer of record (consignee)',
+  customer: 'Customer (CNEE / bill-to)', agent: 'Overseas agent', forwarder: 'Forwarder (co-loader / NVOCC / other forwarder)', broker: 'Customs broker', trucker: 'Trucker', importer: 'Importer of record (consignee)',
   delivery: 'Delivery location / warehouse', shipper: 'Shipper / factory', vendor: 'Vendor (CFS / carrier / terminal / other)',
 };
-const SHORT = { customer: 'Customer', agent: 'Agent', broker: 'Broker', trucker: 'Trucker', importer: 'Importer', delivery: 'Delivery', shipper: 'Shipper', vendor: 'Vendor' };
+const SHORT = { customer: 'Customer', agent: 'Agent', forwarder: 'Forwarder', broker: 'Broker', trucker: 'Trucker', importer: 'Importer', delivery: 'Delivery', shipper: 'Shipper', vendor: 'Vendor' };
 
 /** All roles of a party row, main role first. */
 function of(c) {

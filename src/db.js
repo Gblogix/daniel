@@ -368,7 +368,7 @@ const MIGRATIONS = {
     remark: 'TEXT', internal_note: 'TEXT', color_label: 'TEXT', // My Containers: notes and colour label
   },
   cargo_items: { unit_price: 'REAL', amount: 'REAL', source: 'TEXT', invoice_no: 'TEXT', buyer: 'TEXT' }, // buyer = final buyer (Target, Nordstrom…)
-  companies: { portal_hide: 'TEXT', credit_limit: 'REAL', credit_hold: 'INTEGER NOT NULL DEFAULT 0', credit_note: 'TEXT', lost_ignored: 'INTEGER NOT NULL DEFAULT 0', types: 'TEXT', qbo_customer_id: 'TEXT', qbo_vendor_id: 'TEXT', billing_emails: 'TEXT', terms_days: 'INTEGER', short_name: 'TEXT', default_pic_id: 'INTEGER', report_frequency: 'TEXT', report_emails: 'TEXT', report_last: 'TEXT' },
+  companies: { code: 'TEXT', contact: 'TEXT', fax: 'TEXT', tax_id: 'TEXT', portal_hide: 'TEXT', credit_limit: 'REAL', credit_hold: 'INTEGER NOT NULL DEFAULT 0', credit_note: 'TEXT', lost_ignored: 'INTEGER NOT NULL DEFAULT 0', types: 'TEXT', qbo_customer_id: 'TEXT', qbo_vendor_id: 'TEXT', billing_emails: 'TEXT', terms_days: 'INTEGER', short_name: 'TEXT', default_pic_id: 'INTEGER', report_frequency: 'TEXT', report_emails: 'TEXT', report_last: 'TEXT' },
   invoices: { document_id: 'INTEGER', reviewed_at: 'TEXT', reviewed_by: 'INTEGER',
     qbo_id: 'TEXT', qbo_type: 'TEXT', qbo_hash: 'TEXT', qbo_synced_at: 'TEXT', qbo_error: 'TEXT' }, // QuickBooks Online sync
   emails: { bcc_addr: 'TEXT', reply_to: 'TEXT' },

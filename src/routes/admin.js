@@ -14,7 +14,8 @@ router.get('/companies', auth.requireInternal, (req, res) => {
   const rows = store.db.all(`SELECT c.*, (SELECT COUNT(*) FROM users u WHERE u.company_id = c.id) AS users FROM companies c ORDER BY c.type, c.name`);
   res.render('admin/companies', { title: 'Parties', rows, COMPANY_TYPES, edit: null, staffUsers: staffUsers() });
 });
-router.get('/companies/:id', auth.requireInternal, (req, res) => {
+router.get('/companies/:id', auth.requireInternal, (req, res, next) => {
+  if (!/^\d+$/.test(req.params.id)) return next();
   const edit = store.db.get('SELECT * FROM companies WHERE id = ?', Number(req.params.id));
   const rows = store.db.all(`SELECT c.*, (SELECT COUNT(*) FROM users u WHERE u.company_id = c.id) AS users FROM companies c ORDER BY c.type, c.name`);
   res.render('admin/companies', { title: 'Parties', rows, COMPANY_TYPES, edit, staffUsers: staffUsers() });
@@ -41,6 +42,8 @@ router.post('/companies', auth.requirePerm('parties'), (req, res) => {
     const lim = String(req.body.credit_limit || '').replace(/[$,\s]/g, '');
     store.db.run('UPDATE companies SET credit_limit = ?, credit_hold = ?, credit_note = ? WHERE id = ?', lim === '' ? null : Number(lim) || null, req.body.credit_hold ? 1 : 0, (req.body.credit_note || '').trim().slice(0, 200) || null, cid);
   }
+  if ('code' in req.body) store.db.run('UPDATE companies SET code = ?, contact = ?, fax = ?, tax_id = ? WHERE id = ?',
+    (req.body.code || '').trim() || null, (req.body.contact || '').trim() || null, (req.body.fax || '').trim() || null, (req.body.tax_id || '').trim() || null, cid);
   flash(req, 'ok', 'Saved');
   res.redirect('/companies');
 });
@@ -64,6 +67,51 @@ router.post('/companies/read', auth.requirePerm('parties'), readUpload.array('fi
     }
   }
   res.json({ parties: out, read: files.length, mails: mails.length });
+});
+
+// ---------- import party lists from Excel / CSV (OPUS export) ----------
+const PI = require('../partyImport');
+/** The sheets with the mapping and role chosen on the page (or the guesses on first view). */
+function importState(data, body = null) {
+  return data.sheets.map((sh, si) => {
+    const guess = PI.guessMapping(sh);
+    const mapping = sh.headers.map((_, ci) => (body ? String(body[`map_${si}_${ci}`] ?? '') : guess[ci]));
+    const role = body ? String(body[`role_${si}`] || '') : PI.sheetRole(sh.name, data.filename);
+    const include = body ? Boolean(body[`include_${si}`]) : true;
+    const recs = include ? PI.records(sh, mapping, role) : [];
+    return { ...sh, si, mapping, role, include, recs };
+  });
+}
+function importView(res, token, data, state, extra = {}) {
+  const plan = PI.plan(state.flatMap((s) => s.recs));
+  const count = (a) => plan.filter((p) => p.action === a).length;
+  res.render('admin/party-import', { title: 'Import parties', token, data, state, plan, counts: { new: count('new'), update: count('update'), duplicate: count('duplicate'), noRole: count('no-role') }, FIELDS: PI.FIELDS, COMPANY_TYPES, ...extra });
+}
+router.get('/companies/import', auth.requirePerm('parties'), (req, res) => {
+  res.render('admin/party-import', { title: 'Import parties', token: null, data: null, state: [], plan: [], counts: {}, FIELDS: PI.FIELDS, COMPANY_TYPES });
+});
+router.post('/companies/import', auth.requirePerm('parties'), readUpload.single('file'), auth.checkCsrf, async (req, res) => {
+  if (!req.file) { flash(req, 'err', 'Choose the Excel / CSV file first'); return res.redirect('/companies/import'); }
+  let sheets;
+  try { sheets = await PI.parse(req.file.buffer, req.file.originalname); } catch (e) { flash(req, 'err', e.expose ? e.message : `Could not read the file: ${e.message}`); return res.redirect('/companies/import'); }
+  if (!sheets.length) { flash(req, 'err', 'No rows found in the file'); return res.redirect('/companies/import'); }
+  const token = PI.save({ filename: req.file.originalname, sheets });
+  res.redirect(`/companies/import/${token}`);
+});
+router.get('/companies/import/:token', auth.requirePerm('parties'), (req, res) => {
+  const data = PI.load(req.params.token);
+  if (!data) { flash(req, 'err', 'That upload has expired — upload the file again'); return res.redirect('/companies/import'); }
+  importView(res, req.params.token, data, importState(data));
+});
+router.post('/companies/import/:token', auth.requirePerm('parties'), (req, res) => {
+  const data = PI.load(req.params.token);
+  if (!data) { flash(req, 'err', 'That upload has expired — upload the file again'); return res.redirect('/companies/import'); }
+  const state = importState(data, req.body);
+  if (req.body.go !== 'import') return importView(res, req.params.token, data, state);
+  const r = PI.apply(state.flatMap((s) => s.recs));
+  PI.drop(req.params.token);
+  flash(req, 'ok', `Imported from ${data.filename}: ${r.added} new part${r.added === 1 ? 'y' : 'ies'}, ${r.updated} existing completed${r.unchanged ? `, ${r.unchanged} already up to date` : ''}${r.skipped ? `, ${r.skipped} skipped (no role)` : ''}`);
+  res.redirect('/companies');
 });
 
 // ---------- users — admin only ----------
