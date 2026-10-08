@@ -794,3 +794,5 @@ select.just-picked { outline: 2px solid #22c55e; outline-offset: 1px; transition
 
 .update-bar { position: fixed; left: 50%; bottom: 18px; transform: translateX(-50%); z-index: 300; background: #0f2a4d; color: #fff; padding: 10px 16px; border-radius: 10px; box-shadow: 0 10px 30px rgba(15,23,42,.3); font-size: 13.5px; display: flex; gap: 12px; align-items: center; }
 .update-bar button { background: #fcd34d; color: #0f2a4d; border: 0; border-radius: 6px; padding: 5px 10px; font-weight: 700; cursor: pointer; }
+
+.master-drop { margin: 6px 14px 10px; padding: 10px 12px; }

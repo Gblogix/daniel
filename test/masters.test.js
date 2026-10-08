@@ -97,3 +97,31 @@ test('lists run in ETA order: next arrival first, no ETA last; history latest fi
   const etas = M.list().map((m) => m.eta).filter(Boolean);
   assert.deepEqual(etas, [...etas].sort());
 });
+
+test('MB/L / MAWB dropped on the master page: saved there, empty fields filled, carrier leg goes to the houses', async () => {
+  const store = require('../src/db'); const db = store.db;
+  const M = require('../src/masters'); const S = require('../src/shipments');
+  if (!db.get("SELECT 1 FROM users WHERE email = 'admin@gblogix.com'")) require('../src/seed').bootstrap(db);
+  const mid = M.create({ mode: 'FCL', mbl_no: 'MAEU299999991' });
+  const hid = S.create({ mode: 'FCL', hbl_no: 'UPLOAD-H1', master_id: mid, mbl_no: 'MAEU299999991' });
+  const { createApp } = require('../src/server');
+  const server = createApp().listen(0); await new Promise((r) => server.once('listening', r));
+  const base = `http://127.0.0.1:${server.address().port}`;
+  try {
+    let cookie = '';
+    const keep = (res) => { const c = res.headers.getSetCookie?.() || []; if (c.length) cookie = c.map((x) => x.split(';')[0]).join('; '); return res; };
+    let tok = /name="_csrf" value="([^"]+)"/.exec(await keep(await fetch(`${base}/login`)).text())[1];
+    keep(await fetch(`${base}/login`, { method: 'POST', redirect: 'manual', headers: { cookie, 'content-type': 'application/x-www-form-urlencoded' }, body: new URLSearchParams({ _csrf: tok, email: 'admin@gblogix.com', password: 'changeme123' }) }));
+    const page = await (await fetch(`${base}/masters/${mid}`, { headers: { cookie } })).text();
+    assert.match(page, /Upload the MB\/L/);
+    tok = /name="_csrf" value="([^"]+)"/.exec(page)[1];
+    const fd = new FormData();
+    fd.append('files', new Blob(['BILL OF LADING\nB/L No. MAEU299999991\nVESSEL / VOYAGE: SAMPLE EXPRESS 123E\nPORT OF LOADING  NINGBO, CHINA\nPORT OF DISCHARGE  LONG BEACH, CA\n']), 'mbl.txt');
+    const r = await fetch(`${base}/masters/${mid}/documents?_csrf=${tok}`, { method: 'POST', body: fd, redirect: 'manual', headers: { cookie } });
+    assert.equal(r.headers.get('location'), `/masters/${mid}`);
+    assert.equal(db.get('SELECT COUNT(*) AS n FROM documents WHERE master_id = ?', mid).n, 1);
+    const m = db.get('SELECT * FROM masters WHERE id = ?', mid);
+    assert.ok(m.pol || m.pod || m.vessel, 'something was read from the MB/L');
+    if (m.pod) assert.equal(S.find(hid, null).pod, m.pod, 'house got the carrier leg');
+  } finally { server.close(); }
+});

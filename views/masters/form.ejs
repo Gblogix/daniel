@@ -35,7 +35,7 @@
     </fieldset>
   </div>
   <% if (can('shipments_edit')) { %><div class="actions"><button class="btn"><%= isNew ? 'Create master' : 'Save master' %></button>
-    <% if (!isNew) { %><span class="muted small">Carrier, vessel / voyage, ETD / ETA and POL / POD are copied to every house B/L below.</span><% } %></div><% } %>
+    <% if (!isNew) { %><span class="muted small">Carrier, vessel / voyage, ETD / ETA and POL / POD are copied to every house B/L below.</span><% } else { %><span class="muted small">Have the <%= air ? 'MAWB' : 'MB/L' %> as a file? <a href="/portal">Upload documents</a> creates the master from it (with its houses when the house B/Ls come along).</span><% } %></div><% } %>
 </form>
 </div>
 <% if (!isNew) { %>
@@ -91,6 +91,10 @@
     <% if (m.houses.length > 1) { const sum = (k) => m.houses.reduce((a, h) => a + (Number(h[k]) || 0), 0); %>
     <tfoot><tr><td colspan="5" class="right"><b>Total</b></td><td class="right"><b><%= sum('packages') || '' %></b></td><td class="right"><b><%= fmtNum(sum('weight_kg'), 1) %></b></td><td class="right"><b><%= fmtNum(sum('cbm'), 3) %></b></td><td colspan="2"></td></tr></tfoot><% } %>
   </table></div>
+  <% if (m.id && can('shipments_edit')) { %><form method="post" action="/masters/<%= m.id %>/documents?_csrf=<%= csrf %>" enctype="multipart/form-data" class="dropzone master-drop" data-drop data-autosubmit>
+    <label class="drop-hint"><span class="ico">📄</span><span><b>Upload the <%= air ? 'MAWB' : 'MB/L' %></b> — drag the PDF or the Outlook email here, or <span class="pick">choose file</span> <span data-drop-files class="small"></span><br>
+      <span class="small muted">Saved on this master and read: empty fields (carrier, <%= air ? 'flight' : 'vessel' %>, dates, ports<%= air ? '' : ', containers' %>) are filled in and go to the house files.</span></span>
+      <input type="file" name="files" multiple accept=".pdf,.jpg,.jpeg,.png,.tif,.tiff,.msg,.eml"></label></form><% } %>
   <% if (m.docs && m.docs.length) { %><p class="small" style="padding:0 14px">Master documents: <% m.docs.forEach((d) => { %><a href="/documents/<%= d.id %>" target="_blank"><span class="badge"><%= d.doc_type %></span> <%= d.filename %></a> <% }) %></p><% } %>
   <% if (locals.profits) { %><p class="small" style="padding:0 14px">P/L (from the house files): revenue <b><%= fmtNum(profits.revenue, 2) %></b> · cost <b><%= fmtNum(profits.cost, 2) %></b> · profit <b class="<%= profits.profit < 0 ? 'late' : '' %>"><%= fmtNum(profits.profit, 2) %></b></p><% } %>
   <% if (m.containers.length) { %><p class="small" style="padding:0 14px 12px">Containers: <% m.containers.forEach((c) => { %><span class="mono badge"><%= c.container_no %><%= c.size_type ? ` ${c.size_type}` : '' %></span> <% }) %></p><% } %>

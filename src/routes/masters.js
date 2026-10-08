@@ -61,4 +61,52 @@ router.post('/masters/:id', auth.requirePerm('shipments_edit'), async (req, res)
   res.redirect(`/masters/${id}`);
 });
 
+// Drop the MB/L / MAWB (PDF, image or the Outlook email) on the master: kept on the master, read, and its empty
+// fields filled in (carrier, vessel / flight, dates, ports, containers); the carrier leg then goes to the houses.
+const fs = require('node:fs');
+const path = require('node:path');
+const crypto = require('node:crypto');
+const config = require('../config');
+const masterUpload = require('multer')({ storage: require('multer').memoryStorage(), limits: { fileSize: 25 * 1024 * 1024, files: 10 } });
+router.post('/masters/:id/documents', auth.requirePerm('shipments_edit'), masterUpload.array('files', 10), auth.checkCsrf, async (req, res) => {
+  const id = Number(req.params.id);
+  const m = store.db.get('SELECT * FROM masters WHERE id = ?', id);
+  if (!m) return res.status(404).end();
+  const { files } = await require('../extract/mailfile').expandMailFiles((req.files || []).map((f) => ({ buffer: f.buffer, filename: f.originalname, mime: f.mimetype })));
+  if (!files.length) { flash(req, 'err', 'Choose the MB/L / MAWB file first'); return res.redirect(`/masters/${id}`); }
+  const X = require('../extract/index');
+  const parts = []; let houses = 0;
+  fs.mkdirSync(path.join(config.uploadDir, 'masters'), { recursive: true });
+  for (const f of files) {
+    const got = await X.extractFile({ buffer: f.buffer, filename: f.filename, mime: f.mime, docTypeHint: m.mode === 'AIR' ? 'AWB' : 'MBL' }).catch(() => []);
+    const master = got.filter((p) => p.doc_type === 'MBL' || (p.doc_type === 'AWB' && p.doc_role !== 'house'));
+    houses += got.filter((p) => p.doc_type === 'HBL' || (p.doc_type === 'AWB' && p.doc_role === 'house')).length;
+    parts.push(...master);
+    const stored = path.join(config.uploadDir, 'masters', `${crypto.randomBytes(12).toString('hex')}${path.extname(f.filename).toLowerCase()}`);
+    fs.writeFileSync(stored, f.buffer);
+    store.db.run('INSERT INTO documents (master_id, doc_type, filename, stored_path, mime, size, customer_visible, uploaded_by) VALUES (?, ?, ?, ?, ?, ?, 0, ?)',
+      id, master[0]?.doc_type || (m.mode === 'AIR' ? 'AWB' : 'MBL'), f.filename, stored, f.mime, f.buffer.length, req.user.id);
+  }
+  const msg = [`${files.length} document(s) saved on the master`];
+  if (parts.length) {
+    const d = X.mergeExtractions(parts);
+    const read = { mbl_no: d.mawb_no || d.mbl_no, carrier: d.carrier, scac: d.scac, vessel: d.vessel, voyage: d.voyage, flight_no: d.flight_no, etd: d.etd, eta: d.eta,
+      pol: d.pol, pod: d.pod, place_of_delivery: d.place_of_delivery, service_term: d.service_term, containers: (d.containers || []).map((c) => c.container_no).join(',') || null };
+    const key = (v) => String(v || '').toUpperCase().replace(/[^A-Z0-9]/g, '');
+    if (m.mbl_no && read.mbl_no && key(read.mbl_no) !== key(m.mbl_no)) msg.push(`⚠ the document says ${read.mbl_no}, this master is ${m.mbl_no} — check it is the right master (nothing was filled in)`);
+    else {
+      const fill = Object.fromEntries(Object.entries(read).filter(([k, v]) => v != null && v !== '' && (m[k] == null || m[k] === '')));
+      const r = Object.keys(fill).length ? M.update(id, fill) : { changed: [], houses: [] };
+      const notify = require('../notify');
+      for (const h of r.houses) if (h.changes.length) await notify.onShipmentChanged(h.id, h.changes, { userId: req.user.id });
+      msg.push(r.changed.length ? `filled in: ${r.changed.join(', ')}` : 'nothing new to fill in');
+      const touched = r.houses.filter((h) => h.changes.length).length;
+      if (touched) msg.push(`${touched} house file(s) updated`);
+    }
+  }
+  if (houses) msg.push(`${houses} house B/L page(s) found — to create house files from them use Upload documents`);
+  flash(req, 'ok', msg.join(' · '));
+  res.redirect(`/masters/${id}`);
+});
+
 module.exports = router;
