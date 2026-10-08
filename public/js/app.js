@@ -646,6 +646,16 @@ document.querySelectorAll('[data-quick]').forEach((el) => {
   if (el.tagName === 'INPUT' && el.type !== 'checkbox') el.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); el.blur(); } });
 });
 
+// File header OP / Sales and the same drop-downs in the file form stay in step — otherwise "Save changes" on the
+// form would put back the old OP / Sales right after it was changed in the header.
+document.querySelectorAll('select.fb-pick').forEach((pick) => {
+  const twin = document.querySelector(`form select[name="${pick.dataset.field}"]:not(.fb-pick)`);
+  if (!twin) return;
+  const copy = (from, to) => { if (to.value !== from.value) { to.value = from.value; to.classList.add('just-picked'); setTimeout(() => to.classList.remove('just-picked'), 900); } };
+  pick.addEventListener('change', () => copy(pick, twin));
+  twin.addEventListener('change', () => copy(twin, pick));
+});
+
 // Column settings: tick which columns a list shows (kept per list in this browser).
 document.querySelectorAll('[data-colcfg]').forEach((btn) => {
   const key = `cols:${btn.dataset.colcfg}`;
