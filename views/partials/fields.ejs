@@ -8,6 +8,9 @@
   const sel = (k, label, opts, blank = true) => `<div class="field"><label for="f_${k}">${label}</label><select id="f_${k}" name="${k}">${blank ? '<option value="">—</option>' : ''}${opts.map((o) => `<option value="${e(o.id)}" ${String(s[k]) === String(o.id) ? 'selected' : ''}>${e(o.name)}</option>`).join('')}</select></div>`;
 %>
 <% const misc = s.mode === 'OTHER'; const ship = (html) => html.replace('<div class="field">', `<div class="field" data-ship-only ${misc ? 'hidden' : ''}>`); %>
+<%# Air files have no ISF, vessel, containers, OBL…: those boxes are hidden (and come back if the mode is changed). %>
+<% const isAir = s.mode === 'AIR'; const only = (attr, hide) => (html) => html.replace('<div class="field"', `<div ${attr} ${hide ? 'hidden' : ''} class="field"`);
+   const oc = only('data-ocean-only', isAir); const ai = only('data-air-only', !isAir); const fcl = only('data-fcl-only', s.mode !== 'FCL'); %>
 <script type="application/json" id="required-fields"><%- JSON.stringify(Object.fromEntries(Object.entries(S.REQUIRED).map(([m, l]) => [m, l.map(([k]) => k)]))) %></script>
 <fieldset class="fieldset" id="pic"><legend>Parties & status</legend>
   <div class="grid g4">
@@ -47,11 +50,11 @@
     <%- inp('mbl_no', s.mode === 'AIR' ? 'MAWB No.' : 'MBL No.') %>
     <%- inp('hbl_no', s.mode === 'AIR' ? 'HAWB No.' : 'HBL No.') %>
     <%- inp('carrier', 'Carrier / Airline') %>
-    <%- inp('flight_no', 'Flight No. (air)') %>
-    <%- inp('vessel', 'Vessel') %>
-    <%- inp('voyage', 'Voyage') %>
-    <%- inp('pol', 'Port of loading') %>
-    <%- inp('pod', 'Port of discharge') %>
+    <%- ai(inp('flight_no', 'Flight No.')) %>
+    <%- oc(inp('vessel', 'Vessel')) %>
+    <%- oc(inp('voyage', 'Voyage')) %>
+    <%- inp('pol', isAir ? 'Airport of departure' : 'Port of loading') %>
+    <%- inp('pod', isAir ? 'Airport of destination' : 'Port of discharge') %>
     <%- inp('place_of_delivery', 'Place of delivery') %>
     <%- inp('cfs_location', 'Freight location (pick-up: terminal / CFS / CES)') %>
     <%- inp('etd', 'ETD', 'date') %>
@@ -64,28 +67,28 @@
     <%- inp('atd', 'ATD (actual)', 'date') %>
     <%- inp('ata', 'ATA (actual)', 'date') %>
     <%- inp('last_free_day', 'Last free day', 'date') %>
-    <%- inp('ams_bl_no', 'AMS B/L no.') %>
+    <%- oc(inp('ams_bl_no', 'AMS B/L no.')) %>
     <%- inp('sub_bl_no', 'Sub B/L no.') %>
     <%- inp('customer_ref', 'Customer ref. no.') %>
     <%- inp('agent_ref', 'Agent filing no.') %>
     <%- inp('final_destination', 'Final destination') %>
-    <%- inp('devan_location', 'Devan location / terminal') %>
+    <%- oc(inp('devan_location', 'Devan location / terminal')) %>
     <%- inp('freight_location_tel', 'Freight location tel') %>
     <%- inp('available_date', 'Available date', 'date') %>
     <%- inp('go_date', 'G.O. date', 'date') %>
     <%- inp('it_no', 'I.T. no.') %>
     <%- inp('it_place', 'I.T. place') %>
     <%- inp('it_date', 'I.T. date', 'date') %>
-    <div class="field"><label for="f_service_term">Service term</label><select id="f_service_term" name="service_term"><option value="">—</option>
+    <div data-ocean-only <%= isAir ? 'hidden' : '' %> class="field"><label for="f_service_term">Service term</label><select id="f_service_term" name="service_term"><option value="">—</option>
       <% ['CY/CY', 'CFS/CFS', 'CY/CFS', 'CFS/CY', 'CY/DOOR', 'CFS/DOOR'].forEach((o) => { %><option <%= s.service_term === o ? 'selected' : '' %>><%= o %></option><% }) %></select></div>
-    <div class="field"><label for="f_release_type">Release</label><select id="f_release_type" name="release_type"><option value="">—</option>
+    <div data-ocean-only <%= isAir ? 'hidden' : '' %> class="field"><label for="f_release_type">Release</label><select id="f_release_type" name="release_type"><option value="">—</option>
       <% ['EXPRESS RELEASE', 'TELEX RELEASE', 'ORIGINAL B/L', 'SEA WAYBILL'].forEach((o) => { %><option <%= s.release_type === o ? 'selected' : '' %>><%= o %></option><% }) %></select></div>
     <%- inp('firms_code', 'Firms code') %>
     <%- inp('scac', 'Carrier SCAC / airline prefix', 'text', 'placeholder="auto from MBL"') %>
-    <%- inp('isf_no', 'ISF / AMS ref') %>
+    <%- oc(inp('isf_no', 'ISF / AMS ref')) %>
     <div class="field"><label>&nbsp;</label>
-      <label class="check"><input type="checkbox" name="isf_filed" value="1" <%= s.isf_filed ? 'checked' : '' %>> ISF filed</label>
-      <label class="check"><input type="checkbox" name="telex_release" value="1" <%= s.telex_release ? 'checked' : '' %>> Telex / OBL received</label>
+      <label class="check" data-ocean-only <%= isAir ? 'hidden' : '' %>><input type="checkbox" name="isf_filed" value="1" <%= s.isf_filed ? 'checked' : '' %>> ISF filed</label>
+      <label class="check" data-ocean-only <%= isAir ? 'hidden' : '' %>><input type="checkbox" name="telex_release" value="1" <%= s.telex_release ? 'checked' : '' %>> Telex / OBL received</label>
       <label class="check"><input type="checkbox" name="direct_shipment" value="1" <%= s.direct_shipment ? 'checked' : '' %>> Direct (no HBL)</label>
     </div>
   </div>
@@ -114,7 +117,7 @@
     <div class="field"><label class="check"><input type="checkbox" name="tracking_enabled" value="1" <%= s.tracking_enabled === 0 ? '' : 'checked' %>> Auto-tracking on</label></div>
     <%- inp('pickup_appt', 'Pickup appointment', 'datetime-local') %>
     <%- inp('picked_up_at', 'Picked up', 'date') %>
-    <%- inp('empty_returned_at', 'Empty returned (EIR)', 'date') %>
+    <%- fcl(inp('empty_returned_at', 'Empty returned (EIR)', 'date')) %>
     <div class="field"><label for="f_available_for_pickup">Available for pickup</label><select id="f_available_for_pickup" name="available_for_pickup">
       <option value="" <%= s.available_for_pickup == null ? 'selected' : '' %>>Unknown</option><option value="1" <%= s.available_for_pickup === 1 ? 'selected' : '' %>>Yes</option><option value="0" <%= s.available_for_pickup === 0 ? 'selected' : '' %>>No</option></select></div>
   </div>
@@ -128,7 +131,7 @@
     <div class="field"><label for="f_weight_lbs">LBS <span class="muted small">(auto)</span></label><input id="f_weight_lbs" type="number" step="0.01" data-conv="lbs" data-conv-of="weight_kg" value="<%= conv('lbs', s.weight_kg) %>"></div>
     <%- inp('cbm', 'CBM', 'number', 'step="0.001"') %>
     <div class="field"><label for="f_cft">FT³ <span class="muted small">(auto)</span></label><input id="f_cft" type="number" step="0.01" data-conv="ft³" data-conv-of="cbm" value="<%= conv('ft³', s.cbm) %>"></div>
-    <%- inp('chargeable_weight', 'Chargeable wt (air)', 'number', 'step="0.01"') %>
+    <%- ai(inp('chargeable_weight', 'Chargeable weight (KG)', 'number', 'step="0.01"')) %>
     <%- inp('commodity', 'Commodity') %>
     <%- inp('marks', 'Marks & numbers') %>
     <%- inp('ci_invoice_no', 'C/I no.') %>
@@ -163,7 +166,7 @@
   <div class="field"><label for="f_notes">Internal notes</label><textarea id="f_notes" name="notes" rows="2"><%= s.notes || '' %></textarea></div>
 </fieldset>
 
-<fieldset data-ship-only <%= misc ? "hidden" : "" %> class="fieldset"><legend>Containers</legend>
+<fieldset data-ship-only data-ocean-only <%= misc || isAir ? "hidden" : "" %> class="fieldset"><legend>Containers</legend>
   <div class="tablewrap"><table class="t lines" data-lines="ctn">
     <thead><tr><th>Container No.</th><th>Seal No.</th><th>Size/Type</th><th>Pkgs</th><th>KG</th><th>LBS</th><th>CBM</th><th>FT³</th><th>Pickup no.</th><th>LFD</th><th>Terminal status</th><th></th></tr></thead>
     <tbody>

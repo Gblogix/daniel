@@ -256,7 +256,7 @@
         <% docs.forEach((d) => { %>
           <tr class="<%= d.duplicate_of ? 'dup' : '' %>">
             <% if (edit) { %><td style="width:22px"><% if (!d.from_master) { %><input type="checkbox" name="doc_ids" value="<%= d.id %>" data-bulk-item <%= d.duplicate_of ? 'data-dup' : '' %>><% } %></td><% } %>
-            <td><% if (edit) { %><select class="doc-type" data-doc-type="<%= d.id %>" title="Change document type"><% [...new Set([d.doc_type, 'MBL', 'HBL', 'PL', 'CI', 'ISF', 'AWB', 'NOA', 'AN', 'DO', 'ATME', 'OTHER'])].forEach((t) => { %><option <%= t === d.doc_type ? 'selected' : '' %>><%= t %></option><% }) %></select><% } else { %><span class="badge"><%= d.doc_type %></span><% } %></td>
+            <td><% if (edit) { %><select class="doc-type" data-doc-type="<%= d.id %>" title="Change document type"><% [...new Set([d.doc_type, ...(s.mode === 'AIR' ? ['AWB'] : ['MBL', 'HBL', 'ISF']), 'PL', 'CI', 'NOA', 'AN', 'DO', 'ATME', 'OTHER'])].forEach((t) => { %><option <%= t === d.doc_type ? 'selected' : '' %>><%= t %></option><% }) %></select><% } else { %><span class="badge"><%= d.doc_type %></span><% } %></td>
             <td><a href="/documents/<%= d.id %>" target="_blank"><%= d.filename %></a><br><span class="muted small"><%= d.source %> · <%= fmtDateTime(d.created_at) %></span>
               <% if (d.duplicate_of) { %><span class="badge EXAM" title="Same file already on this file">duplicate</span><% } %>
               <% if (d.from_master) { %><a class="badge" href="/masters/<%= s.master_id %>" title="On the master B/L">master</a><% } %></td>
@@ -269,7 +269,7 @@
       </table></form><% } %>
 <% if (can('shipments_edit')) { %>      <form method="post" action="/shipments/<%= s.id %>/documents?_csrf=<%= csrf %>" enctype="multipart/form-data" style="margin-top:12px" class="dropzone" data-drop>
         <div class="grid g2" style="gap:8px">
-          <select name="doc_type"><% ['MBL','HBL','PL','CI','ISF','AWB','AN','DO','ATME','OTHER'].forEach((t) => { %><option value="<%= t %>"><%= { PL: 'PL (lines added to P/L table)', CI: 'CI (lines added if no P/L)' }[t] || t %></option><% }) %><option value="CIPL">C/I + P/L in one file (lines added)</option><option value="VINV">Vendor / CFS invoice → accounting (auto-read)</option></select>
+          <select name="doc_type"><% [...(s.mode === 'AIR' ? ['AWB'] : ['MBL', 'HBL', 'ISF']), 'PL', 'CI', 'AN', 'DO', 'ATME', 'OTHER'].forEach((t) => { %><option value="<%= t %>"><%= { PL: 'PL (lines added to P/L table)', CI: 'CI (lines added if no P/L)' }[t] || t %></option><% }) %><option value="CIPL">C/I + P/L in one file (lines added)</option><option value="VINV">Vendor / CFS invoice → accounting (auto-read)</option></select>
           <label class="check"><input type="checkbox" name="customer_visible" value="1"> Visible to customer</label>
         </div>
         <input type="file" name="files" multiple style="margin:8px 0">
