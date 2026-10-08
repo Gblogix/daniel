@@ -57,9 +57,20 @@ function parseNote(text, { companies = [], ownName = 'GLOBALBRIDGE' } = {}) {
   const head = lines.slice(0, 6).join(' ');
   const own = norm(ownName);
   // Issuer = the letterhead: the first lines before any "TO: / ATTN / MESSRS / AGENT :" block.
+  // Stops at the title or the first "Label : value" line (the letterhead is often a logo image with no text at all).
   const letter = [];
-  for (const l of lines.slice(0, 4)) { if (/^\s*(TO|ATTN|MESSRS|BILL\s*TO|AGENT|CUSTOMER)\b/i.test(l)) break; letter.push(l); }
-  const issuer = own && norm(letter.join(' ')).includes(own.split(' ')[0]) ? 'us' : 'them';
+  for (const l of lines.slice(0, 4)) {
+    if (/^\s*(TO|ATTN|MESSRS|BILL\s*TO|AGENT|CUSTOMER|PARTNER)\b/i.test(l) || /^\s*(DEBIT|CREDIT)\s*NOTE\b|^\s*D\s*\/\s*[CN]\b|^\s*INVOICE\b/i.test(l) || /^\s*[A-Za-z][A-Za-z.\/ ]{1,24}\s*:/.test(l)) break;
+    letter.push(l);
+  }
+  const ownWord = own.split(' ')[0];
+  const has = (s) => Boolean(own) && norm(s).includes(ownWord);
+  // Addressed to us ("Partner : GlobalBridge", "TO: GLOBALBRIDGE") or paid to someone else → the agent issued it.
+  const toUs = lines.some((l) => /^\s*(TO|ATTN|MESSRS|PARTNER|BILL\s*TO|CUSTOMER|AGENT)\b[^:]*[:.]?/i.test(l) && has(l.replace(/^\s*(TO|ATTN|MESSRS|PARTNER|BILL\s*TO|CUSTOMER|AGENT)\b/i, '')));
+  const benef = /BENEFICIARY(?:'S)?\s*(?:NAME)?\s*[:.]?\s*([^\n]+)/i.exec(T);
+  const paidToUs = benef ? has(benef[1]) : null;
+  const issuer = paidToUs === false || (toUs && !has(letter.join(' '))) ? 'them'
+    : has(letter.join(' ')) || paidToUs === true ? 'us' : 'them';
   const kind = /CREDIT\s*NOTE/i.test(head) && !/DEBIT/i.test(head) ? 'CN' : 'DN';
   const out = { kind, issuer, warnings: [] };
   out.number = labelled(lines, /D\s*\/\s*C\s*(?:NOTE\s*)?NO\.?|D\s*\/\s*N\s*NO\.?|C\s*\/\s*N\s*NO\.?|(?:DEBIT|CREDIT)\s*NOTE\s*(?:NO\.?|#)|NOTE\s*NO\.?|INVOICE\s*NO\.?|REF(?:ERENCE)?\s*NO\.?/i, NUMBER_OK);

@@ -110,3 +110,11 @@ test('NSC debit note: both columns per line, their charges = we owe, their credi
     ['PROFIT SHARE', 'NSCLGB26099999', 1, 100, 100, 'DEBIT']]);
   assert.deepEqual(r.warnings, []);
 });
+
+test('agent note whose letterhead is a logo (no text): addressed to us → issued by the agent, we owe', () => {
+  const noLogo = NSC.split('\n').slice(3).join('\n').replace('SESP26099999', 'AESP26109999').replace('OCEAN FREIGHT  40GP', 'AIR FREIGHT  KG');
+  const r = parseNote(noLogo, { companies: [...agents, { id: 1, name: 'GlobalBridge Logistics' }], ownName: own });
+  assert.equal(r.issuer, 'them');
+  assert.ok(r.total < 0, 'balance is what we owe');
+  assert.deepEqual(r.lines.map((l) => l.side), ['CREDIT', 'CREDIT', 'DEBIT']);
+});

@@ -6,6 +6,7 @@
 <title><%= title %> · GlobalBridge Logistics</title>
 <link rel="stylesheet" href="/css/app.css?v=<%= v %>">
 <script src="/js/embed.js?v=<%= v %>"></script>
+<% if (locals.user && isInternal) { %><meta name="gb-suggest" content="<%= SUGGEST_FIELDS %>"><% } %>
 </head>
 <body>
 <% if (user) { %>

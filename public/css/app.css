@@ -774,3 +774,11 @@ fieldset.plainset { border: 0; padding: 0; margin: 0; min-width: 0; }
 .import-map th { vertical-align: top; min-width: 130px; }
 .import-map select { margin-top: 4px; font-size: 12px; padding: 3px 4px; width: 100%; }
 .import-map select.on { border-color: #1f6feb; background: #eef4ff; }
+
+/* Type-ahead suggestions */
+.sugg { position: absolute; z-index: 200; background: #fff; border: 1px solid #c7d4ea; border-radius: 8px; box-shadow: 0 10px 24px rgba(15,23,42,.16); padding: 4px 0; max-height: 300px; overflow-y: auto; max-width: 520px; }
+.sugg-item { padding: 7px 12px; font-size: 13.5px; cursor: pointer; color: var(--ink); display: flex; gap: 10px; align-items: baseline; justify-content: space-between; }
+.sugg-item b { color: #1d4ed8; }
+.sugg-item.on, .sugg-item:hover { background: var(--soft); }
+.sugg-sub { color: var(--muted); font-size: 11.5px; white-space: nowrap; }
+select.just-picked { outline: 2px solid #22c55e; outline-offset: 1px; transition: outline-color .6s; }

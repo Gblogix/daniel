@@ -101,7 +101,14 @@ document.querySelectorAll('input[data-col]').forEach((all) => {
 // Vendor bill booking: live sum of lines vs the invoice total.
 document.querySelectorAll('form[data-bill]').forEach((form) => {
   const sumEl = form.querySelector('[data-sum]'); const diffEl = form.querySelector('[data-diff]');
-  const total = Number(form.querySelector('[data-total]').dataset.total);
+  let total = Number(form.querySelector('[data-total]').dataset.total);
+  form.querySelector('[data-flip-sides]')?.addEventListener('click', () => {
+    form.querySelectorAll('select[name="l_side"]').forEach((sel) => { sel.value = sel.value === 'CREDIT' ? 'DEBIT' : 'CREDIT'; });
+    if (Number.isFinite(total)) total = -total;
+    const tEl = form.querySelector('[data-total]');
+    if (tEl.dataset.total !== '') tEl.textContent = total.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    calc();
+  });
   const calc = () => {
     let s = 0;
     form.querySelectorAll('tbody tr').forEach((tr) => {
@@ -199,25 +206,95 @@ document.querySelectorAll('select[name="mode"]').forEach((sel) => {
   sel.addEventListener('change', apply);
 });
 
-// Long party lists: a small search box above the drop-down filters it as you type (Enter / single match picks it).
-document.querySelectorAll('select[data-party-search]').forEach((sel) => {
-  const box = document.createElement('input');
-  box.type = 'search'; box.placeholder = 'Type to find a party…'; box.className = 'party-search';
-  sel.parentNode.insertBefore(box, sel);
-  const opts = [...sel.querySelectorAll('option')].filter((o) => o.value);
-  box.addEventListener('input', () => {
-    const q = box.value.trim().toLowerCase();
-    const hits = opts.filter((o) => { const on = !q || o.textContent.toLowerCase().includes(q); o.hidden = !on; return on; });
-    sel.querySelectorAll('optgroup').forEach((g) => { g.hidden = ![...g.children].some((o) => !o.hidden); });
-    if (q && hits.length === 1) { sel.value = hits[0].value; sel.dispatchEvent(new Event('change', { bubbles: true })); }
+// ---------- type-ahead: a list of suggestions under the box while typing (↑ ↓ Enter, or click) ----------
+function gbSuggestBox(input, source, pick) {
+  const list = document.createElement('div');
+  list.className = 'sugg'; list.hidden = true; list.setAttribute('role', 'listbox');
+  document.body.appendChild(list);
+  let items = []; let at = -1; let timer = null; let seq = 0;
+  const place = () => {
+    const r = input.getBoundingClientRect();
+    const up = r.bottom + Math.min(list.offsetHeight || 260, 300) > window.innerHeight && r.top > 260; // no room below: open upwards
+    Object.assign(list.style, { left: `${r.left + window.scrollX}px`, minWidth: `${Math.max(r.width, 220)}px`,
+      top: up ? 'auto' : `${r.bottom + window.scrollY + 2}px`, bottom: up ? `${document.documentElement.clientHeight - r.top - window.scrollY + 2}px` : 'auto' });
+  };
+  const hide = () => { list.hidden = true; at = -1; };
+  const esc = (v) => String(v).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+  const mark = (label, q) => {
+    const i = q ? label.toLowerCase().indexOf(q.toLowerCase()) : -1;
+    return i < 0 ? esc(label) : `${esc(label.slice(0, i))}<b>${esc(label.slice(i, i + q.length))}</b>${esc(label.slice(i + q.length))}`;
+  };
+  const draw = (q) => {
+    if (!items.length) { hide(); return; }
+    list.innerHTML = items.map((it, i) => `<div class="sugg-item${i === at ? ' on' : ''}" data-i="${i}" role="option"><span>${mark(it.label, q)}</span>${it.sub ? `<span class="sugg-sub">${esc(it.sub)}</span>` : ''}</div>`).join('');
+    list.hidden = false; place();
+  };
+  const run = () => {
+    const q = input.value.trim(); const my = ++seq;
+    Promise.resolve(source(q)).then((res) => { if (my !== seq || document.activeElement !== input) return; items = res || []; at = -1; draw(q); }).catch(() => {});
+  };
+  input.setAttribute('autocomplete', 'off');
+  input.addEventListener('input', () => { clearTimeout(timer); timer = setTimeout(run, 140); });
+  input.addEventListener('focus', () => { if (input.dataset.suggestOnFocus !== undefined) run(); });
+  input.addEventListener('keydown', (e) => {
+    if (list.hidden) return;
+    if (e.key === 'ArrowDown') { at = Math.min(items.length - 1, at + 1); draw(input.value.trim()); e.preventDefault(); }
+    else if (e.key === 'ArrowUp') { at = Math.max(0, at - 1); draw(input.value.trim()); e.preventDefault(); }
+    else if (e.key === 'Enter' && (at >= 0 || items.length === 1)) { e.preventDefault(); pick(items[Math.max(at, 0)]); hide(); }
+    else if (e.key === 'Escape' || e.key === 'Tab') hide();
   });
-  box.addEventListener('keydown', (e) => {
-    if (e.key !== 'Enter') return;
-    e.preventDefault();
-    const first = opts.find((o) => !o.hidden);
-    if (first) { sel.value = first.value; sel.dispatchEvent(new Event('change', { bubbles: true })); }
+  list.addEventListener('mousedown', (e) => { const el = e.target.closest('[data-i]'); if (!el) return; e.preventDefault(); pick(items[Number(el.dataset.i)]); hide(); });
+  input.addEventListener('blur', () => setTimeout(hide, 120));
+  window.addEventListener('resize', () => { if (!list.hidden) place(); });
+}
+
+// Drop-downs with many choices (parties, users…): type a few letters, pick from the suggestions.
+document.querySelectorAll('select[data-party-search], select:not([multiple])').forEach((sel) => {
+  const opts = () => [...sel.querySelectorAll('option')].filter((o) => o.value && !o.disabled);
+  if (sel.dataset.partySearch === undefined && (opts().length < 12 || sel.closest('table, .filters, .bulkbar, .tools-menu'))) return;
+  if (sel.previousElementSibling?.classList.contains('party-search')) return;
+  const box = document.createElement('input');
+  box.type = 'search'; box.className = 'party-search';
+  box.placeholder = sel.dataset.partySearch !== undefined ? 'Type to find a party…' : 'Type to search…';
+  sel.parentNode.insertBefore(box, sel);
+  gbSuggestBox(box, (q) => {
+    if (!q) return [];
+    const ql = q.toLowerCase();
+    const hits = opts().map((o) => ({ o, t: o.textContent.trim(), g: o.parentElement.tagName === 'OPTGROUP' ? o.parentElement.label : '' }))
+      .filter((x) => x.t.toLowerCase().includes(ql));
+    hits.sort((a, b) => Number(!a.t.toLowerCase().startsWith(ql)) - Number(!b.t.toLowerCase().startsWith(ql)));
+    return hits.slice(0, 10).map((x) => ({ label: x.t, sub: x.g, value: x.o.value }));
+  }, (it) => {
+    sel.value = it.value; box.value = '';
+    sel.dispatchEvent(new Event('change', { bubbles: true }));
+    sel.classList.add('just-picked'); setTimeout(() => sel.classList.remove('just-picked'), 900);
   });
 });
+
+// Text fields: values used on earlier files (port, vessel, carrier, commodity, address, charge names…).
+(() => {
+  const meta = document.querySelector('meta[name="gb-suggest"]');
+  if (!meta) return;
+  const fields = new Set(meta.content.split(','));
+  const cache = new Map();
+  const attach = (input) => {
+    if (input.dataset.sugg || !fields.has(input.name) || !/^(text|search|)$/.test(input.type || '')) return;
+    input.dataset.sugg = '1';
+    const dl = input.getAttribute('list') && document.getElementById(input.getAttribute('list'));
+    if (dl) input.removeAttribute('list'); // our list replaces the browser's (its values are merged in below)
+    gbSuggestBox(input, async (q) => {
+      if (q.length < 2) return [];
+      const key = `${input.name}|${q.toLowerCase()}`;
+      if (!cache.has(key)) cache.set(key, fetch(`/suggest.json?f=${encodeURIComponent(input.name)}&q=${encodeURIComponent(q)}`).then((r) => r.json()).catch(() => []));
+      const server = await cache.get(key);
+      const local = dl ? [...dl.options].map((o) => o.value).filter((v) => v.toLowerCase().includes(q.toLowerCase())) : [];
+      return [...new Set([...server, ...local])].filter((v) => v !== q).slice(0, 8).map((v) => ({ label: v }));
+    }, (it) => { input.value = it.label; input.dispatchEvent(new Event('input', { bubbles: true })); input.dispatchEvent(new Event('change', { bubbles: true })); });
+  };
+  document.querySelectorAll('input[name]').forEach(attach);
+  // Rows added later (+ Line, + Container): attach when first focused.
+  document.addEventListener('focusin', (e) => { if (e.target.matches?.('input[name]')) attach(e.target); });
+})();
 
 // "＋ New … from documents": show the editable name / address only while that option is picked.
 document.querySelectorAll('select[data-new-party]').forEach((sel) => {

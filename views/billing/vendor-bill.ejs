@@ -50,7 +50,8 @@
     <datalist id="charge-codes"><% codes.forEach((c) => { %><option value="<%= c %>"><% }) %></datalist>
     <div class="billsum"><button type="button" class="btn secondary small" data-add-row="bill">+ Line</button>
       <span>Lines total <b data-sum>0.00</b></span><span><%= note ? 'Note balance' : 'Invoice total' %> <b data-total="<%= ex.total ?? '' %>"><%= ex.total != null ? fmtNum(ex.total, 2) : '—' %></b></span><span data-diff class="late"></span>
-      <span class="note-col small" data-note-dir></span></div>
+      <span class="note-col small" data-note-dir></span>
+      <button type="button" class="btn secondary small note-col" data-flip-sides title="Turn every Debit into Credit and back — e.g. when the agent's note was read as ours">⇄ Flip debit / credit</button></div>
     <div class="field"><label>Memo</label><input name="memo" placeholder="optional"></div>
     <div class="actions">
       <button class="btn" name="next" value="0">✔ Book <%= note ? 'note' : 'vendor bill' %></button>

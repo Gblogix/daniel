@@ -42,7 +42,7 @@ function createApp() {
   app.use(auth.csrf);
   app.use((req, res, next) => {
     Object.assign(res.locals, {
-      S, config, path: req.path, stagesFor: (s, c) => require('./stages').stages(s, c), PORTAL_HIDE: require('./portal').HIDE_OPTIONS, flash: req.session.flash || null, v: ASSET_VERSION,
+      S, config, path: req.path, stagesFor: (s, c) => require('./stages').stages(s, c), PORTAL_HIDE: require('./portal').HIDE_OPTIONS, SUGGEST_FIELDS: Object.keys(require('./suggest').FIELDS).join(','), flash: req.session.flash || null, v: ASSET_VERSION,
       fmtNum: (v, d = 0) => (v == null || v === '' ? '' : Number(v).toLocaleString('en-US', { minimumFractionDigits: d, maximumFractionDigits: d })),
       fmtDate: (v) => (v ? String(v).slice(0, 10) : ''),
       fmtDateTime: (v) => (v ? String(v).replace('T', ' ').slice(0, 16) : ''),

@@ -193,7 +193,9 @@ router.get('/shipments/:id', auth.requireLogin, (req, res) => {
   const profit = internal && acct ? A.shipmentProfit(s.id) : null;
   const plLines = internal && acct ? A.shipmentLines(s.id) : [];
   // Review & send: AR to the customer, D/N or C/N to the agent — with the address each one goes to.
-  const outgoing = invoices.filter((i) => i.kind !== 'AP' && i.status !== 'VOID').map((i) => {
+  // A note the agent sent us (booked from their PDF) is not ours to send back.
+  const received = (i) => i.document_id && db.get("SELECT 1 FROM documents WHERE id = ? AND doc_type = 'VINV'", i.document_id);
+  const outgoing = invoices.filter((i) => i.kind !== 'AP' && i.status !== 'VOID' && !received(i)).map((i) => {
     const c = db.get('SELECT emails, billing_emails FROM companies WHERE id = ?', i.company_id) || {};
     return { ...i, to: require('../invoicing').emailsOf(c) };
   });

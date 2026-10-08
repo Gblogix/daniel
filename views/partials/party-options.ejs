@@ -1,6 +1,6 @@
 <%# Party <option>s grouped by type, the likely types first. locals: parties, selected, prefer (array of types) %>
 <%
-  const LABEL = { customer: 'Customers', agent: 'Overseas agents', broker: 'Customs brokers', trucker: 'Truckers', vendor: 'Vendors (CFS / carrier / other)',
+  const LABEL = { customer: 'Customers', agent: 'Overseas agents', forwarder: 'Forwarders', broker: 'Customs brokers', trucker: 'Truckers', vendor: 'Vendors (CFS / carrier / other)',
     delivery: 'Delivery locations / warehouses', importer: 'Importers', shipper: 'Shippers' };
   const order = [...(locals.prefer || []), ...Object.keys(LABEL)].filter((t, i, a) => a.indexOf(t) === i);
   const groups = {};
