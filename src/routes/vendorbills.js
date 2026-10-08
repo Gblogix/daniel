@@ -68,7 +68,7 @@ router.get('/vendor-bills/:id', auth.requireAccounting, (req, res) => {
   const files = [current, ...matched, ...recent].filter((s) => s && !seen.has(s.id) && seen.add(s.id));
   const parties = store.db.all('SELECT id, name, type, types, terms_days FROM companies ORDER BY name');
   const nextId = V.pending().find((x) => x.id !== d.id)?.id || null;
-  res.render('billing/vendor-bill', { title: `${ex.doc_kind === 'DN' ? 'Book D/N · C/N' : 'Book vendor invoice'} — ${d.filename}`, d, ex, files, matchedIds: matched.map((s) => s.id), parties, codes: A.CHARGE_CODES, nextId });
+  res.render('billing/vendor-bill', { title: `${ex.doc_kind === 'DN' ? 'Book D/N · C/N' : 'Book vendor invoice'} — ${d.filename}`, d, ex, files, matchedIds: matched.map((s) => s.id), parties, codes: A.chargeItems(null), nextId });
 });
 
 router.post('/vendor-bills/:id', auth.requireAccounting, (req, res) => {

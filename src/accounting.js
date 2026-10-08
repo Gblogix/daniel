@@ -11,12 +11,24 @@
 const store = require('./db');
 const company = require('./company');
 
-// Charge descriptions seen on current invoices / debit notes (datalist suggestions).
-const CHARGE_CODES = [
-  'OCEAN FREIGHT', 'AIR FREIGHT', 'THC', 'AMS', 'SEAL', 'DOCUMENT FEE', 'D/O FEE', 'PIERPASS & CTF', 'CFS CHARGE',
-  'TRUCKING CHARGE', 'CHASSIS', 'DEVANNING', 'SEGREGATION', 'STORAGE CHARGE', 'HANDLING CHARGE', 'CUSTOMS CLEARANCE FEE',
-  'DUTIES', 'ISC FEE PAID', 'CES EXAM FEE', 'INSURANCE', 'ANNUAL BOND', 'ISF FILING', 'W/H OUT', 'PICK & PACK', 'LABEL', 'WMS',
-];
+// Charge items as set up in OPUS — the same list for A/R invoices, D/N and C/N. Anything else can still be typed.
+const CHARGE_ITEMS = {
+  AIR: [['AF-AI', 'AIR FREIGHT'], ['CC-AI', 'CUSTOMS CLEARANCE FEE'], ['DOC-AI', 'DOCUMENT FEE'], ['DUT-AI', 'DUTIES'], ['FS-AI', 'FUEL SURCHARGE'],
+    ['HAND-AI', 'HANDLING CHRG'], ['IPI-AIR', 'IPI CHARGE'], ['MPS', 'M.P.F. (.21% VALUE)'], ['OTHER-AI', 'OTHER CHARGE'], ['PS-AI', 'PROFIT SHARE'],
+    ['SECAI-AI', 'SECURITY SURCHARGE'], ['STO-AI', 'STORAGE CHARGE'], ['TRUCK-AI', 'TRUCKING CHARGE']],
+  OCEAN: [['CC-OI', 'CUSTOMS CLEARANCE FEE'], ['CFSDV', 'CFS/DEVANNING'], ['CTP-OI', 'CTP-CLEAN TRUCK PROGRAM'], ['DDC', 'DDC'], ['DOC-OI', 'DOCUMENT FEE'],
+    ['DRAYG-OI', 'CONTAINER DRAYAGE'], ['DUT-OI', 'DUTIES'], ['EXAM', 'EXAM FEE'], ['FMC-OI', 'FMC FILING FEE'], ['HAND-OI', 'HANDLING CHARGE'],
+    ['IPI-SEA', 'IPI CHARGE'], ['OF-OI', 'OCEAN FREIGHT'], ['OTHER-OI', 'OTHER CHARGE'], ['PIERPASS-OI', 'PIERPASS'], ['PS-OI', 'PROFIT SHARE'],
+    ['SECAI-OI', 'SECURITY SURCHARGE'], ['STO-OI', 'STORAGE CHARGE'], ['TRANSLOAD', 'TRANSLOADING CHARGE'], ['TRUCK-OI', 'TRUCKING CHARGE']],
+};
+/** The items for a file's mode (air or ocean); both lists when there is no file. [{ code, name }] */
+function chargeItems(mode) {
+  const lists = mode === 'AIR' ? [CHARGE_ITEMS.AIR] : mode ? [CHARGE_ITEMS.OCEAN] : [CHARGE_ITEMS.OCEAN, CHARGE_ITEMS.AIR];
+  const seen = new Set();
+  return lists.flat().filter(([, n]) => !seen.has(n) && seen.add(n)).map(([code, name]) => ({ code, name }));
+}
+// All item names (vendor bills, suggestions).
+const CHARGE_CODES = chargeItems(null).map((c) => c.name);
 
 const round = (v) => Math.round((Number(v) || 0) * 100) / 100;
 const today = () => new Date().toISOString().slice(0, 10);
@@ -557,7 +569,7 @@ function setReviewed(id, on, { db = store.db, userId = null } = {}) {
 }
 
 module.exports = { findDuplicates, normNo,
-  CHARGE_CODES, saveInvoice, getInvoice, listInvoices, voidInvoice, recordPayment, settleNetting,
+  CHARGE_CODES, CHARGE_ITEMS, chargeItems, saveInvoice, getInvoice, listInvoices, voidInvoice, recordPayment, settleNetting,
   agentStatement, arAging, shipmentProfit, refreshStatus, addDays, payOnAccount, applyUnapplied, unappliedPayments,
   shipmentLines, profitReport, openItems, settleSelected,
   partyStatement, agingSummary, setReviewed, KIND_LABEL, BUCKETS,

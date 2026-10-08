@@ -221,10 +221,10 @@
     <div class="tablewrap"><table class="t lines" data-lines="acct">
       <thead><tr><th style="min-width:240px">Item</th><th>Rate</th><th>Qty</th><th>Amount</th><th></th></tr></thead>
       <tbody><% [0, 1, 2].forEach(() => { %><tr>
-        <td><input name="l_desc" list="charge-codes"></td><td><input name="l_rate" style="width:100px"></td><td><input name="l_qty" style="width:60px"></td>
+        <td><input name="l_desc" list="charge-codes" placeholder="Pick or type an item"></td><td><input name="l_rate" style="width:100px"></td><td><input name="l_qty" style="width:60px"></td>
         <td><input name="l_amount" placeholder="= rate × qty" style="width:120px"></td><td><button type="button" class="btn secondary small" data-remove-row>✕</button></td></tr><% }) %></tbody>
     </table></div>
-    <datalist id="charge-codes"><% codes.forEach((c) => { %><option value="<%= c %>"><% }) %></datalist>
+    <datalist id="charge-codes"><% codes.forEach((c) => { %><option value="<%= c.name %>" label="<%= c.code %>"><% }) %></datalist>
     <div class="actions" style="margin-top:8px"><button type="button" class="btn secondary small" data-add-row="acct">+ Line</button><button class="btn">Save to this file</button></div>
   </form></details><% } %>
 </div>

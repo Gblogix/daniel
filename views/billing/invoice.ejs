@@ -63,14 +63,14 @@
       <tbody>
       <% (inv.lines.length ? inv.lines : [{}, {}, {}]).forEach((l) => { %><tr>
         <% if (k === 'DN') { %><td><select name="l_mh"><option <%= l.mh === 'H' ? '' : 'selected' %>>M</option><option <%= l.mh === 'H' ? 'selected' : '' %>>H</option></select></td><td><input name="l_bl" value="<%= l.bl_no || '' %>"></td><% } %>
-        <td><input name="l_desc" value="<%= l.description || '' %>" list="charge-codes"></td><td><input name="l_unit" value="<%= l.unit || '' %>" style="width:70px"></td>
+        <td><input name="l_desc" value="<%= l.description || '' %>" list="charge-codes" placeholder="Pick or type an item"></td><td><input name="l_unit" value="<%= l.unit || '' %>" style="width:70px"></td>
         <td><input name="l_rate" value="<%= l.rate ?? '' %>" style="width:100px"></td><td><input name="l_qty" value="<%= l.qty ?? '' %>" style="width:60px"></td>
         <td><input name="l_amount" value="<%= l.amount ?? '' %>" placeholder="= rate × qty" style="width:110px"></td>
         <% if (k === 'DN') { %><td><select name="l_pc"><option <%= l.pc === 'P' ? '' : 'selected' %>>C</option><option <%= l.pc === 'P' ? 'selected' : '' %>>P</option></select></td>
           <td><select name="l_side"><option value="DEBIT" <%= l.side === 'CREDIT' ? '' : 'selected' %>>Debit (+)</option><option value="CREDIT" <%= l.side === 'CREDIT' ? 'selected' : '' %>>Credit (−)</option></select></td><% } %>
         <td><button type="button" class="btn secondary small" data-remove-row>✕</button></td></tr><% }) %>
       </tbody></table></div>
-    <datalist id="charge-codes"><% codes.forEach((c) => { %><option value="<%= c %>"><% }) %></datalist>
+    <datalist id="charge-codes"><% codes.forEach((c) => { %><option value="<%= c.name %>" label="<%= c.code %>"><% }) %></datalist>
     <button type="button" class="btn secondary small" data-add-row="inv" style="margin-top:8px">+ Line</button>
     <p class="muted small">Leave Amount empty to use Rate × Qty.<% if (k === 'DN') { %> Debit = the agent owes us; Credit = we owe the agent. A negative balance prints as a CREDIT NOTE.<% } %></p>
   </div>

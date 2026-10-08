@@ -223,7 +223,7 @@ router.get('/shipments/:id', auth.requireLogin, (req, res) => {
   } : {};
   const portalHide = internal ? null : require('../portal').hiddenFor(s.customer_id);
   res.render(view, { title: S.fileName(s), s, trackLink, tools, portalHide, newCustomer, nextActions, tr: S.tracking(s), docs, events, emails, trackEvents, invoices, profit, plLines, acctParties, outgoing, vendorPending, autoSend: db.setting('auto_send_reviewed') === '1',
-    codes: A.CHARGE_CODES, billing: acct ? S.billingState(s) : null, trackingStatus: require('../tracking').status(), ...(internal ? partyLists() : {}) });
+    codes: A.chargeItems(s.mode), billing: acct ? S.billingState(s) : null, trackingStatus: require('../tracking').status(), ...(internal ? partyLists() : {}) });
 });
 
 /** Which documents each external role may download. */

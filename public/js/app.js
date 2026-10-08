@@ -236,6 +236,7 @@ function gbSuggestBox(input, source, pick) {
   input.setAttribute('autocomplete', 'off');
   input.addEventListener('input', () => { clearTimeout(timer); timer = setTimeout(run, 140); });
   input.addEventListener('focus', () => { if (input.dataset.suggestOnFocus !== undefined) run(); });
+  input.addEventListener('click', () => { if (input.dataset.suggestOnFocus !== undefined && list.hidden) run(); });
   input.addEventListener('keydown', (e) => {
     if (list.hidden) return;
     if (e.key === 'ArrowDown') { at = Math.min(items.length - 1, at + 1); draw(input.value.trim()); e.preventDefault(); }
@@ -282,13 +283,17 @@ document.querySelectorAll('select[data-party-search], select:not([multiple])').f
     input.dataset.sugg = '1';
     const dl = input.getAttribute('list') && document.getElementById(input.getAttribute('list'));
     if (dl) input.removeAttribute('list'); // our list replaces the browser's (its values are merged in below)
+    // A fixed list (charge items): the whole list opens on click, like a drop-down; typing filters by name or code.
+    if (dl) input.dataset.suggestOnFocus = '';
+    const fixed = dl ? [...dl.options].map((o) => ({ label: o.value, sub: o.label && o.label !== o.value ? o.label : '' })) : [];
     gbSuggestBox(input, async (q) => {
-      if (q.length < 2) return [];
-      const key = `${input.name}|${q.toLowerCase()}`;
+      const ql = q.toLowerCase();
+      const local = fixed.filter((it) => !ql || it.label.toLowerCase().includes(ql) || it.sub.toLowerCase().includes(ql));
+      if (q.length < 2) return dl ? local : [];
+      const key = `${input.name}|${ql}`;
       if (!cache.has(key)) cache.set(key, fetch(`/suggest.json?f=${encodeURIComponent(input.name)}&q=${encodeURIComponent(q)}`).then((r) => r.json()).catch(() => []));
-      const server = await cache.get(key);
-      const local = dl ? [...dl.options].map((o) => o.value).filter((v) => v.toLowerCase().includes(q.toLowerCase())) : [];
-      return [...new Set([...server, ...local])].filter((v) => v !== q).slice(0, 8).map((v) => ({ label: v }));
+      const server = (await cache.get(key)).filter((v) => !fixed.some((it) => it.label === v)).map((v) => ({ label: v, sub: 'used before' }));
+      return [...local, ...server].filter((it) => it.label !== q).slice(0, dl ? 30 : 8);
     }, (it) => { input.value = it.label; input.dispatchEvent(new Event('input', { bubbles: true })); input.dispatchEvent(new Event('change', { bubbles: true })); });
   };
   document.querySelectorAll('input[name]').forEach(attach);

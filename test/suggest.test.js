@@ -21,7 +21,19 @@ test('suggests earlier values: starts-with first, then most used; whitelisted fi
   assert.deepEqual(suggest('carrier', 'sam'), ['SAMPLE LINES']);
   assert.deepEqual(suggest('password_hash', 'a'), []);
   assert.deepEqual(suggest('pol', ''), []);
-  assert.ok(suggest('l_desc', 'freight').length > 0, 'charge names are suggested even before any invoice');
+  assert.deepEqual(suggest('l_desc', 'freight'), [], 'no history yet (the fixed charge items come with the page)');
   assert.deepEqual(suggest('pol', '%'), [], 'LIKE wildcards are literal');
   for (const f of Object.keys(FIELDS)) assert.doesNotThrow(() => suggest(f, 'x'), f);
+});
+
+test('charge items follow the file: air items on an air file, ocean items otherwise; both without a file', () => {
+  const A = require('../src/accounting');
+  const air = A.chargeItems('AIR').map((c) => c.name);
+  const ocean = A.chargeItems('FCL').map((c) => c.name);
+  assert.ok(air.includes('AIR FREIGHT') && air.includes('M.P.F. (.21% VALUE)') && !air.includes('OCEAN FREIGHT'));
+  assert.ok(ocean.includes('OCEAN FREIGHT') && ocean.includes('PIERPASS') && !ocean.includes('AIR FREIGHT'));
+  assert.equal(A.chargeItems('AIR').find((c) => c.name === 'AIR FREIGHT').code, 'AF-AI');
+  const all = A.chargeItems(null).map((c) => c.name);
+  assert.equal(new Set(all).size, all.length, 'no duplicates');
+  assert.ok(all.includes('AIR FREIGHT') && all.includes('OCEAN FREIGHT'));
 });

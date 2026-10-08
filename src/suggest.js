@@ -31,7 +31,6 @@ function suggest(field, q, { db = store.db, limit = 8 } = {}) {
     } catch { continue; } // a column not in this database yet
     for (const r of rows) counts.set(r.v, (counts.get(r.v) || 0) + r.n);
   }
-  if (field === 'l_desc') for (const c of require('./accounting').CHARGE_CODES) if (c.toLowerCase().includes(term.toLowerCase()) && !counts.has(c)) counts.set(c, 0);
   const t = term.toLowerCase();
   return [...counts.entries()]
     .sort((a, b) => Number(!String(a[0]).toLowerCase().startsWith(t)) - Number(!String(b[0]).toLowerCase().startsWith(t)) || b[1] - a[1] || String(a[0]).localeCompare(String(b[0])))

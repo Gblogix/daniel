@@ -40,14 +40,14 @@
     <div class="tablewrap"><table class="t lines" data-lines="bill">
       <thead><tr><th style="min-width:200px">Charge</th><th class="note-col">B/L</th><th class="note-col">Debit / Credit</th><th class="ap-col">Qty</th><th class="ap-col">Rate</th><th>Amount</th><th></th></tr></thead>
       <tbody><% lines.forEach((l) => { %><tr>
-        <td><input name="l_desc" value="<%= l.description || '' %>" list="charge-codes"></td>
+        <td><input name="l_desc" value="<%= l.description || '' %>" list="charge-codes" placeholder="Pick or type an item"></td>
         <td class="note-col"><input name="l_bl" value="<%= l.bl_no || '' %>" style="width:130px" class="mono"></td>
         <td class="note-col"><select name="l_side"><option value="DEBIT" <%= l.side === 'CREDIT' ? '' : 'selected' %>>Debit</option><option value="CREDIT" <%= l.side === 'CREDIT' ? 'selected' : '' %>>Credit</option></select></td>
         <td class="ap-col"><input name="l_qty" value="<%= l.qty ?? '' %>" style="width:64px"></td><td class="ap-col"><input name="l_rate" value="<%= l.rate ?? '' %>" style="width:90px"></td>
         <td><input name="l_amount" value="<%= l.amount ?? '' %>" style="width:110px" data-amt></td>
         <td><button type="button" class="btn secondary small" data-remove-row>✕</button></td></tr><% }) %></tbody>
     </table></div>
-    <datalist id="charge-codes"><% codes.forEach((c) => { %><option value="<%= c %>"><% }) %></datalist>
+    <datalist id="charge-codes"><% codes.forEach((c) => { %><option value="<%= c.name %>" label="<%= c.code %>"><% }) %></datalist>
     <div class="billsum"><button type="button" class="btn secondary small" data-add-row="bill">+ Line</button>
       <span>Lines total <b data-sum>0.00</b></span><span><%= note ? 'Note balance' : 'Invoice total' %> <b data-total="<%= ex.total ?? '' %>"><%= ex.total != null ? fmtNum(ex.total, 2) : '—' %></b></span><span data-diff class="late"></span>
       <span class="note-col small" data-note-dir></span>
