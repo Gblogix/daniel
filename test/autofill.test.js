@@ -72,3 +72,19 @@ test('LCL pick-up (CFS) follows the co-loader agent + port', () => {
   assert.equal(AF.suggest({ mode: 'LCL', agent_id: ag, pod: 'OAKLAND' }).fills.cfs_location, undefined);
   assert.equal(AF.suggest({ mode: 'LCL', pod: 'LONG BEACH' }).fills.cfs_location, undefined);
 });
+
+test('air: the cargo location follows the airline (AWB prefix), even when the airline name is written differently', () => {
+  const S = require('../src/shipments');
+  const db = require('../src/db').db;
+  const a = S.create({ mode: 'AIR', hbl_no: 'AIRLOC-1', mbl_no: '180-11112222', carrier: 'KOREAN AIRLINES', pod: 'LOS ANGELES,U.S.A.' });
+  const waiting = S.create({ mode: 'AIR', hbl_no: 'AIRLOC-2', mbl_no: '180-33334444', carrier: 'Korean Air', pod: 'LOS ANGELES, CA' });
+  const other = S.create({ mode: 'AIR', hbl_no: 'AIRLOC-3', mbl_no: '350-55556666', pod: 'LOS ANGELES, CA' });
+  S.update(a, { cfs_location: 'SAMPLE AIR CARGO TERMINAL, 6000 SAMPLE BLVD, LOS ANGELES', firms_code: 'W000' });
+  const get = (id) => db.get('SELECT cfs_location, firms_code FROM shipments WHERE id = ?', id);
+  assert.equal(get(waiting).cfs_location, 'SAMPLE AIR CARGO TERMINAL, 6000 SAMPLE BLVD, LOS ANGELES', 'open file of the same airline filled');
+  assert.notEqual(get(other).cfs_location, 'SAMPLE AIR CARGO TERMINAL, 6000 SAMPLE BLVD, LOS ANGELES', 'another airline untouched');
+  // A new file of that airline later: filled when it is created.
+  const later = S.create({ mode: 'AIR', hbl_no: 'AIRLOC-4', mbl_no: '180-77778888', pod: 'LOS ANGELES,U.S.A.' });
+  assert.equal(get(later).cfs_location, 'SAMPLE AIR CARGO TERMINAL, 6000 SAMPLE BLVD, LOS ANGELES');
+  assert.equal(get(later).firms_code, 'W000');
+});

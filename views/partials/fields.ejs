@@ -56,7 +56,7 @@
     <%- inp('pol', isAir ? 'Airport of departure' : 'Port of loading') %>
     <%- inp('pod', isAir ? 'Airport of destination' : 'Port of discharge') %>
     <%- inp('place_of_delivery', 'Place of delivery') %>
-    <%- inp('cfs_location', 'Freight location (pick-up: terminal / CFS / CES)') %>
+    <%- inp('cfs_location', isAir ? 'Cargo location (airline warehouse) — remembered per airline' : 'Freight location (pick-up: terminal / CFS / CES)') %>
     <%- inp('etd', 'ETD', 'date') %>
     <div><%- inp('eta', 'ETA', 'date') %>
       <% if (s.id && locals.trackingStatus) { %><div class="small eta-src" style="margin-top:-6px">

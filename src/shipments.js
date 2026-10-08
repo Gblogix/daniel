@@ -137,6 +137,7 @@ function update(id, input, { db = store.db } = {}) {
   }
   if (!current.master_id || changes.some((c) => ['mbl_no', 'mode', 'master_id'].includes(c.field))) require('./masters').linkHouse(id, { db });
   if (changes.some((c) => AUTOFILL_KEYS.includes(c.field))) require('./autofill').apply(id, { db });
+  if (changes.some((c) => c.field === 'cfs_location')) require('./autofill').spreadPickup(id, { db });
   return changes;
 }
 

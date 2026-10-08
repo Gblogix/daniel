@@ -68,7 +68,15 @@ function suggest(s, { db = store.db } = {}) {
   const pod = portKey(s.pod);
   if (PICKUP.some((f) => empty(s[f])) && pod) {
     const cands = lastWith(db, s, PICKUP, 'mode = ?', [s.mode || 'FCL']).filter((r) => portKey(r.pod) === pod);
-    const same = (r) => (s.mode === 'LCL' && s.agent_id ? String(r.agent_id) === String(s.agent_id) : norm(r.carrier) === norm(carrier) && !!carrier);
+    // Air: the airline's cargo terminal — same AWB prefix (180 = Korean Air), else the same airline by its first word
+    // ("KOREAN AIRLINES" on the HAWB = "Korean Air" from the prefix).
+    const prefix = (r) => { const n = norm(r.mbl_no || r.mawb_no); return /^\d{11}$/.test(n) ? n.slice(0, 3) : null; };
+    const word = (v) => String(v || '').toUpperCase().replace(/[^A-Z ]/g, ' ').trim().split(/\s+/)[0] || '';
+    const same = (r) => {
+      if (s.mode === 'LCL' && s.agent_id) return String(r.agent_id) === String(s.agent_id);
+      if (s.mode === 'AIR') return (prefix(s) && prefix(r) === prefix(s)) || (!!carrier && word(r.carrier) === word(carrier));
+      return norm(r.carrier) === norm(carrier) && !!carrier;
+    };
     const hit = cands.find(same);
     if (hit) {
       for (const f of PICKUP) if (empty(s[f]) && !empty(hit[f])) fills[f] = hit[f];
@@ -105,6 +113,26 @@ function apply(id, { db = store.db } = {}) {
   return keys;
 }
 
+/**
+ * A cargo location typed on an air file also goes to the other open air files of the same airline (AWB prefix) and
+ * airport that still have none. Returns how many were filled.
+ */
+function spreadPickup(id, { db = store.db } = {}) {
+  const s = db.get('SELECT * FROM shipments WHERE id = ?', id);
+  if (!s || s.mode !== 'AIR' || empty(s.cfs_location)) return 0;
+  const n = norm(s.mbl_no);
+  if (!/^\d{11}$/.test(n)) return 0;
+  let filled = 0;
+  for (const r of db.all("SELECT * FROM shipments WHERE id <> ? AND mode = 'AIR' AND (cfs_location IS NULL OR cfs_location = '') AND status <> 'DELIVERED' AND locked_at IS NULL", id)) {
+    if (norm(r.mbl_no).slice(0, 3) !== n.slice(0, 3) || !/^\d{11}$/.test(norm(r.mbl_no)) || portKey(r.pod) !== portKey(s.pod)) continue;
+    const set = PICKUP.filter((f) => empty(r[f]) && !empty(s[f]));
+    db.run(`UPDATE shipments SET ${set.map((f) => `${f} = ?`).join(', ')} WHERE id = ?`, ...set.map((f) => s[f]), r.id);
+    require('./shipments').addEvent(r.id, 'AUTOFILL', `Auto-filled: cargo location from ${s.ref_no} (same airline)`, { db, customerVisible: false });
+    filled++;
+  }
+  return filled;
+}
+
 /** Same for a master: carrier from the MB/L / MAWB prefix. */
 function applyMaster(id, { db = store.db } = {}) {
   const m = db.get('SELECT * FROM masters WHERE id = ?', id);
@@ -118,4 +146,4 @@ function applyMaster(id, { db = store.db } = {}) {
   return keys;
 }
 
-module.exports = { carrierFor, suggest, apply, applyMaster, PICKUP, DELIVERY };
+module.exports = { carrierFor, suggest, apply, applyMaster, spreadPickup, PICKUP, DELIVERY };
