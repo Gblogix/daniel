@@ -188,3 +188,18 @@ test('air waybill: MAWB reads as master, HAWB as house under the same MAWB', () 
   assert.equal(d.shipper_name, 'MAPLE COSMETICS INC.');
   assert.equal(d.consignee_name, 'HARBOR TRADE INC');
 });
+
+test("IATA air waybill box titles (\"Shipper's Name and Address\") are not taken as the shipper / consignee", () => {
+  const T = `NSCXA2699999
+Shipper's Name and Address      Shipper's Account Number      Not Negotiable
+SAMPLE ELECTRONICS CO., LTD                                    Air Waybill
+123 TEST-RO, SEOUL, KOREA
+Consignee's Name and Address    Consignee's Account Number
+SAMPLE TRADE INC
+100 SAMPLE AVE, LOS ANGELES, CA 90001
+Issuing Carrier's Agent Name and City
+SAMPLE AGENT CO., LTD`;
+  const r = extractRules(T, 'awb.pdf');
+  assert.equal(r.shipper_name, 'SAMPLE ELECTRONICS CO., LTD');
+  assert.equal(r.consignee_name, 'SAMPLE TRADE INC');
+});

@@ -93,6 +93,10 @@ if (require.main === module) {
   if (config.sessionSecret === 'dev-only-change-me') console.warn('WARNING: set SESSION_SECRET before using this in production');
   bootstrap();
   const fresh = require('./reset').freshStartOnce();
+  // Box titles read as names by older versions ("'S NAME AND ADDRESS" from an air waybill): clear them.
+  for (const k of ['shipper_name', 'consignee_name', 'notify_party']) {
+    require('./db').db.run(`UPDATE shipments SET ${k} = NULL WHERE ${k} LIKE '%NAME AND ADDRESS%' OR ${k} LIKE '%ACCOUNT NUMBER%'`);
+  }
   const linked = require('./masters').backfill();
   if (linked) console.log(`Masters: ${linked} file(s) grouped under their master B/L`);
   if (fresh) console.log(`Fresh start: removed ${fresh.shipments} test shipments, ${fresh.invoices} invoices, ${fresh.documents} files — new files come from email from now on`);

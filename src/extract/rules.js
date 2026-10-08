@@ -501,13 +501,15 @@ function partyName(lines, labelRe) {
     const line = lines[i].trim();
     if (!labelRe.test(line)) continue;
     const cell = line.split(/\s{2,}/)[0];
-    const rest = cell.replace(labelRe, '').replace(/^[\s:/]*(?:\(?\s*(?:NAME\s*(?:&|AND)\s*ADDRESS|IMPORTER\s+OF\s+RECORD)\s*\)?)?[\s:)]*/i, '')
+    const rest = cell.replace(labelRe, '').replace(/^\s*['’`´]\s*S\b/i, '').replace(/^[\s:/]*(?:\(?\s*(?:NAME\s*(?:&|AND)\s*ADDRESS|IMPORTER\s+OF\s+RECORD)\s*\)?)?[\s:)]*/i, '')
       .replace(/^(?:NAME\s*(?:&|AND)\s*ADDRESS|\(\s*IMPORTER\s+OF\s+RECORD\s*\))[\s:)]*/i, '').trim();
-    if (rest.length > 2 && !/^(ADDRESS|NAME)\b/i.test(rest) && !SMALL_PRINT.test(rest)) return rest;
+    const labelLike = (v) => /^(ADDRESS|NAME)\b|NAME\s*(?:&|AND)\s*ADDRESS|ACCOUNT\s*(?:NO|NUMBER)|^['’`´]\s*S\b/i.test(v);
+    if (rest.length > 2 && !labelLike(rest) && !SMALL_PRINT.test(rest)) return rest;
     for (let j = i + 1; j < Math.min(lines.length, i + 5); j++) {
       const v = lines[j].trim().split(/\s{2,}/)[0];
       if (!v || SMALL_PRINT.test(v) || /^\([A-Z]{4}\)/.test(v)) continue;
       if (/^(ADDRESS|NAME)\b/i.test(v) || isLabelCell(v)) break;
+      if (labelLike(v)) continue; // "Shipper's Account Number" and similar box titles
       return v;
     }
   }
