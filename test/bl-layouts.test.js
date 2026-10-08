@@ -214,3 +214,55 @@ test('MAWB + HAWB: the file takes the HAWB parties, never the agent / us named o
   // Only the MAWB: its names are all there is.
   assert.equal(mergeExtractions([{ doc_type: 'AWB', doc_role: 'master', shipper_name: 'SAMPLE AGENT CO., LTD' }]).shipper_name, 'SAMPLE AGENT CO., LTD');
 });
+
+// IATA waybill printed with the serial in two halves ("180 SEL 5607 9575"), flight and date in separate cells,
+// "FREIGHT PREPAID" below the goods (names / numbers made up).
+const HAWB2 = `180 SEL 1234 5675  TESTXA2600001
+SAMPLE AGENT CO.,LTD
+SAMPLE COSMETICS CO.,LTD.,  812,TEST-DONG,11,SAMPLE-RO,
+361, SAMPLE-RO,DONG-MYEON,  YEONGDEUNGPO-GU,SEOUL,REPUBLIC OF KOREA 07223
+CHUNCHEON-SI,REPUBLIC OF KOREA(24315)  TEL : 02-000-0000
+TEL : 82-70-0000-0000
+SAMPLE TRADE INC
+100 SAMPLE AVE FULLERTON, CA 92833
+TEL) (213) 555-0100
+E-MAIL : BUYER@SAMPLETRADE.EXAMPLE
+SAME AS CONSIGNEE
+SAMPLE AGENT CO.,LTD
+INCHEON AIRPORT,KOREA
+LAX  KE  KRW  PP  PP  N.V.D.
+LOS ANGELES,U.S.A.  KE213  OCT.10,2026  NIL
+ATT:INVOICE,P/LIST.
+15  5,038.0K Q  5,038.0  AS ARRANGED  SAMPLE CLEANSER
+SAMPLE TONER
+"FREIGHT PREPAID"
+AS ARRANGED
+SAMPLE AGENT CO.,LTD
+AS AGENT FOR THE CARRIER  KOREAN AIRLINES
+OCT.09,2026  ICN  S.J.PARK
+TESTXA2600001`;
+const MAWB2 = `180 SEL 1234 5675  180 1234 5675-
+SAMPLE AGENT CO., LTD.  KOREAN AIRLINES
+RM812, TEST-DONG,11, SAMPLE-RO,  41-3,SAMPLE-DONG,
+YEONGDEUNGPO-GU, SEOUL, REPUBLIC OF KOREA  SEOUL,KOREA
+GLOBAL BRIDGE LOGISTICS
+1661 N.RAYMOND AVE., SUITE 140F, ANAHEIM,
+CA 92801
+SAME AS CONSIGNEE
+SAMPLE HANDLING LOGISTICS CO., LTD.
+INCHEON AIRPORT,KOREA
+LAX  KE  KRW  PP  PP  N.V.D.
+LOS ANGELES,U.S.A.  KE213  OCT.10,2026  NIL
+15  5,038.0K Q  5,038.0  5,120  25,794,560  CONSOLIDATION SHIPMENT
+OCT.09,2026  ICN  S.J.PARK
+180 1234 5675-`;
+
+test('air waybill with the serial in two halves: master / house, parties, flight, date, weight', () => {
+  const h = extractRules(HAWB2, 'h.pdf');
+  assert.deepEqual([h.doc_role, h.mawb_no, h.hawb_no, h.shipper_name, h.consignee_name, h.notify_party, h.carrier, h.flight_no, h.etd, h.pol, h.pod, h.packages, h.weight_kg, h.commodity],
+    ['house', '180-12345675', 'TESTXA2600001', 'SAMPLE COSMETICS CO.,LTD.', 'SAMPLE TRADE INC', 'SAME AS CONSIGNEE', 'KOREAN AIRLINES', 'KE213', '2026-10-10', 'INCHEON AIRPORT,KOREA', 'LOS ANGELES,U.S.A.', 15, 5038, 'SAMPLE CLEANSER']);
+  assert.equal(h.consignee_address, '100 SAMPLE AVE FULLERTON, CA 92833');
+  const m = extractRules(MAWB2, 'm.pdf');
+  assert.deepEqual([m.doc_role, m.mawb_no, m.hawb_no ?? null, m.consignee_name, m.flight_no, m.etd, m.weight_kg], ['master', '180-12345675', null, 'GLOBAL BRIDGE LOGISTICS', 'KE213', '2026-10-10', 5038]);
+  assert.ok(m.carrier, 'airline from the AWB prefix');
+});

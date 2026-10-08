@@ -209,12 +209,14 @@ function nscHouseLayout(raw) {
  */
 function awbLayout(raw) {
   const L = raw.map((l) => l.trim()).filter(Boolean);
-  const head = /^(\d{3})\s+([A-Z]{3})\s+(\d{8})\s+([A-Z0-9-]{6,})$/.exec(L[0] || '');
+  // "350 ICN 35125226  NSCXA2610005" or "180 SEL 5607 9575  180 5607 9575-" (serial printed in two halves).
+  const head = /^(\d{3})\s+([A-Z]{3})\s+(\d{4}\s?\d{4})\s{2,}(.{6,})$/.exec(L[0] || '');
   if (!head) return null;
-  const mawb = `${head[1]}-${head[3]}`;
-  const second = head[4].replace(/-/g, '');
-  const out = { mawb_no: mawb, mbl_no: mawb, doc_role: second === head[1] + head[3] ? 'master' : 'house' };
-  if (out.doc_role === 'house') { out.hawb_no = head[4]; out.hbl_no = head[4]; }
+  const serial = head[3].replace(/\s/g, '');
+  const mawb = `${head[1]}-${serial}`;
+  const second = head[4].replace(/[^A-Z0-9]/gi, '');
+  const out = { mawb_no: mawb, mbl_no: mawb, doc_role: second === head[1] + serial ? 'master' : 'house' };
+  if (out.doc_role === 'house') { const h = head[4].trim().replace(/[-\s]+$/, ''); out.hawb_no = h; out.hbl_no = h; }
   const cell = (l) => String(l || '').split(/\s{2,}/);
   const companyLike = (t) => /\b(INC|LLC|LTD|CO|CORP|CORPORATION|COMPANY|LOGISTICS|TRADE|TRADING|GROUP|AIRLINES?|AIR)\b\.?/i.test(t) && !/^(TEL|E-?MAIL|MAIL|ATT|CONTACT|FAX)\b/i.test(t);
   const agentFor = L.findIndex((l) => /AGENT\s+FOR\s+THE\s+CARRIER/i.test(l));
@@ -223,15 +225,26 @@ function awbLayout(raw) {
   if (airline) out.carrier = airline.replace(/\s+(INC|CO|LTD)\.?$/i, '').trim();
   const norm = (v) => String(v || '').toUpperCase().replace(/[^A-Z0-9]/g, '');
   const freight = L.findIndex((l) => /"?FREIGHT\s+(PREPAID|COLLECT)"?/i.test(l));
-  const top = L.slice(1, freight > 0 ? freight : 20);
+  // The party boxes end where the routing starts ("INCHEON AIRPORT,KOREA" above "LAX  KE  KRW …").
+  const routeAt = L.findIndex((l, i) => i > 0 && /^[A-Z]{3}\s{1,}[A-Z0-9]{2}\b/.test(l) && /\b(USD|KRW|CNY|EUR|JPY|PP|CC|C|P)\b/.test(l));
+  const partyEnd = routeAt > 1 ? routeAt - 1 : 20;
+  const freightInBoxes = freight > 0 && freight < partyEnd;
+  const top = L.slice(1, freightInBoxes ? freight : partyEnd);
+  const stopper = (c) => companyLike(c) || /^SAME\s+AS\b/i.test(c);
   const names = [];
   top.forEach((l, i) => cell(l).forEach((c, k) => { if (companyLike(c) && norm(c) !== norm(issuer) && norm(c) !== norm(airline)) names.push({ i, k, name: c.trim() }); }));
   const firstLeft = names.filter((n) => n.k === 0 || cell(top[n.i]).length === 1);
-  if (firstLeft[0]) out.shipper_name = firstLeft[0].name;
+  if (firstLeft[0]) out.shipper_name = firstLeft[0].name.replace(/[\s,;]+$/, '');
   if (firstLeft[1]) {
-    out.consignee_name = firstLeft[1].name;
+    out.consignee_name = firstLeft[1].name.replace(/[\s,;]+$/, '');
     const addr = []; const block = [];
-    for (let i = firstLeft[1].i + 1; i < top.length; i++) { const c = cell(top[i])[0]; block.push(top[i]); if (!/^(TEL|E-?MAIL|MAIL|ATT|CONTACT|FAX|PHONE)\b/i.test(c)) addr.push(c); }
+    let notifyAt = -1;
+    for (let i = firstLeft[1].i + 1; i < top.length; i++) {
+      const c = cell(top[i])[0];
+      if (stopper(c)) { notifyAt = i; break; } // the next box (notify / issuing agent)
+      block.push(top[i]); if (!/^(TEL|E-?MAIL|MAIL|ATT|CONTACT|FAX|PHONE)\b/i.test(c)) addr.push(c);
+    }
+    if (!freightInBoxes && notifyAt >= 0) out.notify_party = cell(top[notifyAt])[0].trim();
     out.consignee_address = addr.join('\n') || null;
     const em = /[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/i.exec(block.join(' '));
     const tel = /(?:TEL|PHONE|CONTACT)\)?\s*[.:]?\s*(\+?[\d(][\d\s().-]{7,}\d)/i.exec(block.join(' '));
@@ -240,12 +253,21 @@ function awbLayout(raw) {
     for (let i = firstLeft[0].i + 1; i < firstLeft[1].i; i++) { const c = cell(top[i])[0]; if (!/^(TEL|E-?MAIL|MAIL|ATT|CONTACT|FAX)\b/i.test(c) && !companyLike(c)) saddr.push(c); }
     out.shipper_address = saddr.join('\n') || null;
   }
-  if (freight > 0) {
+  if (freightInBoxes) {
     const after = cell(L[freight + 1]);
     const n = after.length > 1 ? after[after.length - 1] : null;
     if (n && !/^SAME\s+AS/i.test(n)) out.notify_party = n; else if (n) out.notify_party = n;
   }
   const fl = L.findIndex((l) => /\b([A-Z0-9]{2}\d{2,4})\/(\d{1,2}\.?[A-Z]{3}\.?\d{2,4})\b/i.test(l));
+  // "LOS ANGELES,U.S.A.  KE213  OCT.10,2026  NIL": flight and date in their own cells.
+  const fl2 = fl >= 0 ? -1 : L.findIndex((l, i) => i > 0 && cell(l).length >= 3 && /^[A-Z0-9]{2}\d{2,4}$/.test(cell(l)[1]) && toISODate(cell(l)[2]));
+  if (fl2 >= 0) {
+    const c = cell(L[fl2]);
+    out.flight_no = c[1]; out.etd = toISODate(c[2]); out.pod = c[0].trim() || null;
+    const route = L.slice(Math.max(0, fl2 - 4), fl2).find((l) => /^[A-Z]{3}\s+[A-Z0-9]{2}\b/.test(l));
+    const ri = route ? L.indexOf(route, Math.max(0, fl2 - 4)) : -1;
+    if (ri > 0 && /[A-Z]{3}/.test(L[ri - 1]) && !/\d{3,}/.test(L[ri - 1])) out.pol = cell(L[ri - 1])[0];
+  }
   if (fl >= 0) {
     const m = /\b([A-Z0-9]{2}\d{2,4})\/(\d{1,2}\.?[A-Z]{3}\.?\d{2,4})\b/i.exec(L[fl]);
     out.flight_no = m[1];
@@ -255,11 +277,13 @@ function awbLayout(raw) {
     const ri = route ? L.indexOf(route, Math.max(0, fl - 4)) : -1;
     if (ri > 0 && /[A-Z]{3}/.test(L[ri - 1]) && !/\d{3,}/.test(L[ri - 1])) out.pol = cell(L[ri - 1])[0];
   }
+  // MAWB without the "agent for the carrier" line: the airline from the AWB prefix (180 = Korean Air).
+  if (!out.carrier) { try { out.carrier = require('../tracking/codes').parseAwb(mawb)?.airline || undefined; } catch { /* no table */ } }
   const wt = L.find((l) => /^\d+\s+[\d,]+(?:\.\d+)?\s*K\s*[GQ]?\b/i.test(l));
   if (wt) {
     const w = /^(\d+)\s+([\d,]+(?:\.\d+)?)\s*K\s*[GQ]?\s+([\d,]+(?:\.\d+)?)?/i.exec(wt);
     out.packages = Number(w[1]); out.weight_kg = num(w[2]); if (w[3]) out.chargeable_weight = num(w[3]);
-    const goods = /AS\s+AGREED\s+(.+)$/i.exec(wt);
+    const goods = /AS\s+(?:AGREED|ARRANGED)\s+(.+)$/i.exec(wt) || /\s{2,}([A-Z][A-Z\s]{6,}[A-Z])$/.exec(wt);
     if (goods) out.commodity = goods[1].trim();
   }
   return out;
