@@ -279,7 +279,7 @@ document.querySelectorAll('select[data-party-search], select:not([multiple])').f
   const fields = new Set(meta.content.split(','));
   const cache = new Map();
   const attach = (input) => {
-    if (input.dataset.sugg || !fields.has(input.name) || !/^(text|search|)$/.test(input.type || '')) return;
+    if (input.dataset.sugg || input.dataset.partyLookup !== undefined || !fields.has(input.name) || !/^(text|search|)$/.test(input.type || '')) return;
     input.dataset.sugg = '1';
     const dl = input.getAttribute('list') && document.getElementById(input.getAttribute('list'));
     if (dl) input.removeAttribute('list'); // our list replaces the browser's (its values are merged in below)
@@ -474,12 +474,29 @@ document.querySelectorAll('input[data-party-lookup]').forEach((inp) => {
   const esc = (v) => String(v ?? '').replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
   let rows = []; let active = -1; let timer = null; let autoFilled = addr ? addr.value : '';
   const TYPE = { customer: 'customer', importer: 'importer', shipper: 'shipper', agent: 'agent', broker: 'broker', trucker: 'trucker', vendor: 'vendor', delivery: 'warehouse' };
-  const render = () => {
-    list.innerHTML = rows.map((r, i) => `<div class="lookup-item ${i === active ? 'on' : ''}" data-i="${i}"><b>${esc(r.name)}</b>
-      <span class="muted small">${r.source === 'party' ? `Parties · ${TYPE[r.type] || r.type}` : 'used before'}</span>
-      ${r.address ? `<div class="small muted">${esc(r.address).replace(/\n/g, ', ')}</div>` : '<div class="small muted">no address on record</div>'}</div>`).join('');
-    list.hidden = !rows.length;
+  // Names only; the address shows in a small box beside the list for the row under the mouse / arrow keys.
+  const pop = document.createElement('div');
+  pop.className = 'lookup-pop'; pop.hidden = true;
+  list.insertAdjacentElement('afterend', pop);
+  const short = (a) => { const s = String(a || '').replace(/\s*\n\s*/g, ', ').replace(/\s+/g, ' ').trim(); return s.length > 140 ? `${s.slice(0, 140)}…` : s; };
+  const showPop = (i) => {
+    const r = rows[i]; const el = list.querySelector(`[data-i="${i}"]`);
+    if (!r || !el || list.hidden) { pop.hidden = true; return; }
+    pop.innerHTML = `<b>${esc(r.name)}</b><div>${r.address ? esc(short(r.address)) : '<span class="muted">no address on record</span>'}</div>`;
+    pop.style.left = `${list.offsetLeft + list.offsetWidth + 6}px`;
+    pop.style.top = `${list.offsetTop + el.offsetTop - list.scrollTop}px`;
+    pop.hidden = false;
+    if (pop.getBoundingClientRect().right > window.innerWidth - 8) pop.style.left = `${list.offsetLeft - pop.offsetWidth - 6}px`; // no room on the right
   };
+  const render = () => {
+    list.innerHTML = rows.map((r, i) => `<div class="lookup-item ${i === active ? 'on' : ''}" data-i="${i}" title="${esc(r.name)}"><b>${esc(r.name)}</b>
+      <span class="muted small">${r.source === 'party' ? `Parties · ${TYPE[r.type] || r.type}` : 'used before'}</span></div>`).join('');
+    list.hidden = !rows.length;
+    if (active >= 0) showPop(active); else pop.hidden = true;
+  };
+  list.addEventListener('mouseover', (e) => { const it = e.target.closest('[data-i]'); if (it) showPop(Number(it.dataset.i)); });
+  list.addEventListener('mouseleave', () => { if (active < 0) pop.hidden = true; else showPop(active); });
+  list.addEventListener('scroll', () => { pop.hidden = true; });
   const pick = (r) => {
     inp.value = r.name;
     if (addr && r.address) {

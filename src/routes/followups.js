@@ -94,6 +94,10 @@ router.get('/parties/lookup.json', auth.requireInternal, (req, res) => {
     const partyAddr = party ? db.get('SELECT address FROM companies WHERE id = ?', party.id)?.address : null;
     push({ name: r.name, address: addr || partyAddr || '', company_id: party?.id || null, type: party?.type || null, source: 'file' });
   }
+  // Names that start with what was typed (or have a word starting with it) before names that only contain it
+  // ("national" → NATIONAL SHIPPING before …INTERNATIONAL TRADE).
+  const rank = (r) => { const k = P.norm(r.name); return k.startsWith(n) ? 0 : ` ${k}`.includes(` ${n}`) ? 1 : 2; };
+  out.sort((a, b) => rank(a) - rank(b));
   res.json(out.slice(0, 10));
 });
 
