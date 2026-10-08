@@ -2,7 +2,7 @@
 <div class="pagehead"><h1>Upload shipping documents</h1></div>
 <div class="grid" style="grid-template-columns: minmax(0, 3fr) minmax(0, 2fr); align-items:start">
   <div class="card">
-    <p class="muted" style="margin-top:0">Upload the B/L, packing list, commercial invoice and ISF for one shipment. We read the MBL/HBL numbers,
+    <p class="muted" style="margin-top:0">Upload the B/L (or MAWB / HAWB for air), packing list, commercial invoice and ISF for one shipment. Master and house files are made and linked automatically. We read the MBL/HBL numbers,
       container & seal numbers, weight, CBM and schedule automatically — no need to email them.<br>
       <span class="small">한 선적 건의 서류(MBL, HBL, P/L, C/I, ISF)를 함께 업로드해 주세요. PDF, Excel, CSV 가능.</span></p>
     <form method="post" action="/portal/upload?_csrf=<%= csrf %>" enctype="multipart/form-data">
@@ -10,8 +10,8 @@
         <div class="field"><label>Overseas agent</label><select name="agent_id"><option value="">—</option><% agents.forEach((a) => { %><option value="<%= a.id %>"><%= a.name %></option><% }) %></select></div>
       <% } %>
       <div class="dropzone">
-        <% const labels = { MBL: 'Master B/L', HBL: 'House B/L', PL: 'Packing list', CI: 'Commercial invoice', CIPL: 'C/I + P/L in one file (Excel tabs or PDF)', ISF: 'ISF', AWB: 'Air waybill (air)', OTHER: 'Other / auto-detect' }; %>
-        <% slots.forEach((slot) => { %>
+        <% const labels = { MBL: 'Master B/L', HBL: 'House B/L', PL: 'Packing list', CI: 'Commercial invoice', CIPL: 'C/I + P/L in one file (Excel tabs or PDF)', ISF: 'ISF', MAWB: 'Master AWB (MAWB) — air', HAWB: 'House AWB (HAWB) — air', AWB: 'Air waybill — not sure which', OTHER: 'Other / auto-detect' }; %>
+        <% slots.filter((x) => x !== 'AWB').forEach((slot) => { %>
           <div class="slot"><label for="u_<%= slot %>"><%= labels[slot] %><% if (slot === 'CIPL') { %><br><span class="small muted" style="font-weight:400">합본 파일 — split by tab / page title</span><% } %><% if (['PL', 'CI', 'CIPL'].includes(slot)) { %><br><span class="small muted" style="font-weight:400">여러 개 가능 (invoice / buyer별)</span><% } %></label>
             <input id="u_<%= slot %>" type="file" name="<%= slot %>" accept=".pdf,.xlsx,.csv,.txt,.jpg,.jpeg,.png" multiple></div>
         <% }) %>

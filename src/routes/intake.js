@@ -18,7 +18,8 @@ const { extractFile, mergeExtractions } = require('../extract');
 
 const router = express.Router();
 // CIPL: commercial invoice + packing list in one file (Excel tabs or PDF pages) — split and typed automatically.
-const SLOTS = ['MBL', 'HBL', 'PL', 'CI', 'CIPL', 'ISF', 'AWB', 'OTHER'];
+// MAWB / HAWB: air waybills by role (AWB = older form field, read either way).
+const SLOTS = ['MBL', 'HBL', 'MAWB', 'HAWB', 'PL', 'CI', 'CIPL', 'ISF', 'AWB', 'OTHER'];
 const ALLOWED = /\.(pdf|xlsx|csv|txt|jpe?g|png)$/i;
 const upload = multer({
   dest: path.join(config.uploadDir, 'intake'),
@@ -56,8 +57,19 @@ async function processUpload(files, { userId, agentId, note, db = store.db }) {
   const perDoc = [];
   for (const f of files) {
     const buffer = fs.readFileSync(f.path);
-    const parts = await extractFile({ buffer, filename: f.originalname, mime: f.mimetype, docTypeHint: f.slot === 'OTHER' || f.slot === 'CIPL' ? 'AUTO' : f.slot });
+    const hint = f.slot === 'OTHER' || f.slot === 'CIPL' ? 'AUTO' : ['MAWB', 'HAWB'].includes(f.slot) ? 'AWB' : f.slot;
+    const parts = await extractFile({ buffer, filename: f.originalname, mime: f.mimetype, docTypeHint: hint });
     for (const ex of parts) {
+      // Put on the MAWB / HAWB line: the user said which one it is.
+      if (f.slot === 'MAWB' && ex.doc_type === 'AWB') {
+        ex.doc_role = 'master';
+        ex.mawb_no = ex.mawb_no || ex.mbl_no || ex.hbl_no || null; ex.mbl_no = ex.mawb_no;
+        ex.hbl_no = null; ex.hawb_no = null;
+      }
+      if (f.slot === 'HAWB' && ex.doc_type === 'AWB') {
+        ex.doc_role = 'house';
+        ex.hawb_no = ex.hawb_no || (ex.hbl_no && ex.hbl_no !== ex.mbl_no ? ex.hbl_no : null) || ex.hbl_no || null; ex.hbl_no = ex.hawb_no;
+      }
       // A merged PDF becomes one document row per detected document (same file, page range in the name).
       const name = parts.length > 1 && ex.sheet ? `${f.originalname} [${ex.sheet}]` : parts.length > 1 && ex.pages ? `${f.originalname} [p.${ex.pages.join(',')}]` : f.originalname;
       perDoc.push({ filename: name, ...ex });

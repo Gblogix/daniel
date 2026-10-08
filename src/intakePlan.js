@@ -10,7 +10,8 @@ const S = require('./shipments');
 
 const key = (v) => String(v || '').toUpperCase().replace(/[^A-Z0-9]/g, '');
 const exOf = (d) => { try { return { ...JSON.parse(d.extracted_json || '{}'), doc_type: d.doc_type }; } catch { return { doc_type: d.doc_type }; } };
-const isHouseAwb = (ex) => ex.doc_type === 'AWB' && (ex.hawb_no || (ex.hbl_no && key(ex.hbl_no) !== key(ex.mbl_no || ex.mawb_no)));
+const isHouseAwb = (ex) => ex.doc_type === 'AWB' && ex.doc_role !== 'master'
+  && (ex.doc_role === 'house' || ex.hawb_no || (ex.hbl_no && key(ex.hbl_no) !== key(ex.mbl_no || ex.mawb_no)));
 const isMasterDoc = (ex) => ex.doc_type === 'MBL' || (ex.doc_type === 'AWB' && !isHouseAwb(ex));
 const isHouseBl = (ex) => ex.doc_type === 'HBL' || isHouseAwb(ex);
 const houseNo = (ex) => ex.hawb_no || ex.hbl_no || null;

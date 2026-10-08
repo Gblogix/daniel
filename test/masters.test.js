@@ -125,3 +125,19 @@ test('MB/L / MAWB dropped on the master page: saved there, empty fields filled, 
     if (m.pod) assert.equal(S.find(hid, null).pod, m.pod, 'house got the carrier leg');
   } finally { server.close(); }
 });
+
+test('upload lines MAWB / HAWB: one master + one house each, even when the waybill numbers alone are unclear', () => {
+  const P = require('../src/intakePlan');
+  const doc = (id, ex) => ({ id, doc_type: 'AWB', extracted_json: JSON.stringify(ex) });
+  // As put on the MAWB line (number read into hbl_no by the reader) and two HAWB lines.
+  const p = P.plan([
+    doc(1, { doc_type: 'AWB', doc_role: 'master', mawb_no: '350-11111111', mbl_no: '350-11111111' }),
+    doc(2, { doc_type: 'AWB', doc_role: 'house', hawb_no: 'TESTXA0000001', hbl_no: 'TESTXA0000001', mbl_no: '350-11111111' }),
+    doc(3, { doc_type: 'AWB', doc_role: 'house', hawb_no: 'TESTXA0000002', hbl_no: 'TESTXA0000002', mbl_no: '350-11111111' }),
+  ]);
+  assert.equal(p.kind, 'multi');
+  assert.deepEqual(p.houses.map((h) => h.hbl), ['TESTXA0000001', 'TESTXA0000002']);
+  assert.deepEqual(p.masterDocs, [1]);
+  // Only the MAWB → a master, no house.
+  assert.equal(P.plan([doc(1, { doc_type: 'AWB', doc_role: 'master', mawb_no: '350-11111111', mbl_no: '350-11111111' })]).kind, 'master');
+});
