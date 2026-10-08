@@ -77,3 +77,29 @@ test('House B/L list: inline note, flag, bulk change OP and block', async () => 
   assert.match(list, /container\(s\) to pick up/);
   assert.match(list, /Journey/);
 });
+
+test('OP / Sales can be changed from the file header bar (staff accounts only)', async () => {
+  const S = require('../src/shipments');
+  const db = require('../src/db').db;
+  const id = S.create({ mode: 'FCL', hbl_no: 'OP-CHANGE-1' });
+  const staff = db.get("SELECT id FROM users WHERE role = 'staff' LIMIT 1").id;
+  const cust = db.get("SELECT id FROM users WHERE role = 'customer' LIMIT 1")?.id;
+  const { createApp } = require('../src/server');
+  const server = createApp().listen(0); await new Promise((r) => server.once('listening', r));
+  const base = `http://127.0.0.1:${server.address().port}`;
+  try {
+    let cookie = '';
+    const keep = (res) => { const c = res.headers.getSetCookie?.() || []; if (c.length) cookie = c.map((x) => x.split(';')[0]).join('; '); return res; };
+    let tok = /name="_csrf" value="([^"]+)"/.exec(await keep(await fetch(`${base}/login`)).text())[1];
+    keep(await fetch(`${base}/login`, { method: 'POST', redirect: 'manual', headers: { cookie, 'content-type': 'application/x-www-form-urlencoded' }, body: new URLSearchParams({ _csrf: tok, email: 'admin@gblogix.com', password: 'changeme123' }) }));
+    const page = await (await fetch(`${base}/shipments/${id}`, { headers: { cookie } })).text();
+    assert.match(page, /data-field="owner_id"/);
+    tok = /data-csrf="([^"]+)"/.exec(page)[1];
+    const post = (body) => fetch(`${base}/quick/shipments/${id}`, { method: 'POST', headers: { cookie, 'content-type': 'application/json', 'x-csrf-token': tok }, body: JSON.stringify(body) });
+    assert.equal((await post({ owner_id: String(staff) })).status, 200);
+    assert.equal(S.find(id, null).owner_id, staff);
+    if (cust) { assert.equal((await post({ sales_id: String(cust) })).status, 400); }
+    assert.equal((await post({ owner_id: '' })).status, 200);
+    assert.equal(S.find(id, null).owner_id ?? null, null);
+  } finally { server.close(); }
+});

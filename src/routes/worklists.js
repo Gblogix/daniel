@@ -63,6 +63,13 @@ router.post('/quick/shipments/:id', auth.requirePerm('shipments_edit'), (req, re
   if ('internal_note' in b) store.db.run('UPDATE shipments SET internal_note = ? WHERE id = ?', String(b.internal_note || '').slice(0, 300) || null, id);
   if ('color_label' in b) store.db.run('UPDATE shipments SET color_label = ? WHERE id = ?', LABELS[b.color_label] ? b.color_label : null, id);
   if ('flagged' in b) store.db.run('UPDATE shipments SET flagged = ? WHERE id = ?', b.flagged ? 1 : 0, id);
+  // OP / Sales from the file's header bar (only staff accounts).
+  for (const k of ['owner_id', 'sales_id']) {
+    if (!(k in b)) continue;
+    const uid = Number(b[k]) || null;
+    if (uid && !store.db.get("SELECT 1 FROM users WHERE id = ? AND role IN ('admin', 'staff') AND active = 1", uid)) return res.status(400).json({ error: 'Unknown user' });
+    S.update(id, { [k]: uid || '' });
+  }
   res.json({ ok: true });
 });
 router.post('/quick/containers/:id', auth.requirePerm('shipments_edit'), (req, res) => {

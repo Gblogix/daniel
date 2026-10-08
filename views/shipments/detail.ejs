@@ -20,8 +20,9 @@
   <% if (cr && cr.over) { %><span class="fb-badge overdue" title="Open A/R above the credit limit">Over credit</span><% } %><% if (cr && cr.manual) { %><span class="fb-badge overdue" title="<%= cr.note || '' %>">Credit hold</span><% } %>
   <% (T.badges || []).forEach((b) => { %><span class="fb-badge <%= b.cls %>" title="<%= b.title %>"><%= b.label %><%= b.amount && canAccounting ? ` $${fmtNum(b.amount, 2)}` : '' %></span><% }) %>
   <% if (s.bill_to_id && s.bill_to_id !== s.customer_id) { %><span class="fb-item">BILL TO: <%= s.bill_to_name %></span><% } %>
-  <span class="fb-item">SALES: <%= s.sales_name || '—' %></span>
-  <span class="fb-item">OP: <%= s.owner_name || '—' %></span>
+  <% const pickUser = (k, cur) => editOk && locals.staffUsers ? `<select class="fb-pick" data-quick="/quick/shipments/${s.id}" data-field="${k}" aria-label="${k === 'owner_id' ? 'OP' : 'Sales'}"><option value="">—</option>${staffUsers.map((u) => `<option value="${u.id}" ${u.id === cur ? 'selected' : ''}>${String(u.name).replace(/</g, '&lt;')}</option>`).join('')}</select>` : null; %>
+  <span class="fb-item" data-csrf="<%= csrf %>">SALES: <%- pickUser('sales_id', s.sales_id) || (s.sales_name || '—') %></span>
+  <span class="fb-item" data-csrf="<%= csrf %>">OP: <%- pickUser('owner_id', s.owner_id) || (s.owner_name || '—') %></span>
   <details class="tools">
     <summary class="btn small">Tools ▾</summary>
     <div class="tools-menu">

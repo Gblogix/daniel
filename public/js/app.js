@@ -252,7 +252,7 @@ function gbSuggestBox(input, source, pick) {
 // Drop-downs with many choices (parties, users…): type a few letters, pick from the suggestions.
 document.querySelectorAll('select[data-party-search], select:not([multiple])').forEach((sel) => {
   const opts = () => [...sel.querySelectorAll('option')].filter((o) => o.value && !o.disabled);
-  if (sel.dataset.partySearch === undefined && (opts().length < 12 || sel.closest('table, .filters, .bulkbar, .tools-menu'))) return;
+  if (sel.dataset.partySearch === undefined && (opts().length < 12 || sel.closest('table, .filters, .bulkbar, .tools-menu, .filebar'))) return;
   if (sel.previousElementSibling?.classList.contains('party-search')) return;
   const box = document.createElement('input');
   box.type = 'search'; box.className = 'party-search';

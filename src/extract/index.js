@@ -102,8 +102,14 @@ function mergeExtractions(docs) {
   };
   const draft = { containers: [], items: [], warnings: [], sources: {} };
   const consolidated = new Set(docs.filter((d) => ['PL', 'CI'].includes(d.doc_type)).map((d) => d.ci_invoice_no || d.filename || Math.random())).size > 1;
+  // With a house B/L / HAWB in the set, its parties are the file's: the carrier's MB/L / MAWB names the agent and us,
+  // never the real shipper / consignee — so those are not used even when the house left a box empty.
+  const isMaster = (d) => d.doc_type === 'MBL' || (d.doc_type === 'AWB' && d.doc_role === 'master');
+  const hasHouse = docs.some((d) => d.doc_type === 'HBL' || (d.doc_type === 'AWB' && d.doc_role !== 'master'));
+  const PARTY = ['shipper_name', 'shipper_address', 'consignee_name', 'consignee_address', 'consignee_contact', 'notify_party', 'notify_address'];
   for (const field of SCALARS) {
     const candidates = docs.filter((d) => d[field] !== null && d[field] !== undefined && d[field] !== '')
+      .filter((d) => !(hasHouse && PARTY.includes(field) && isMaster(d)))
       .sort((a, b) => rank(field, a.doc_type, a) - rank(field, b.doc_type, b));
     if (candidates.length) {
       draft[field] = candidates[0][field];

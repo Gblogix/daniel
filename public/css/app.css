@@ -786,3 +786,8 @@ select.just-picked { outline: 2px solid #22c55e; outline-offset: 1px; transition
 .lookup-item { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .lookup-pop { position: absolute; z-index: 61; width: 280px; background: #fff; border: 1px solid #c7d4ea; border-left: 3px solid #1f6feb; border-radius: 8px; box-shadow: 0 8px 20px rgba(15,23,42,.14); padding: 8px 10px; font-size: 12.5px; line-height: 1.45; color: var(--ink); }
 .lookup-pop b { display: block; font-size: 12.5px; margin-bottom: 2px; }
+
+/* OP / Sales picker in the file header bar */
+.fb-pick { width: auto; max-width: 170px; display: inline-block; padding: 1px 22px 1px 6px; font: inherit; font-weight: 700; color: inherit; background-color: rgba(255,255,255,.35); border: 1px solid rgba(0,0,0,.18); border-radius: 6px; cursor: pointer; }
+.fb-pick.saved { outline: 2px solid #16a34a; }
+.fb-pick.failed { outline: 2px solid #dc2626; }

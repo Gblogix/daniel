@@ -203,3 +203,14 @@ SAMPLE AGENT CO., LTD`;
   assert.equal(r.shipper_name, 'SAMPLE ELECTRONICS CO., LTD');
   assert.equal(r.consignee_name, 'SAMPLE TRADE INC');
 });
+
+test('MAWB + HAWB: the file takes the HAWB parties, never the agent / us named on the MAWB', () => {
+  const d = mergeExtractions([
+    { doc_type: 'AWB', doc_role: 'master', mawb_no: '350-00000011', shipper_name: 'SAMPLE AGENT CO., LTD', consignee_name: 'GLOBALBRIDGE LOGISTICS' },
+    { doc_type: 'AWB', doc_role: 'house', hawb_no: 'TESTXA0000001', shipper_name: 'SAMPLE ELECTRONICS CO., LTD', consignee_name: null },
+  ]);
+  assert.equal(d.shipper_name, 'SAMPLE ELECTRONICS CO., LTD');
+  assert.equal(d.consignee_name, null, 'left empty rather than taking our own name from the MAWB');
+  // Only the MAWB: its names are all there is.
+  assert.equal(mergeExtractions([{ doc_type: 'AWB', doc_role: 'master', shipper_name: 'SAMPLE AGENT CO., LTD' }]).shipper_name, 'SAMPLE AGENT CO., LTD');
+});
