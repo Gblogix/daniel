@@ -8,7 +8,7 @@ const S = require('./shipments');
 // What a copy keeps: the parties and the lane — not the B/L numbers, containers, dates or status.
 const COPY_FIELDS = ['mode', 'origin_country', 'customer_id', 'bill_to_id', 'agent_id', 'broker_id', 'trucker_id', 'delivery_company_id', 'owner_id', 'sales_id',
   'shipper_name', 'shipper_address', 'consignee_name', 'consignee_address', 'notify_party', 'notify_address', 'pol', 'pod', 'place_of_delivery', 'final_destination',
-  'carrier', 'scac', 'cfs_location', 'firms_code', 'freight_location_tel', 'delivery_address', 'commodity', 'package_unit', 'service_term', 'release_type', 'title'];
+  'carrier', 'scac', 'cfs_location', 'cfs_address', 'firms_code', 'freight_location_tel', 'delivery_address', 'commodity', 'package_unit', 'service_term', 'release_type', 'title'];
 
 function copy(id, { db = store.db, userId = null } = {}) {
   const s = db.get('SELECT * FROM shipments WHERE id = ?', id);

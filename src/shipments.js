@@ -53,7 +53,7 @@ const HOLD_TYPES = ['1H (exam)', 'CBP hold', 'Freight/BL hold', 'Lien', 'USDA', 
 const EDITABLE_FIELDS = [
   'mode', 'title', 'origin_country', 'status', 'customer_id', 'agent_id', 'broker_id', 'trucker_id', 'delivery_company_id',
   'shipper_name', 'shipper_address', 'consignee_name', 'notify_party', 'mbl_no', 'hbl_no', 'carrier', 'vessel',
-  'voyage', 'flight_no', 'pol', 'pod', 'place_of_delivery', 'cfs_location', 'etd', 'eta', 'atd', 'ata',
+  'voyage', 'flight_no', 'pol', 'pod', 'place_of_delivery', 'cfs_location', 'cfs_address', 'etd', 'eta', 'atd', 'ata',
   'packages', 'package_unit', 'weight_kg', 'cbm', 'chargeable_weight', 'commodity', 'delivery_address',
   'delivery_date', 'delivery_time', 'last_free_day', 'customs_status', 'isf_filed', 'service_price',
   'invoice_no', 'invoice_amount', 'paid', 'notes',
@@ -112,7 +112,7 @@ function create(input, { db = store.db, userId } = {}) {
 }
 
 // A change to any of these can make the history suggest a carrier / pick-up location / delivery address.
-const AUTOFILL_KEYS = ['mbl_no', 'mode', 'master_id', 'customer_id', 'consignee_name', 'carrier', 'pod', 'agent_id'];
+const AUTOFILL_KEYS = ['mbl_no', 'mode', 'master_id', 'customer_id', 'consignee_name', 'carrier', 'pod', 'agent_id', 'cfs_location'];
 
 /** Updates a shipment and returns the list of changed fields ({field, from, to}). */
 function update(id, input, { db = store.db } = {}) {
@@ -137,7 +137,7 @@ function update(id, input, { db = store.db } = {}) {
   }
   if (!current.master_id || changes.some((c) => ['mbl_no', 'mode', 'master_id'].includes(c.field))) require('./masters').linkHouse(id, { db });
   if (changes.some((c) => AUTOFILL_KEYS.includes(c.field))) require('./autofill').apply(id, { db });
-  if (changes.some((c) => c.field === 'cfs_location')) require('./autofill').spreadPickup(id, { db });
+  if (changes.some((c) => c.field === 'cfs_location' || c.field === 'cfs_address')) require('./autofill').spreadPickup(id, { db });
   return changes;
 }
 

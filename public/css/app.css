@@ -796,3 +796,7 @@ select.just-picked { outline: 2px solid #22c55e; outline-offset: 1px; transition
 .update-bar button { background: #fcd34d; color: #0f2a4d; border: 0; border-radius: 6px; padding: 5px 10px; font-weight: 700; cursor: pointer; }
 
 .master-drop { margin: 6px 14px 10px; padding: 10px 12px; }
+
+.loc-field { grid-column: span 2; }
+.loc-field textarea { margin-top: 4px; font-size: 13px; }
+@media (max-width: 760px) { .loc-field { grid-column: auto; } }

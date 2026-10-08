@@ -88,3 +88,20 @@ test('air: the cargo location follows the airline (AWB prefix), even when the ai
   assert.equal(get(later).cfs_location, 'SAMPLE AIR CARGO TERMINAL, 6000 SAMPLE BLVD, LOS ANGELES');
   assert.equal(get(later).firms_code, 'W000');
 });
+
+test('cargo / freight location address: kept under the location, follows it to the next files', () => {
+  const S = require('../src/shipments');
+  const db = require('../src/db').db;
+  const a = S.create({ mode: 'AIR', hbl_no: 'ADDR-1', mbl_no: '180-12120000', pod: 'LOS ANGELES,U.S.A.' });
+  S.update(a, { cfs_location: 'SAMPLE KE CARGO TERMINAL', cfs_address: '6000 SAMPLE AVE\nLOS ANGELES, CA 90045' });
+  const b = S.create({ mode: 'AIR', hbl_no: 'ADDR-2', mbl_no: '180-34340000', pod: 'LOS ANGELES, CA' });
+  assert.equal(db.get('SELECT cfs_address FROM shipments WHERE id = ?', b).cfs_address, '6000 SAMPLE AVE\nLOS ANGELES, CA 90045');
+  // Another airline, same location name typed by hand: its address comes along.
+  const c = S.create({ mode: 'AIR', hbl_no: 'ADDR-3', mbl_no: '999-00001111', pod: 'CHICAGO, IL' });
+  S.update(c, { cfs_location: 'sample ke cargo terminal' });
+  assert.equal(db.get('SELECT cfs_address FROM shipments WHERE id = ?', c).cfs_address, '6000 SAMPLE AVE\nLOS ANGELES, CA 90045');
+  // Printed under the location on the A/N.
+  const T = require('../src/docs/templates');
+  const html = T.arrivalNotice({ ...S.find(b, null), items: [], containers: [] }, { company: {} });
+  assert.match(html, /SAMPLE KE CARGO TERMINAL<br>6000 SAMPLE AVE<br>LOS ANGELES, CA 90045/);
+});

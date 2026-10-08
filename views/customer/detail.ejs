@@ -48,7 +48,7 @@
     <h2>Delivery</h2>
     <div class="deliv" style="font-size:14px">📍 <div><b><%= s.delivery_company_name || s.customer_name || 'Delivery' %></b><br><%= s.delivery_address || 'Address to be confirmed' %></div></div>
     <p style="font-size:16px;margin:14px 0 6px">🗓 <b><%= s.delivery_date || 'Date TBA' %></b> <%= s.delivery_time || '' %></p>
-    <% if (s.cfs_location && !(locals.portalHide || new Set()).has('pickup')) { %><p class="muted small">Pick-up: <%= s.cfs_location %></p><% } %>
+    <% if (s.cfs_location && !(locals.portalHide || new Set()).has('pickup')) { %><p class="muted small">Pick-up: <%= s.cfs_location %><%= s.cfs_address ? ` — ${String(s.cfs_address).replace(/\s*\n\s*/g, ', ')}` : '' %></p><% } %>
     <% if (s.status !== 'DELIVERED' && (user.role === 'customer')) { %>
     <form method="post" action="/shipments/<%= s.id %>/delivery-request" class="reqbox" id="request">
       <input type="hidden" name="_csrf" value="<%= csrf %>">

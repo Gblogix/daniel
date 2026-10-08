@@ -344,6 +344,7 @@ const MIGRATIONS = {
     profit_remark: 'TEXT', profit_ignore: 'INTEGER NOT NULL DEFAULT 0', // dashboard: negative-profit review
     pierpass_paid: 'INTEGER NOT NULL DEFAULT 0', // ocean: PierPass TMF / Clean Truck Fee paid
     master_id: 'INTEGER', // house file → its master B/L (masters)
+    cfs_address: 'TEXT', // address of the pick-up / cargo location
     bl_invoices: 'TEXT', // commercial invoice nos. the B/L names (UB005, EZVC_TGT_26-09…) — P/L expected for each
     scac: 'TEXT', direct_shipment: 'INTEGER NOT NULL DEFAULT 0', isf_no: 'TEXT', telex_release: 'INTEGER NOT NULL DEFAULT 0',
     firms_code: 'TEXT', entry_no: 'TEXT', css_no: 'TEXT', holds: 'TEXT', cargo_value: 'REAL', ci_invoice_no: 'TEXT',

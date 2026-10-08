@@ -10,7 +10,7 @@
 const store = require('./db');
 const codes = require('./tracking/codes');
 
-const PICKUP = ['cfs_location', 'firms_code', 'freight_location_tel'];
+const PICKUP = ['cfs_location', 'cfs_address', 'firms_code', 'freight_location_tel'];
 const DELIVERY = ['delivery_company_id', 'delivery_address', 'trucker_id', 'broker_id'];
 
 const empty = (v) => v == null || v === '';
@@ -83,6 +83,15 @@ function suggest(s, { db = store.db } = {}) {
       if (PICKUP.some((f) => f in fills)) from.pickup = hit.ref_no;
     }
   }
+  // Location typed but no address: the address of the party (warehouse / terminal) with that name.
+  const loc = s.cfs_location || fills.cfs_location;
+  if (empty(s.cfs_address) && !fills.cfs_address && loc) {
+    // …the address used with that location on an earlier file, else the party (warehouse / terminal) of that name.
+    const prev = db.get("SELECT ref_no, cfs_address FROM shipments WHERE id <> ? AND UPPER(TRIM(cfs_location)) = UPPER(TRIM(?)) AND cfs_address IS NOT NULL AND cfs_address <> '' ORDER BY id DESC LIMIT 1", s.id || 0, loc);
+    const party = !prev && require('./extract/party').findParty(loc, { db });
+    const addr = prev?.cfs_address || (party && db.get('SELECT address FROM companies WHERE id = ?', party.id)?.address);
+    if (addr) { fills.cfs_address = addr; from.pickup = from.pickup || prev?.ref_no || 'Parties'; }
+  }
   if (DELIVERY.some((f) => empty(s[f]))) {
     let rows = [];
     if (s.customer_id) rows = lastWith(db, s, DELIVERY, 'customer_id = ?', [s.customer_id]);
@@ -107,7 +116,7 @@ function apply(id, { db = store.db } = {}) {
   db.run(`UPDATE shipments SET ${keys.map((k) => `${k} = ?`).join(', ')}, updated_at = datetime('now') WHERE id = ?`, ...keys.map((k) => fills[k]), id);
   const parts = [];
   if (from.carrier) parts.push(`carrier ${fills.carrier} (${from.carrier})`);
-  if (from.pickup) parts.push(`pick-up location from ${from.pickup}`);
+  if (from.pickup) parts.push(`pick-up location${fills.cfs_address && !fills.cfs_location ? ' address' : ''} from ${from.pickup}`);
   if (from.delivery) parts.push(`delivery details from ${from.delivery}`);
   if (parts.length) require('./shipments').addEvent(id, 'AUTOFILL', `Auto-filled: ${parts.join('; ')}`, { db, customerVisible: false });
   return keys;
@@ -123,9 +132,10 @@ function spreadPickup(id, { db = store.db } = {}) {
   const n = norm(s.mbl_no);
   if (!/^\d{11}$/.test(n)) return 0;
   let filled = 0;
-  for (const r of db.all("SELECT * FROM shipments WHERE id <> ? AND mode = 'AIR' AND (cfs_location IS NULL OR cfs_location = '') AND status <> 'DELIVERED' AND locked_at IS NULL", id)) {
+  for (const r of db.all("SELECT * FROM shipments WHERE id <> ? AND mode = 'AIR' AND (cfs_location IS NULL OR cfs_location = '' OR ((cfs_address IS NULL OR cfs_address = '') AND cfs_location = ?)) AND status <> 'DELIVERED' AND locked_at IS NULL", id, s.cfs_location)) {
     if (norm(r.mbl_no).slice(0, 3) !== n.slice(0, 3) || !/^\d{11}$/.test(norm(r.mbl_no)) || portKey(r.pod) !== portKey(s.pod)) continue;
     const set = PICKUP.filter((f) => empty(r[f]) && !empty(s[f]));
+    if (!set.length) continue;
     db.run(`UPDATE shipments SET ${set.map((f) => `${f} = ?`).join(', ')} WHERE id = ?`, ...set.map((f) => s[f]), r.id);
     require('./shipments').addEvent(r.id, 'AUTOFILL', `Auto-filled: cargo location from ${s.ref_no} (same airline)`, { db, customerVisible: false });
     filled++;

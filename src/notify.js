@@ -217,7 +217,7 @@ async function sendDeliveryOrder(shipmentId, { db = store.db, userId = null } = 
   const atme = s.mode === 'AIR' ? (latestDocs(s.id, ['ATME'], db)[0] || await generateDocument(s.id, 'ATME', { db, userId })) : null;
   const id = await queueEmail({
     shipmentId: s.id, kind: 'DELIVERY_ORDER', to, subject: subjectLine(s, 'D/O'),
-    html: summaryHtml(s, `Dear ${esc(s.trucker_name)},<br>Please find attached the delivery order. Pick up at <b>${esc(s.cfs_location || s.pod || '')}</b> and deliver to <b>${esc(s.delivery_address || '')}</b>.`),
+    html: summaryHtml(s, `Dear ${esc(s.trucker_name)},<br>Please find attached the delivery order. Pick up at <b>${esc([s.cfs_location || s.pod, s.cfs_address].filter(Boolean).join(', '))}</b> and deliver to <b>${esc(s.delivery_address || '')}</b>.`),
     documents: atme ? [d, atme] : [d],
   }, { db });
   db.run("UPDATE shipments SET do_sent_at = datetime('now') WHERE id = ?", s.id);
@@ -282,7 +282,7 @@ const COMPOSE = {
   AN: { label: 'Arrival notice & documents → broker', party: 'broker_id', generate: (s) => (s.mode === 'AIR' ? ['AN', 'ATME'] : ['AN']), attach: ['HBL', 'MBL', 'PL', 'CI', 'ISF'], subject: 'A/N', emailKind: 'BROKER_PACKET',
     intro: (s) => `Dear ${esc(s.broker_name || '')},<br>Please find attached the arrival notice${s.mode === 'AIR' ? ', authority to make entry' : ''} and shipping documents for customs clearance.` },
   DO: { label: 'Delivery order → trucker', party: 'trucker_id', generate: (s) => (s.mode === 'AIR' ? ['DO', 'ATME'] : ['DO']), attach: [], subject: 'D/O', emailKind: 'DELIVERY_ORDER',
-    intro: (s) => `Dear ${esc(s.trucker_name || '')},<br>Please find attached the delivery order. Pick up at <b>${esc(s.cfs_location || s.pod || '')}</b> and deliver to <b>${esc(s.delivery_address || '')}</b>.` },
+    intro: (s) => `Dear ${esc(s.trucker_name || '')},<br>Please find attached the delivery order. Pick up at <b>${esc([s.cfs_location || s.pod, s.cfs_address].filter(Boolean).join(', '))}</b> and deliver to <b>${esc(s.delivery_address || '')}</b>.` },
   UPDATE: { label: 'Status update → customer', party: 'customer_id', generate: () => [], attach: [], subject: 'Shipment status update', emailKind: 'CUSTOMER_UPDATE',
     intro: (s) => `Dear ${esc(s.customer_name || '')},<br>Shipment status update for your shipment ${esc(s.ref_no)}.` },
   BLANK: { label: 'New email', party: 'customer_id', generate: () => [], attach: [], subject: '', emailKind: 'MANUAL', intro: (s) => `Dear ${esc(s.customer_name || '')},<br>` },

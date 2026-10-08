@@ -118,7 +118,7 @@ function arrivalNotice(s, { company: co, preparedBy = '', revision = 0, invoice 
   <tr>${cell('I.T. NO. & PLACE', esc([s.it_no, s.it_place].filter(Boolean).join(' / ')), 'colspan="3"')}${cell('I.T. DATE', us(s.it_date))}</tr>
   <tr><td rowspan="3"><span class="lbl">Customs Broker</span><span class="val">${up(s.broker_name)}</span></td>
     ${cell(air ? 'TERMINAL' : 'DEVAN LOCATION', up(s.devan_location), 'colspan="4"')}</tr>
-  <tr>${cell('FREIGHT LOCATION', `${up(s.cfs_location)}${s.freight_location_tel ? ` T : ${esc(s.freight_location_tel)}` : ''}`, 'colspan="4"')}</tr>
+  <tr>${cell('FREIGHT LOCATION', `${up(s.cfs_location)}${s.cfs_address ? `<br>${nl(String(s.cfs_address).toUpperCase())}` : ''}${s.freight_location_tel ? ` T : ${esc(s.freight_location_tel)}` : ''}`, 'colspan="4"')}</tr>
   <tr>${cell('FIRMS CODE', up(s.firms_code))}${cell('AVAILABLE DATE', us(s.available_date))}${cell('LAST FREE DATE', us(s.last_free_day))}${cell('G.O. DATE', us(s.go_date), 'colspan="2"')}</tr>
 </table>
 <table style="margin-top:4px">
@@ -160,7 +160,7 @@ function arrivalNotice(s, { company: co, preparedBy = '', revision = 0, invoice 
 function deliveryOrder(s, { company: co, preparedBy = '', revision = 0 } = {}) {
   const t = nowOffice();
   const air = s.mode === 'AIR';
-  const pickup = s.mode === 'FCL' && s.devan_location ? s.devan_location : (s.cfs_location || s.devan_location || s.pod);
+  const pickup = s.mode === 'FCL' && s.devan_location ? s.devan_location : [s.cfs_location || s.devan_location || s.pod, s.cfs_location ? s.cfs_address : null].filter(Boolean).join('\n');
   const deliverTo = [s.delivery_company_name || s.customer_name, s.delivery_address].filter(Boolean).join('\n');
   const body = `
 <table style="table-layout:fixed"><tr>
@@ -231,7 +231,7 @@ function authorityToMakeEntry(s, { preparedBy = '' } = {}) {
   <tr><td colspan="3"></td><td colspan="4">EFFECTIVE STORAGE DATE : <b>${us(s.storage_start)}</b></td></tr>
 </table>${hr}
 <table>
-  <tr><td style="width:15%">FREIGHT LOC.</td><td style="width:2%">:</td><td style="width:40%"><b>${up(s.cfs_location)}</b></td><td style="width:15%">I.T.NO.</td><td>: <b>${esc(s.it_no)}</b></td></tr>
+  <tr><td style="width:15%">FREIGHT LOC.</td><td style="width:2%">:</td><td style="width:40%"><b>${up(s.cfs_location)}</b>${s.cfs_address ? `<br>${nl(String(s.cfs_address).toUpperCase())}` : ''}</td><td style="width:15%">I.T.NO.</td><td>: <b>${esc(s.it_no)}</b></td></tr>
   <tr><td></td><td></td><td>Tel: ${esc(s.freight_location_tel)} &nbsp;&nbsp;&nbsp;&nbsp; Fax:</td><td>I.T.ISSUE PLACE</td><td>: <b>${up(s.it_place)}</b></td></tr>
   <tr><td>FIRM CODE</td><td>:</td><td><b>${up(s.firms_code)}</b></td><td>I.T.DATE</td><td>: <b>${us(s.it_date)}</b></td></tr>
 </table>
