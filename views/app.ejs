@@ -65,7 +65,7 @@
 
 <script type="application/json" id="shell-data"><%- JSON.stringify({
   items: favItems,
-  favorites, open, csrf, userId: user.id,
+  favorites, open, csrf, userId: user.id, version: v,
 }).replace(/</g, '\\u003c') %></script>
 <script src="/js/shell.js?v=<%= v %>"></script>
 </body>

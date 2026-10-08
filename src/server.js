@@ -5,13 +5,21 @@ const config = require('./config');
 const auth = require('./auth');
 const S = require('./shipments');
 
-// Cache-buster for /css and /js so browsers pick up a new release immediately.
+// Release id: a hash of the screens, scripts and styles. It busts the browser cache for /css and /js, and open
+// browsers compare it (GET /version.json) to reload themselves after an update — no Ctrl+F5 needed.
 const ASSET_VERSION = (() => {
   const fs = require('node:fs');
-  try {
-    return ['css/app.css', 'js/app.js', 'js/shell.js', 'js/embed.js']
-      .map((f) => fs.statSync(require('node:path').join(__dirname, '..', 'public', f)).mtimeMs).reduce((a, b) => Math.max(a, b), 0).toString(36).slice(-6);
-  } catch { return Date.now().toString(36); }
+  const h = require('node:crypto').createHash('sha1');
+  const walk = (dir) => {
+    let names = [];
+    try { names = fs.readdirSync(dir, { withFileTypes: true }); } catch { return; }
+    for (const e of names.sort((a, b) => a.name.localeCompare(b.name))) {
+      const p = path.join(dir, e.name);
+      if (e.isDirectory()) walk(p);
+      else if (/\.(js|css|ejs)$/.test(e.name)) { h.update(e.name); h.update(fs.readFileSync(p)); }
+    }
+  };
+  try { for (const d of ['public', 'views', 'src']) walk(path.join(__dirname, '..', d)); return h.digest('hex').slice(0, 10); } catch { return Date.now().toString(36); }
 })();
 const { bootstrap } = require('./seed');
 
@@ -23,6 +31,7 @@ function createApp() {
   app.disable('x-powered-by');
 
   app.use(express.static(path.join(config.root, 'public'), { maxAge: '1h' }));
+  app.get('/version.json', (req, res) => { res.set('Cache-Control', 'no-store'); res.json({ v: ASSET_VERSION }); });
   // Provider webhooks need the raw body for signature checks and sit outside session / CSRF.
   app.post('/webhooks/terminal49', express.raw({ type: '*/*', limit: '5mb' }), async (req, res) => {
     const r = await require('./tracking').handleTerminal49Webhook(req.body, req.get('X-T49-Webhook-Signature'));

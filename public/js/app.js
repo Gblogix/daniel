@@ -680,3 +680,33 @@ document.querySelectorAll('[data-colcfg]').forEach((btn) => {
   btn.after(panel);
   btn.addEventListener('click', () => { panel.hidden = !panel.hidden; });
 });
+
+// ---------- unsaved input, saves, and new releases ----------
+// gbDirty = something typed in a form that is not saved yet (the workspace then never reloads this page by itself).
+(() => {
+  const saving = (form) => (form.getAttribute('method') || 'get').toLowerCase() === 'post';
+  document.addEventListener('input', (e) => {
+    const f = e.target.closest?.('form');
+    if (f && saving(f) && !e.target.matches('[data-quick], .party-search, [type=search]')) window.gbDirty = true;
+  });
+  document.addEventListener('submit', (e) => {
+    window.gbDirty = false;
+    if (saving(e.target)) { try { window.top.gbChanged?.(); } catch (err) { /* not in the workspace */ } }
+  });
+  // Inline saves (OP / Sales in the file bar, notes and labels in lists) count as changes too.
+  document.addEventListener('change', (e) => { if (e.target.matches?.('[data-quick]')) { try { window.top.gbChanged?.(); } catch (err) { /* ignore */ } } });
+  // After saving, the server shows the page again: tell the workspace (covers redirects after a POST).
+  if (document.querySelector('.flash.ok')) { try { window.top.gbChanged?.(); } catch (err) { /* ignore */ } }
+  // Pages outside the workspace (customer portal): reload by themselves after an update.
+  if (window.top === window && !document.body.classList.contains('shell')) {
+    const v = (document.querySelector('link[href*="app.css?v="]')?.getAttribute('href') || '').split('v=')[1];
+    const check = async () => {
+      try {
+        const r = await (await fetch('/version.json', { cache: 'no-store' })).json();
+        if (v && r.v && r.v !== v && !window.gbDirty) location.reload();
+      } catch (err) { /* offline */ }
+    };
+    setInterval(check, 60000);
+    document.addEventListener('visibilitychange', () => { if (!document.hidden) check(); });
+  }
+})();

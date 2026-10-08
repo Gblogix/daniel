@@ -791,3 +791,6 @@ select.just-picked { outline: 2px solid #22c55e; outline-offset: 1px; transition
 .fb-pick { width: auto; max-width: 170px; display: inline-block; padding: 1px 22px 1px 6px; font: inherit; font-weight: 700; color: inherit; background-color: rgba(255,255,255,.35); border: 1px solid rgba(0,0,0,.18); border-radius: 6px; cursor: pointer; }
 .fb-pick.saved { outline: 2px solid #16a34a; }
 .fb-pick.failed { outline: 2px solid #dc2626; }
+
+.update-bar { position: fixed; left: 50%; bottom: 18px; transform: translateX(-50%); z-index: 300; background: #0f2a4d; color: #fff; padding: 10px 16px; border-radius: 10px; box-shadow: 0 10px 30px rgba(15,23,42,.3); font-size: 13.5px; display: flex; gap: 12px; align-items: center; }
+.update-bar button { background: #fcd34d; color: #0f2a4d; border: 0; border-radius: 6px; padding: 5px 10px; font-weight: 700; cursor: pointer; }

@@ -7,6 +7,7 @@
   const MAX = 12;
   const HOME = '/dashboard';
   let tabs = []; let active = null; let seq = 0;
+  let lastChange = 0; // when something was last saved in any tab
   let favorites = data.favorites.slice();
 
   const clean = (t) => String(t || '').replace(/ · GlobalBridge Logistics$/, '') || 'Loading…';
@@ -61,6 +62,7 @@
       try {
         const w = f.contentWindow;
         if (w.location.pathname === '/login') { location.href = '/login'; return; }
+        t.loadedAt = Date.now();
         t.url = w.location.pathname + w.location.search + w.location.hash;
         t.title = clean(w.document.title);
         f.title = t.title;
@@ -89,7 +91,13 @@
     return create(url, title);
   }
 
+  /** A tab with typed-but-unsaved input is never reloaded behind the user's back. */
+  const dirty = (t) => { try { return Boolean(t.frame.contentWindow.gbDirty); } catch (e) { return false; } };
+
   function activate(id) {
+    const t0 = tabs.find((x) => x.id === id);
+    // Something was saved in another tab since this one loaded (an OP, an invoice, a status…): show it fresh.
+    if (t0 && id !== active && t0.loadedAt && t0.loadedAt < lastChange && !dirty(t0)) reload(t0);
     active = id;
     for (const t of tabs) t.frame.classList.toggle('on', t.id === id);
     renderTabs();
@@ -105,6 +113,9 @@
     if (active === id && !silent) activate((tabs[i] || tabs[i - 1] || tabs[0]).id);
     else renderTabs();
   }
+
+  // Pages inside tabs report a save, so the other tabs refresh when they are shown again.
+  window.gbChanged = () => { lastChange = Date.now(); const cur = tabs.find((x) => x.id === active); if (cur) cur.loadedAt = lastChange + 1; };
 
   // Pages inside tabs call this for detail links (shipment, invoice, party…), like OPUS opening B/L entry.
   window.gbOpenTab = (url, title) => open(url, title);
@@ -222,6 +233,27 @@
   }
   refreshBell(); setInterval(refreshBell, 120000);
   window.gbRefreshBell = refreshBell;
+
+  // ---------- new release on the server: reload by itself (tabs come back), unless something is being typed ----------
+  let newer = null;
+  async function checkVersion() {
+    try {
+      const r = await (await fetch('/version.json', { cache: 'no-store' })).json();
+      if (r.v && data.version && r.v !== data.version) newer = r.v;
+    } catch (e) { /* server restarting */ }
+    if (!newer) return;
+    if (!tabs.some(dirty)) { save(); location.reload(); return; }
+    let bar = $('update-bar');
+    if (!bar) {
+      bar = document.createElement('div'); bar.id = 'update-bar'; bar.className = 'update-bar';
+      bar.innerHTML = 'The system was updated — it refreshes by itself once your open form is saved. <button type="button">Refresh now</button>';
+      bar.querySelector('button').onclick = () => { save(); location.reload(); };
+      document.body.appendChild(bar);
+    }
+  }
+  setInterval(checkVersion, 60000);
+  document.addEventListener('visibilitychange', () => { if (!document.hidden) checkVersion(); });
+  window.gbCheckVersion = checkVersion;
 
   // ---------- header height (the favorites bar wraps onto more lines) ----------
   const top = document.querySelector('.shell-top');
