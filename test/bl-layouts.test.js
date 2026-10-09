@@ -266,3 +266,9 @@ test('air waybill with the serial in two halves: master / house, parties, flight
   assert.deepEqual([m.doc_role, m.mawb_no, m.hawb_no ?? null, m.consignee_name, m.flight_no, m.etd, m.weight_kg], ['master', '180-12345675', null, 'GLOBAL BRIDGE LOGISTICS', 'KE213', '2026-10-10', 5038]);
   assert.ok(m.carrier, 'airline from the AWB prefix');
 });
+
+test('air waybill box titles are not read as the port / airport', () => {
+  const T = `AIR WAYBILL\nAirport of Departure (Addr. of First Carrier) and Requested Routing\nCURRENCY CHGS WT/VAL OTHER\nAirport of Destination\nLOS ANGELES ,U.S.A`;
+  const r = extractRules(T, 'awb.pdf');
+  assert.notEqual(r.pol, 'CURRENCY CHGS WT/VAL OTHER');
+});

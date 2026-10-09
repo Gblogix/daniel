@@ -146,7 +146,9 @@ const isLabelCell = (c) => LABEL_WORDS.test(String(c).trim());
 const isLabelRow = (l) => { const cells = l.trim().split(/\s{2,}/); return cells.length > 0 && cells.every(isLabelCell); };
 // A place / vessel value: letters, not a label or contract prose.
 const PROSE = /\b(DESTINATION|AIRPORT|ORIGIN|ROUTING|FLIGHT|ARRIVAL|APPLICABLE|CLAUSE|WEIGHT|MEASUREMENT|PACKAGES|PARTICULARS|DESCRIPTION|CARRIER|DOCUMENT|MULTIMODAL|DEPARTURE|INVOICE|ISSUANCE|NEGOTIABLE|PRINCIPAL|RECEIPT|DELIVERY|DISCHARGE|LOADING|VOYAGE|PORT|PLACE|ETD|ETA)\b/i;
-const placeOk = (v) => { const t = String(v).trim().replace(/[.,;]+$/, ''); return t.length >= 3 && t.length <= 45 && /[A-Z]{3}/i.test(t) && !PROSE.test(t) && !/[:;]/.test(t) ? t.toUpperCase() : null; };
+// Box titles printed on air waybills / B/Ls are not places ("CURRENCY CHGS WT/VAL OTHER", "DECLARED VALUE FOR CARRIAGE"…).
+const FORM_WORDS = /\b(CURRENCY|CHGS|WT\/VAL|DECLARED|VALUE\s+FOR|AMOUNT\s+OF|INSURANCE|ACCOUNTING|HANDLING\s+INFO|REQUESTED|ROUTING|FLIGHT\/DATE|BY\s+FIRST\s+CARRIER|TO\s+BY|CODE|PPD|COLL)\b/i;
+const placeOk = (v) => { const t = String(v).trim().replace(/[.,;]+$/, ''); return t.length >= 3 && t.length <= 45 && /[A-Z]{3}/i.test(t) && !PROSE.test(t) && !FORM_WORDS.test(t) && !/[:;]/.test(t) ? t.toUpperCase() : null; };
 const refOk = (v) => { const t = String(v).trim().toUpperCase().replace(/^[#:]\s*/, ''); return /^[A-Z0-9][A-Z0-9-]{5,24}$/.test(t) && /\d{4}/.test(t) ? t : null; };
 const dateOk = (v) => toISODate(String(v).trim());
 /** "MAERSK CAP JACKSON 638E" / "MAERSK CAP JACKSON / 638E" / "HMM BLESSING V.0071E" → [vessel, voyage]. */
