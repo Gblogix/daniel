@@ -98,7 +98,7 @@ router.get('/parties/lookup.json', auth.requireInternal, (req, res) => {
   // ("national" → NATIONAL SHIPPING before …INTERNATIONAL TRADE).
   const rank = (r) => { const k = P.norm(r.name); return k.startsWith(n) ? 0 : ` ${k}`.includes(` ${n}`) ? 1 : 2; };
   out.sort((a, b) => rank(a) - rank(b));
-  res.json(out.slice(0, 10));
+  res.json(out.slice(0, 10).map((r) => ({ ...r, address: require('../address').tidy(r.address || '', r.name) })));
 });
 
 // Type-ahead for text fields (values used on earlier files).

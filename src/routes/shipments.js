@@ -384,7 +384,7 @@ router.get('/shipments/:id/preview/:type', auth.requireInternal, (req, res) => {
   const s = S.find(Number(req.params.id), null);
   if (!GENERATORS[type] || !s) return res.status(404).render('error', { title: 'Not found', message: 'Unknown document.' });
   res.set('Content-Security-Policy', "default-src 'none'; style-src 'unsafe-inline'; img-src data:");
-  res.type('html').send(GENERATORS[type](s, notify.docContext(s, { userId: req.user.id })));
+  res.type('html').send(GENERATORS[type](s, { ...notify.docContext(s, { userId: req.user.id }), ...(req.query.prices === '0' ? { prices: false } : {}) }));
 });
 
 // Issue (save) a document without emailing it — e.g. to download and send manually.
@@ -420,7 +420,7 @@ router.post('/shipments/:id/email/:kind', auth.requirePerm('send_notices'), uplo
     const since = notify.lastEmailId();
     await notify.sendComposed({
       kind, shipmentId: id, to: addrList(b.to), cc: addrList([b.cc, ...me].join(',')), bcc: addrList(b.bcc), replyTo: addrList(b.reply_to),
-      subject: String(b.subject || '').trim().slice(0, 300), html: String(b.html || ''), generate: arr(b.generate), docIds: arr(b.doc_ids).map(Number).filter(Boolean), extraDocs,
+      subject: String(b.subject || '').trim().slice(0, 300), html: String(b.html || ''), anPrices: b.an_prices === '1', generate: arr(b.generate), docIds: arr(b.doc_ids).map(Number).filter(Boolean), extraDocs,
     }, { userId: req.user.id });
     const problem = notify.deliveryProblem(since);
     flash(req, problem ? 'err' : 'ok', problem || `Email sent — a copy is on the file${config.mailTransport === 'outlook' ? ' and in Outlook Sent Items' : ''}`);
@@ -436,7 +436,7 @@ router.get('/shipments/:id/doc/:type', auth.requireInternal, (req, res) => {
   const type = req.params.type.toUpperCase();
   const s = S.find(Number(req.params.id), null);
   if (!['AN', 'DO', 'ATME'].includes(type) || !s) return res.status(404).render('error', { title: 'Not found', message: 'Unknown document.' });
-  res.render('shipments/docview', { title: `${{ AN: 'Arrival notice', DO: 'Delivery order', ATME: 'ATME' }[type]} · ${s.ref_no}`, s, type });
+  res.render('shipments/docview', { title: `${{ AN: 'Arrival notice', DO: 'Delivery order', ATME: 'ATME' }[type]} · ${s.ref_no}`, s, type, prices: req.query.prices !== '0' });
 });
 
 // ---------- documents ----------

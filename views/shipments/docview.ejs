@@ -9,5 +9,5 @@
     <a class="btn secondary small" href="/shipments/<%= s.id %>">← File</a>
   </div>
 </div>
-<iframe id="docframe" class="docframe" src="/shipments/<%= s.id %>/preview/<%= type %>" title="<%= title %>"></iframe>
+<iframe id="docframe" class="docframe" src="/shipments/<%= s.id %>/preview/<%= type %><%= locals.prices === false ? '?prices=0' : '' %>" title="<%= title %>"></iframe>
 <%- include('../partials/foot') %>

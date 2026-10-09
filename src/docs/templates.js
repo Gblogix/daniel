@@ -15,6 +15,7 @@ const esc = (v) => String(v ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '
 const nl = (v) => esc(v).replace(/\n/g, '<br>');
 const n = (v, d = 2) => (v == null || v === '' ? '' : Number(v).toLocaleString('en-US', { minimumFractionDigits: d, maximumFractionDigits: d }));
 const lbs = (kg) => (kg == null || kg === '' ? '' : `${n(Number(kg) * 2.20462)} LBS`);
+const addr = (v, name) => require('../address').tidy(v || '', name || '');
 const up = (v) => esc(String(v ?? '').toUpperCase());
 /** 2026-09-16 -> 09/16/2026 (forms use US dates) */
 const us = (d) => (d && /^\d{4}-\d{2}-\d{2}/.test(d) ? `${d.slice(5, 7)}/${d.slice(8, 10)}/${d.slice(0, 4)}` : esc(d || ''));
@@ -84,14 +85,16 @@ function remitBlock(co) {
 
 // ---------------------------------------------------------------------------------------------------------------
 // ARRIVAL NOTICE / FREIGHT INVOICE
-function arrivalNotice(s, { company: co, preparedBy = '', revision = 0, invoice = null } = {}) {
+function arrivalNotice(s, { company: co, preparedBy = '', revision = 0, invoice: inv = null, prices = true } = {}) {
+  // Without prices (chosen in the send window): the charges box stays empty.
+  const invoice = prices ? inv : null;
   const t = nowOffice();
   const air = s.mode === 'AIR';
   const ctnRows = s.containers.length ? s.containers : [{}];
   const sizes = {};
   for (const c of s.containers) if (c.size_type) sizes[c.size_type] = (sizes[c.size_type] || 0) + 1;
   const sizeText = Object.entries(sizes).map(([k, v]) => `${k} X ${v}`).join('<br>');
-  const lines = invoice?.lines?.length ? invoice.lines : (s.charges || []).map((c) => ({ description: c.description, amount: c.amount }));
+  const lines = !prices ? [] : invoice?.lines?.length ? invoice.lines : (s.charges || []).map((c) => ({ description: c.description, amount: c.amount }));
   const total = invoice ? invoice.total : lines.reduce((a, l) => a + (Number(l.amount) || 0), 0);
   const body = `
 <table class="nob"><tr>
@@ -104,15 +107,15 @@ function arrivalNotice(s, { company: co, preparedBy = '', revision = 0, invoice 
 <div class="title">ARRIVAL NOTICE / FREIGHT INVOICE</div>
 <table class="b" style="table-layout:fixed">
   <colgroup><col style="width:45%"><col style="width:13%"><col style="width:13%"><col style="width:16%"><col style="width:13%"></colgroup>
-  <tr><td rowspan="3"><span class="lbl">Shipper</span><span class="val">${up(s.shipper_name)}</span><b>${nl(String(s.shipper_address || '').toUpperCase())}</b></td>
+  <tr><td rowspan="3"><span class="lbl">Shipper</span><span class="val">${up(s.shipper_name)}</span><b>${nl(String(addr(s.shipper_address, s.shipper_name)).toUpperCase())}</b></td>
     ${cell(air ? 'MASTER AWB NO.' : 'MASTER B/L NO.', up(s.mbl_no), 'colspan="2" class="big"')}${cell(air ? 'HOUSE AWB NO.' : 'HOUSE B/L NO.', up(s.direct_shipment ? '' : s.hbl_no), 'colspan="2"')}</tr>
   <tr>${cell('FILING NO.', esc(s.ref_no), 'colspan="2"')}${cell('CUSTOMER REFERENCE NO.', esc(s.customer_ref), 'colspan="2"')}</tr>
   <tr>${cell(air ? 'AMS AWB NO.' : 'AMS B/L NO.', esc(s.ams_bl_no), 'colspan="2"')}${cell('ISF NO.', esc(s.isf_no), 'colspan="2"')}</tr>
-  <tr><td rowspan="3"><span class="lbl">Consignee</span><span class="val">${up(s.consignee_name || s.customer_name)}</span><b>${nl(String(s.consignee_address || '').toUpperCase())}</b></td>
+  <tr><td rowspan="3"><span class="lbl">Consignee</span><span class="val">${up(s.consignee_name || s.customer_name)}</span><b>${nl(String(addr(s.consignee_address, s.consignee_name || s.customer_name)).toUpperCase())}</b></td>
     ${cell(air ? 'FLIGHT INFO.' : 'VESSEL INFO.', up(air ? s.flight_no : [s.vessel, s.voyage].filter(Boolean).join(' ')), 'colspan="2"')}${cell('SUB B/L NO.', esc(s.sub_bl_no), 'colspan="2"')}</tr>
   <tr>${cell(air ? 'AIRPORT OF DEPARTURE' : 'PORT OF LOADING', up(s.pol), 'colspan="3"')}${cell(s.atd ? 'ATD' : 'ETD', us(s.atd || s.etd))}</tr>
   <tr>${cell(air ? 'AIRPORT OF DESTINATION' : 'PORT OF DISCHARGE', up(s.pod), 'colspan="3"')}${cell(s.ata ? 'ATA' : 'ETA', us(s.ata || s.eta))}</tr>
-  <tr><td rowspan="3"><span class="lbl">Notify Party</span><span class="val">${up(s.notify_party || 'SAME AS CONSIGNEE')}</span><b>${nl(String(s.notify_address || '').toUpperCase())}</b></td>
+  <tr><td rowspan="3"><span class="lbl">Notify Party</span><span class="val">${up(s.notify_party || 'SAME AS CONSIGNEE')}</span><b>${nl(String(addr(s.notify_address, s.notify_party)).toUpperCase())}</b></td>
     ${cell('PLACE OF DELIVERY', up(s.place_of_delivery), 'colspan="3"')}${cell('ETA', us(s.place_of_delivery ? s.eta : s.eta))}</tr>
   <tr>${cell('FINAL DESTINATION', up(s.final_destination), 'colspan="3"')}${cell('ETA', us(s.eta))}</tr>
   <tr>${cell('I.T. NO. & PLACE', esc([s.it_no, s.it_place].filter(Boolean).join(' / ')), 'colspan="3"')}${cell('I.T. DATE', us(s.it_date))}</tr>
@@ -161,7 +164,7 @@ function deliveryOrder(s, { company: co, preparedBy = '', revision = 0 } = {}) {
   const t = nowOffice();
   const air = s.mode === 'AIR';
   const pickup = s.mode === 'FCL' && s.devan_location ? s.devan_location : [s.cfs_location || s.devan_location || s.pod, s.cfs_location ? s.cfs_address : null].filter(Boolean).join('\n');
-  const deliverTo = [s.delivery_company_name || s.customer_name, s.delivery_address].filter(Boolean).join('\n');
+  const deliverTo = [s.delivery_company_name || s.customer_name, addr(s.delivery_address, s.delivery_company_name || s.customer_name)].filter(Boolean).join('\n');
   const body = `
 <table style="table-layout:fixed"><tr>
   <td style="width:58%;border:1px solid #000;padding:6px"><div style="font-size:19px;font-weight:700">${esc(co.name)}</div>
@@ -215,10 +218,10 @@ function authorityToMakeEntry(s, { preparedBy = '' } = {}) {
   const row = (a, b, c, d, e = '') => `<tr><td style="width:15%">${a}</td><td style="width:2%">:</td><td style="width:22%"><b>${b}</b></td><td style="width:15%">${c}</td><td style="width:2%">:</td><td><b>${d}</b></td><td class="r" style="width:22%">${e}</td></tr>`;
   const hr = '<div style="border-top:3px double #000;margin:6px 0"></div>';
   const body = `
-<div class="c" style="font-size:14px">${up(cons)}</div><div class="c">${nl(String(s.consignee_address || '').toUpperCase())}</div>
+<div class="c" style="font-size:14px">${up(cons)}</div><div class="c">${nl(String(addr(s.consignee_address, s.consignee_name || s.customer_name)).toUpperCase())}</div>
 <div class="title" style="font-size:20px;margin-top:16px">AUTHORITY TO MAKE ENTRY</div>${hr}
-<table><tr><td style="width:33%">SHIPPER :<br><b>${up(s.shipper_name)}<br>${nl(String(s.shipper_address || '').toUpperCase())}</b></td>
-  <td style="width:34%">CONSIGNEE :<br><b>${up(cons)}<br>${nl(String(s.consignee_address || '').toUpperCase())}</b></td>
+<table><tr><td style="width:33%">SHIPPER :<br><b>${up(s.shipper_name)}<br>${nl(String(addr(s.shipper_address, s.shipper_name)).toUpperCase())}</b></td>
+  <td style="width:34%">CONSIGNEE :<br><b>${up(cons)}<br>${nl(String(addr(s.consignee_address, s.consignee_name || s.customer_name)).toUpperCase())}</b></td>
   <td>NOTIFY PARTY :<br><b>${up(s.notify_party || 'SAME AS CONSIGNEE')}</b></td></tr></table>${hr}
 <table><tr><td>Merchandise Imported at</td><td><b>${up(s.pod)}</b></td><td>on</td><td><b>${us(s.ata || s.eta)}</b></td><td>Via</td><td><b>${up(s.carrier || s.vessel)}</b></td></tr></table>${hr}
 <table>

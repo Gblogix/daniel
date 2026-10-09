@@ -151,7 +151,7 @@ function records(sheet, mapping, defaultRole) {
     if (!rec.name) continue;
     if (PT.LABELS[defaultRole]) rec.roles.unshift(defaultRole); // the sheet's role, plus any from Type / Y-N columns
     rec.roles = [...new Set(rec.roles)];
-    rec.address = rec.address.join(', ').replace(/,\s*,/g, ',');
+    rec.address = require('./address').tidy(rec.address.join(', ').replace(/,\s*,/g, ','), rec.name);
     rec.emails = [...new Set(rec.emails.join(',').split(/[,;\s]+/).filter((e) => /@/.test(e)).map((e) => e.toLowerCase()))].join(', ');
     rec.phone = rec.phone.join(' / ');
     rec.country = rec.country ? country(rec.country) : '';

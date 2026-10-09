@@ -18,7 +18,8 @@
   <div class="crow"><label></label><div class="cfield"><label class="check small"><input type="checkbox" name="include_me" value="1"> Include myself (CC <%= me.email || 'me' %>)</label>
     <% if (d.suggestions.length) { %><span class="muted small"> · suggestions from this file's parties and earlier emails appear as you type</span><% } %></div></div>
   <div class="crow"><label>Attachment</label><div class="cfield">
-    <% d.generate.forEach((t) => { %><label class="check small attach"><input type="checkbox" name="generate" value="<%= t %>" checked> 📄 <b><%= NAMES[t] %></b> — created now (PDF) <a href="/shipments/<%= s.id %>/doc/<%= t %>" target="_blank">preview</a></label><% }) %>
+    <% d.generate.forEach((t) => { %><label class="check small attach"><input type="checkbox" name="generate" value="<%= t %>" checked> 📄 <b><%= NAMES[t] %></b> — created now (PDF) <a href="/shipments/<%= s.id %>/doc/<%= t %>" target="_blank" <%- t === 'AN' ? 'data-an-preview' : '' %>>preview</a></label>
+      <% if (t === 'AN') { %><label class="check small attach" style="margin-left:22px"><input type="checkbox" name="an_prices" value="1" checked data-an-prices> 💲 Show charges &amp; amount due on the A/N <span class="muted">(untick to send it without prices)</span></label><% } %><% }) %>
     <% d.docs.forEach((doc) => { %><label class="check small attach"><input type="checkbox" name="doc_ids" value="<%= doc.id %>" <%= doc.checked ? 'checked' : '' %>> <span class="badge"><%= doc.doc_type %></span> <%= doc.filename %></label><% }) %>
     <% if (!d.generate.length && !d.docs.length) { %><span class="muted small">No documents on the file.</span><% } %>
     <div style="margin-top:6px"><input type="file" name="files" multiple aria-label="Upload attachments"> <span class="muted small">Added files are also saved on the file.</span></div></div></div>

@@ -122,6 +122,22 @@ if (require.main === module) {
   for (const k of ['shipper_name', 'consignee_name', 'notify_party']) {
     require('./db').db.run(`UPDATE shipments SET ${k} = NULL WHERE ${k} LIKE '%NAME AND ADDRESS%' OR ${k} LIKE '%ACCOUNT NUMBER%'`);
   }
+  {
+    const db = require('./db').db;
+    // Air waybill box titles read as airports by older versions ("CURRENCY CHGS WT/VAL OTHER"): clear them.
+    for (const k of ['pol', 'pod']) db.run(`UPDATE shipments SET ${k} = NULL WHERE ${k} LIKE '%CHGS%' OR ${k} LIKE '%WT/VAL%' OR ${k} LIKE '%DECLARED VALUE%'`);
+    // Addresses repeated by merged imports / documents: tidy once (street, city, name, state said twice).
+    if (!db.setting('addresses_tidied')) {
+      const { tidy } = require('./address');
+      for (const c of db.all("SELECT id, name, address FROM companies WHERE address IS NOT NULL AND address <> ''")) { const t = tidy(c.address, c.name); if (t !== c.address) db.run('UPDATE companies SET address = ? WHERE id = ?', t, c.id); }
+      for (const s of db.all('SELECT id, shipper_name, shipper_address, consignee_name, consignee_address, notify_party, notify_address FROM shipments')) {
+        for (const [a, n] of [['shipper_address', 'shipper_name'], ['consignee_address', 'consignee_name'], ['notify_address', 'notify_party']]) {
+          if (s[a]) { const t = tidy(s[a], s[n]); if (t !== s[a]) db.run(`UPDATE shipments SET ${a} = ? WHERE id = ?`, t, s.id); }
+        }
+      }
+      db.setSetting('addresses_tidied', '1');
+    }
+  }
   const linked = require('./masters').backfill();
   if (linked) console.log(`Masters: ${linked} file(s) grouped under their master B/L`);
   if (fresh) console.log(`Fresh start: removed ${fresh.shipments} test shipments, ${fresh.invoices} invoices, ${fresh.documents} files — new files come from email from now on`);

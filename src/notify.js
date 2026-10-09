@@ -73,12 +73,12 @@ function docContext(s, { db = store.db, userId = null } = {}) {
 }
 
 /** Render A/N, D/O or ATME for a shipment (PDF when Chromium is available), store it as a document and return the row. */
-async function generateDocument(shipmentId, type, { db = store.db, userId = null } = {}) {
+async function generateDocument(shipmentId, type, { db = store.db, userId = null, options = {} } = {}) {
   const s = S.find(shipmentId, null, { db });
   if (!s) throw new Error('Shipment not found');
   // Re-issuing a document marks it as a revision (…_Rev, …_Rev2), as brokers expect.
   const revision = db.get("SELECT COUNT(*) AS n FROM documents WHERE shipment_id = ? AND doc_type = ? AND source = 'generated'", s.id, type).n;
-  const html = GENERATORS[type](s, { ...docContext(s, { db, userId }), revision });
+  const html = GENERATORS[type](s, { ...docContext(s, { db, userId }), revision, ...options });
   // Nothing with charges on it is shown in the customer portal (the A/N is emailed; staff can share it per shipment).
   return storeGenerated(db, { shipmentId: s.id, type, base: fileName(type, s, revision), html, visible: false, userId, refNo: s.ref_no });
 }
@@ -318,13 +318,13 @@ function composeDefaults(kind, shipmentId, { db = store.db } = {}) {
 }
 
 /** Send what the person reviewed: generate the notices ticked, attach the files ticked, then the usual follow-ups. */
-async function sendComposed({ kind, shipmentId, to, cc = [], bcc = [], replyTo = [], subject, html, generate = [], docIds = [], extraDocs = [] }, { db = store.db, userId = null } = {}) {
+async function sendComposed({ kind, shipmentId, to, cc = [], bcc = [], replyTo = [], subject, html, generate = [], docIds = [], extraDocs = [], anPrices = true }, { db = store.db, userId = null } = {}) {
   const c = COMPOSE[kind];
   const s = S.find(shipmentId, null, { db });
   if (!to.length) throw new Error('Add at least one recipient');
   if (kind === 'DO') { const cr = require('./credit').forShipment(s, { db }); if (cr?.blocksRelease) throw new Error(`D/O held — credit hold on ${cr.party}: ${cr.reason}. Collect payment or ask an admin to release this file.`); }
   const made = [];
-  for (const t of generate.filter((x) => c.generate(s).includes(x))) made.push(await generateDocument(s.id, t, { db, userId }));
+  for (const t of generate.filter((x) => c.generate(s).includes(x))) made.push(await generateDocument(s.id, t, { db, userId, options: t === 'AN' ? { prices: anPrices } : {} }));
   const picked = docIds.length ? db.all(`SELECT * FROM documents WHERE shipment_id = ? AND id IN (${docIds.map(() => '?').join(',')})`, s.id, ...docIds) : [];
   const id = await queueEmail({ shipmentId: s.id, kind: c.emailKind, to, cc, bcc, replyTo, subject, html, documents: [...made, ...picked, ...extraDocs] }, { db });
   if (kind === 'AN') { db.run("UPDATE shipments SET an_sent_at = datetime('now') WHERE id = ?", s.id); S.addEvent(s.id, 'AN_SENT', `Arrival notice & documents sent (${to.join(', ')})`, { db, userId }); }

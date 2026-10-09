@@ -704,3 +704,12 @@ document.querySelectorAll('[data-colcfg]').forEach((btn) => {
     document.addEventListener('visibilitychange', () => { if (!document.hidden) check(); });
   }
 })();
+
+// Send window: the A/N preview follows the "show charges" tick.
+document.querySelectorAll('[data-an-prices]').forEach((box) => {
+  const link = document.querySelector('[data-an-preview]');
+  if (!link) return;
+  const base = link.getAttribute('href').split('?')[0];
+  const sync = () => link.setAttribute('href', box.checked ? base : `${base}?prices=0`);
+  box.addEventListener('change', sync); sync();
+});
