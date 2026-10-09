@@ -129,9 +129,9 @@
     <%- inp('packages', 'Packages', 'number', 'step="1"') %>
     <%- inp('package_unit', 'Unit (CTNS/PLTS)') %>
     <%- inp('weight_kg', 'Gross weight (KG)', 'number', 'step="0.01"') %>
-    <div class="field"><label for="f_weight_lbs">LBS <span class="muted small">(auto)</span></label><input id="f_weight_lbs" type="number" step="0.01" data-conv="lbs" data-conv-of="weight_kg" value="<%= conv('lbs', s.weight_kg) %>"></div>
+    <div class="field"><label for="f_weight_lbs">LBS <span class="muted small">(auto)</span></label><input id="f_weight_lbs" type="text" readonly tabindex="-1" class="conv-ro" data-conv="lbs" data-conv-of="weight_kg" value="<%= conv('lbs', s.weight_kg) %>" title="Worked out from KG"></div>
     <%- inp('cbm', 'CBM', 'number', 'step="0.001"') %>
-    <div class="field"><label for="f_cft">FT³ <span class="muted small">(auto)</span></label><input id="f_cft" type="number" step="0.01" data-conv="ft³" data-conv-of="cbm" value="<%= conv('ft³', s.cbm) %>"></div>
+    <div class="field"><label for="f_cft">FT³ <span class="muted small">(auto)</span></label><input id="f_cft" type="text" readonly tabindex="-1" class="conv-ro" data-conv="ft³" data-conv-of="cbm" value="<%= conv('ft³', s.cbm) %>" title="Worked out from CBM"></div>
     <%- ai(inp('chargeable_weight', 'Chargeable weight (KG)', 'number', 'step="0.01"')) %>
     <%- inp('commodity', 'Commodity') %>
     <%- inp('marks', 'Marks & numbers') %>
@@ -168,7 +168,7 @@
 </fieldset>
 
 <fieldset data-ship-only data-ocean-only <%= misc || isAir ? "hidden" : "" %> class="fieldset"><legend>Containers</legend>
-  <div class="tablewrap"><table class="t lines" data-lines="ctn">
+  <div class="tablewrap"><table class="t lines ctn-lines" data-lines="ctn">
     <thead><tr><th>Container No.</th><th>Seal No.</th><th>Size/Type</th><th>Pkgs</th><th>KG</th><th>LBS</th><th>CBM</th><th>FT³</th><th>Pickup no.</th><th>LFD</th><th>Terminal status</th><th></th></tr></thead>
     <tbody>
     <% const ctns = s.containers && s.containers.length ? s.containers : [{}]; ctns.forEach((c) => { %>
@@ -178,9 +178,9 @@
         <td><input name="ctn_size" value="<%= c.size_type || '' %>" placeholder="40HC"></td>
         <td><input name="ctn_pkgs" value="<%= c.packages ?? '' %>"></td>
         <td><input name="ctn_kg" value="<%= c.weight_kg ?? '' %>"></td>
-        <td><input data-conv="lbs" data-conv-of="ctn_kg" value="<%= conv('lbs', c.weight_kg) %>" title="Pounds — converted from KG (typing here fills KG)"></td>
+        <td><input data-conv="lbs" data-conv-of="ctn_kg" value="<%= conv('lbs', c.weight_kg) %>" readonly tabindex="-1" class="conv-ro" title="Pounds — worked out from KG"></td>
         <td><input name="ctn_cbm" value="<%= c.cbm ?? '' %>"></td>
-        <td><input data-conv="ft³" data-conv-of="ctn_cbm" value="<%= conv('ft³', c.cbm) %>" title="Cubic feet — converted from CBM (typing here fills CBM)"></td>
+        <td><input data-conv="ft³" data-conv-of="ctn_cbm" value="<%= conv('ft³', c.cbm) %>" readonly tabindex="-1" class="conv-ro" title="Cubic feet — worked out from CBM"></td>
         <td><input name="ctn_pickup" value="<%= c.pickup_no || '' %>"></td>
         <td><input name="ctn_lfd" value="<%= c.pickup_lfd || '' %>" type="date"></td>
         <td class="small nowrap"><%= [c.current_status, c.available === 1 ? 'available' : c.available === 0 ? 'not available' : '', c.holds].filter(Boolean).join(' · ') %></td>
@@ -204,7 +204,7 @@
     <% buyers.forEach((b) => { const g = groups[b]; %><button type="button" class="buyer-chip" data-buyer="<%= b === '—' ? '' : b %>" data-only="<%= b %>">
       <b><%= b === '—' ? 'No buyer' : b %></b> <span class="muted small"><%= [...g.invoices].join(', ') || 'no invoice' %> · <%= g.lines %> line<%= g.lines === 1 ? "" : "s" %> · <%= g.pkgs || '—' %> pkgs · <%= g.kg ? `${fmtNum(g.kg, 1)} kg (${fmtNum(g.kg * 2.20462, 1)} lbs)` : '— kg' %> · <%= g.cbm ? `${fmtNum(g.cbm, 3)} cbm (${fmtNum(g.cbm * 35.3147, 1)} ft³)` : '— cbm' %></span></button><% }) %>
   </div><% } %>
-  <div class="tablewrap"><table class="t lines" data-lines="item">
+  <div class="tablewrap"><table class="t lines item-lines" data-lines="item">
     <thead><tr><th>Final buyer</th><th>Invoice no.</th><th>PO / SKU</th><th style="min-width:220px">Description</th><th>HS code</th><th>Qty</th><th>Unit</th><th>Pkgs</th><th>KG</th><th>LBS</th><th>CBM</th><th>FT³</th><th></th></tr></thead>
     <tbody>
     <% items.forEach((i) => { %>
@@ -218,9 +218,9 @@
         <td><input name="item_unit" value="<%= i.unit || '' %>"></td>
         <td><input name="item_pkgs" value="<%= i.packages ?? '' %>"></td>
         <td><input name="item_kg" value="<%= i.weight_kg ?? '' %>"></td>
-        <td><input data-conv="lbs" data-conv-of="item_kg" value="<%= conv('lbs', i.weight_kg) %>" title="Pounds — converted from KG (typing here fills KG)"></td>
+        <td><input data-conv="lbs" data-conv-of="item_kg" value="<%= conv('lbs', i.weight_kg) %>" readonly tabindex="-1" class="conv-ro" title="Pounds — worked out from KG"></td>
         <td><input name="item_cbm" value="<%= i.cbm ?? '' %>"></td>
-        <td><input data-conv="ft³" data-conv-of="item_cbm" value="<%= conv('ft³', i.cbm) %>" title="Cubic feet — converted from CBM (typing here fills CBM)"></td>
+        <td><input data-conv="ft³" data-conv-of="item_cbm" value="<%= conv('ft³', i.cbm) %>" readonly tabindex="-1" class="conv-ro" title="Cubic feet — worked out from CBM"></td>
         <td><input type="hidden" name="item_price" value="<%= i.unit_price ?? '' %>"><input type="hidden" name="item_amount" value="<%= i.amount ?? '' %>">
           <button type="button" class="btn secondary small" data-remove-row>✕</button></td>
       </tr>
