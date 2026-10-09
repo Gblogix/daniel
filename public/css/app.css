@@ -815,3 +815,26 @@ table.ctn-lines td:nth-child(10) input { width: 150px; }  /* LFD */
 table.item-lines td input.conv-ro, table.item-lines td input[name=item_kg], table.item-lines td input[name=item_cbm] { width: 90px; }
 input.conv-ro { background: #f1f5f9; color: #475569; border-color: #e2e8f0; cursor: default; }
 input.conv-ro:focus { outline: none; box-shadow: none; }
+
+/* File entry form: compact, a section bar on top, Save always in reach */
+.fileform .fieldset { padding: 10px 12px 4px; margin-bottom: 10px; scroll-margin-top: 52px; }
+.fileform .fieldset > legend { font-size: 14px; }
+.fileform .field { margin-bottom: 8px; }
+.fileform label { font-size: 11.5px; margin-bottom: 2px; }
+.fileform input, .fileform select, .fileform textarea { padding: 5px 8px; font-size: 13.5px; }
+.fileform .g4 { grid-template-columns: repeat(auto-fill, minmax(165px, 1fr)); gap: 0 12px; }
+.fileform .g6 { grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: 0 12px; }
+.fileform .g3 { gap: 0 12px; }
+.fileform textarea { min-height: 0; }
+.form-nav { position: sticky; top: 0; z-index: 20; display: flex; flex-wrap: wrap; gap: 4px; padding: 6px 8px; margin: 0 0 10px; background: rgba(246,248,251,.96); border: 1px solid var(--line); border-radius: 8px; backdrop-filter: blur(4px); }
+.form-nav a { font-size: 12.5px; padding: 4px 10px; border-radius: 999px; color: #1e3a8a; background: #fff; border: 1px solid #dbe4f3; }
+.form-nav a:hover { background: var(--soft); text-decoration: none; }
+.form-nav a.on { background: var(--navy); color: #fff; border-color: var(--navy); }
+.more-fields { margin: 0 0 8px; }
+.more-fields > summary { cursor: pointer; font-size: 12.5px; color: #1e3a8a; padding: 4px 0 8px; }
+.save-bar { position: sticky; bottom: 0; z-index: 20; background: rgba(255,255,255,.96); border-top: 1px solid var(--line); padding: 8px 0; margin-top: 4px; align-items: center; }
+
+select.combo-hidden { display: none !important; }
+input.party-search.combo { margin-bottom: 0; background-image: linear-gradient(45deg, transparent 50%, #64748b 50%), linear-gradient(135deg, #64748b 50%, transparent 50%); background-position: calc(100% - 14px) 52%, calc(100% - 9px) 52%; background-size: 5px 5px; background-repeat: no-repeat; padding-right: 24px; }
+input.just-picked { outline: 2px solid #22c55e; outline-offset: 1px; }
+.sugg { max-height: 340px; }

@@ -248,21 +248,37 @@ document.querySelectorAll('select[data-party-search], select:not([multiple])').f
   const opts = () => [...sel.querySelectorAll('option')].filter((o) => o.value && !o.disabled);
   if (sel.dataset.partySearch === undefined && (opts().length < 12 || sel.closest('table, .filters, .bulkbar, .tools-menu, .filebar'))) return;
   if (sel.previousElementSibling?.classList.contains('party-search')) return;
+  // In the file form the box IS the drop-down (one line instead of two): it shows the chosen name, a click lists
+  // everything, typing filters. Elsewhere it sits above the drop-down as a search helper.
+  const compact = Boolean(sel.closest('.fileform'));
   const box = document.createElement('input');
-  box.type = 'search'; box.className = 'party-search';
-  box.placeholder = sel.dataset.partySearch !== undefined ? 'Type to find a party…' : 'Type to search…';
+  box.type = compact ? 'text' : 'search'; box.className = `party-search${compact ? ' combo' : ''}`;
+  box.placeholder = compact ? '— type or pick —' : sel.dataset.partySearch !== undefined ? 'Type to find a party…' : 'Type to search…';
   sel.parentNode.insertBefore(box, sel);
+  const chosen = () => { const o = sel.selectedOptions[0]; return o && o.value ? o.textContent.trim() : ''; };
+  if (compact) {
+    sel.classList.add('combo-hidden'); sel.tabIndex = -1;
+    if (sel.id) { box.id = `${sel.id}_q`; const lab = sel.closest('.field')?.querySelector(`label[for="${sel.id}"]`); if (lab) lab.htmlFor = box.id; }
+    box.value = chosen(); box.dataset.suggestOnFocus = '';
+    box.addEventListener('focus', () => box.select());
+    box.addEventListener('blur', () => setTimeout(() => {
+      if (!box.value.trim() && sel.value) { sel.value = ''; sel.dispatchEvent(new Event('change', { bubbles: true })); }
+      box.value = chosen();
+    }, 160));
+    sel.addEventListener('change', () => { if (document.activeElement !== box) box.value = chosen(); });
+  }
   gbSuggestBox(box, (q) => {
-    if (!q) return [];
-    const ql = q.toLowerCase();
+    const typed = compact && q === chosen() ? '' : q; // focusing a filled box lists everything
+    if (!typed && !compact) return [];
+    const ql = typed.toLowerCase();
     const hits = opts().map((o) => ({ o, t: o.textContent.trim(), g: o.parentElement.tagName === 'OPTGROUP' ? o.parentElement.label : '' }))
-      .filter((x) => x.t.toLowerCase().includes(ql));
-    hits.sort((a, b) => Number(!a.t.toLowerCase().startsWith(ql)) - Number(!b.t.toLowerCase().startsWith(ql)));
-    return hits.slice(0, 10).map((x) => ({ label: x.t, sub: x.g, value: x.o.value }));
+      .filter((x) => !ql || x.t.toLowerCase().includes(ql));
+    if (ql) hits.sort((a, b) => Number(!a.t.toLowerCase().startsWith(ql)) - Number(!b.t.toLowerCase().startsWith(ql)));
+    return hits.slice(0, ql ? 12 : 80).map((x) => ({ label: x.t, sub: x.g, value: x.o.value }));
   }, (it) => {
-    sel.value = it.value; box.value = '';
+    sel.value = it.value; box.value = compact ? it.label : '';
     sel.dispatchEvent(new Event('change', { bubbles: true }));
-    sel.classList.add('just-picked'); setTimeout(() => sel.classList.remove('just-picked'), 900);
+    (compact ? box : sel).classList.add('just-picked'); setTimeout(() => (compact ? box : sel).classList.remove('just-picked'), 900);
   });
 });
 
@@ -645,7 +661,7 @@ document.querySelectorAll('[data-quick]').forEach((el) => {
 document.querySelectorAll('select.fb-pick').forEach((pick) => {
   const twin = document.querySelector(`form select[name="${pick.dataset.field}"]:not(.fb-pick)`);
   if (!twin) return;
-  const copy = (from, to) => { if (to.value !== from.value) { to.value = from.value; to.classList.add('just-picked'); setTimeout(() => to.classList.remove('just-picked'), 900); } };
+  const copy = (from, to) => { if (to.value !== from.value) { to.value = from.value; to.dispatchEvent(new Event('change')); } };
   pick.addEventListener('change', () => copy(pick, twin));
   twin.addEventListener('change', () => copy(twin, pick));
 });
@@ -712,4 +728,20 @@ document.querySelectorAll('[data-an-prices]').forEach((box) => {
   const base = link.getAttribute('href').split('?')[0];
   const sync = () => link.setAttribute('href', box.checked ? `${base}?prices=1` : base);
   box.addEventListener('change', sync); sync();
+});
+
+// File form: the section bar shows where you are; Ctrl+S saves.
+document.querySelectorAll('.fileform').forEach((wrap) => {
+  const nav = wrap.querySelector('.form-nav');
+  const links = nav ? [...nav.querySelectorAll('a')] : [];
+  if (links.length && 'IntersectionObserver' in window) {
+    const io = new IntersectionObserver((entries) => {
+      entries.forEach((en) => { if (en.isIntersecting) links.forEach((a) => a.classList.toggle('on', a.getAttribute('href') === `#${en.target.id}`)); });
+    }, { rootMargin: '-60px 0px -70% 0px' });
+    links.forEach((a) => { const el = wrap.querySelector(a.getAttribute('href')); if (el) io.observe(el); });
+  }
+  const form = wrap.closest('form');
+  if (form) document.addEventListener('keydown', (e) => {
+    if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 's') { e.preventDefault(); const btn = form.querySelector('.save-bar .btn') || form.querySelector('button.btn:not([type=button])'); if (btn) btn.click(); }
+  });
 });

@@ -237,7 +237,7 @@
     <fieldset class="plainset" <%= locked ? 'disabled' : '' %>>
     <%- include('../partials/fields', { s }) %>
     </fieldset>
-    <% if (locked) { %><p class="muted small">🔒 Locked — view only<%= isAdmin ? '. Unlock at the top of the page to make a change.' : '. Ask an admin to unlock it.' %></p><% } else if (can('shipments_edit')) { %><div class="actions"><button class="btn">Save changes</button></div><% } else { %><p class="muted small">View only — you do not have the "Create / edit shipments" permission.</p><% } %>
+    <% if (locked) { %><p class="muted small">🔒 Locked — view only<%= isAdmin ? '. Unlock at the top of the page to make a change.' : '. Ask an admin to unlock it.' %></p><% } else if (can('shipments_edit')) { %><div class="actions save-bar"><button class="btn">Save changes</button><span class="muted small">Ctrl+S</span></div><% } else { %><p class="muted small">View only — you do not have the "Create / edit shipments" permission.</p><% } %>
   </form>
 
   <div>

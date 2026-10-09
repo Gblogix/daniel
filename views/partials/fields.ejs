@@ -12,6 +12,8 @@
 <% const isAir = s.mode === 'AIR'; const only = (attr, hide) => (html) => html.replace('<div class="field"', `<div ${attr} ${hide ? 'hidden' : ''} class="field"`);
    const oc = only('data-ocean-only', isAir); const ai = only('data-air-only', !isAir); const fcl = only('data-fcl-only', s.mode !== 'FCL'); %>
 <script type="application/json" id="required-fields"><%- JSON.stringify(Object.fromEntries(Object.entries(S.REQUIRED).map(([m, l]) => [m, l.map(([k]) => k)]))) %></script>
+<div class="fileform">
+<nav class="form-nav" aria-label="Sections"><a href="#pic">Parties</a><a href="#routing" data-ship-only <%= misc ? 'hidden' : '' %>><%= isAir ? 'AWB' : 'B/L' %> &amp; routing</a><a href="#pickup" data-ship-only <%= misc ? 'hidden' : '' %>>Clearance</a><a href="#cargo" data-ship-only <%= misc ? 'hidden' : '' %>>Cargo</a><a href="#delivery" data-ship-only <%= misc ? 'hidden' : '' %>>Delivery</a><a href="#ctns" data-ship-only data-ocean-only <%= misc || isAir ? 'hidden' : '' %>>Containers</a><a href="#items" data-ship-only <%= misc ? 'hidden' : '' %>>P/L</a><a href="#notes">Notes</a></nav>
 <fieldset class="fieldset" id="pic"><legend>Parties & status</legend>
   <div class="grid g4">
     <%- sel('mode', 'Mode', Object.entries(S.MODES).map(([id, m]) => ({ id, name: m.label })), false) %>
@@ -35,7 +37,7 @@
     <%- ship(sel('agent_id', 'Overseas agent', agents)) %>
     <%- ship(sel('broker_id', 'Customs broker', brokers)) %>
     <%- ship(sel('trucker_id', 'Trucker', truckers)) %>
-    <% if (locals.staffUsers) { %><%- sel('owner_id', 'Person in charge (PIC) — gets the heads-up', staffUsers) %><%- sel('sales_id', 'Sales', staffUsers) %><% } %>
+    <% if (locals.staffUsers) { %><%- sel('owner_id', 'PIC (gets the heads-up)', staffUsers) %><%- sel('sales_id', 'Sales', staffUsers) %><% } %>
   </div>
   <% const ta = (k, label) => `<div class="field"><label for="f_${k}">${label}${src(k)}</label><textarea id="f_${k}" name="${k}" rows="2">${e(s[k])}</textarea></div>`; %>
   <div class="grid g3" data-ship-only <%= misc ? 'hidden' : '' %>>
@@ -45,7 +47,7 @@
   </div>
 </fieldset>
 
-<fieldset data-ship-only <%= misc ? "hidden" : "" %> class="fieldset"><legend>B/L & routing</legend>
+<fieldset data-ship-only <%= misc ? "hidden" : "" %> class="fieldset" id="routing"><legend>B/L & routing</legend>
   <div class="grid g4">
     <%- inp('mbl_no', s.mode === 'AIR' ? 'MAWB No.' : 'MBL No.') %>
     <%- inp('hbl_no', s.mode === 'AIR' ? 'HAWB No.' : 'HBL No.') %>
@@ -68,6 +70,15 @@
     <%- inp('atd', 'ATD (actual)', 'date') %>
     <%- inp('ata', 'ATA (actual)', 'date') %>
     <%- inp('last_free_day', 'Last free day', 'date') %>
+    <div class="field"><label>&nbsp;</label>
+      <label class="check" data-ocean-only <%= isAir ? 'hidden' : '' %>><input type="checkbox" name="isf_filed" value="1" <%= s.isf_filed ? 'checked' : '' %>> ISF filed</label>
+      <label class="check" data-ocean-only <%= isAir ? 'hidden' : '' %>><input type="checkbox" name="telex_release" value="1" <%= s.telex_release ? 'checked' : '' %>> Telex / OBL received</label>
+      <label class="check"><input type="checkbox" name="direct_shipment" value="1" <%= s.direct_shipment ? 'checked' : '' %>> Direct (no HBL)</label>
+    </div>
+  </div>
+  <% const moreFilled = ['ams_bl_no','sub_bl_no','customer_ref','agent_ref','final_destination','devan_location','freight_location_tel','available_date','go_date','it_no','it_place','it_date','service_term','release_type','firms_code','scac','isf_no'].filter((k) => s[k] != null && s[k] !== ''); %>
+  <details class="more-fields" <%= moreFilled.length ? 'open' : '' %>><summary>More — I.T., AMS / ISF, references, firms code, service term<%= moreFilled.length ? ` (${moreFilled.length} filled)` : '' %></summary>
+  <div class="grid g4">
     <%- oc(inp('ams_bl_no', 'AMS B/L no.')) %>
     <%- inp('sub_bl_no', 'Sub B/L no.') %>
     <%- inp('customer_ref', 'Customer ref. no.') %>
@@ -87,12 +98,7 @@
     <%- inp('firms_code', 'Firms code') %>
     <%- inp('scac', 'Carrier SCAC / airline prefix', 'text', 'placeholder="auto from MBL"') %>
     <%- oc(inp('isf_no', 'ISF / AMS ref')) %>
-    <div class="field"><label>&nbsp;</label>
-      <label class="check" data-ocean-only <%= isAir ? 'hidden' : '' %>><input type="checkbox" name="isf_filed" value="1" <%= s.isf_filed ? 'checked' : '' %>> ISF filed</label>
-      <label class="check" data-ocean-only <%= isAir ? 'hidden' : '' %>><input type="checkbox" name="telex_release" value="1" <%= s.telex_release ? 'checked' : '' %>> Telex / OBL received</label>
-      <label class="check"><input type="checkbox" name="direct_shipment" value="1" <%= s.direct_shipment ? 'checked' : '' %>> Direct (no HBL)</label>
-    </div>
-  </div>
+  </div></details>
 </fieldset>
 
 <fieldset data-ship-only <%= misc ? "hidden" : "" %> class="fieldset" id="pickup"><legend>Clearance & release</legend>
@@ -124,7 +130,7 @@
   </div>
 </fieldset>
 
-<fieldset data-ship-only <%= misc ? "hidden" : "" %> class="fieldset"><legend>Cargo totals</legend>
+<fieldset data-ship-only <%= misc ? "hidden" : "" %> class="fieldset" id="cargo"><legend>Cargo totals</legend>
   <div class="grid g6">
     <%- inp('packages', 'Packages', 'number', 'step="1"') %>
     <%- inp('package_unit', 'Unit (CTNS/PLTS)') %>
@@ -154,7 +160,7 @@
   </div>
 </fieldset>
 
-<fieldset class="fieldset"><legend><%= canAccounting ? 'Billing & notes' : 'Notes' %></legend>
+<fieldset class="fieldset" id="notes"><legend><%= canAccounting ? 'Billing & notes' : 'Notes' %></legend>
   <% if (canAccounting) { %>
   <div class="grid g4">
     <%- inp('service_price', 'Service price (USD)', 'number', 'step="0.01"') %>
@@ -167,7 +173,7 @@
   <div class="field"><label for="f_notes">Internal notes</label><textarea id="f_notes" name="notes" rows="2"><%= s.notes || '' %></textarea></div>
 </fieldset>
 
-<fieldset data-ship-only data-ocean-only <%= misc || isAir ? "hidden" : "" %> class="fieldset"><legend>Containers</legend>
+<fieldset data-ship-only data-ocean-only <%= misc || isAir ? "hidden" : "" %> class="fieldset" id="ctns"><legend>Containers</legend>
   <div class="tablewrap"><table class="t lines ctn-lines" data-lines="ctn">
     <thead><tr><th>Container No.</th><th>Seal No.</th><th>Size/Type</th><th>Pkgs</th><th>KG</th><th>LBS</th><th>CBM</th><th>FT³</th><th>Pickup no.</th><th>LFD</th><th>Terminal status</th><th></th></tr></thead>
     <tbody>
@@ -192,7 +198,7 @@
   <button type="button" class="btn secondary small" data-add-row="ctn" style="margin-top:8px">+ Container</button>
 </fieldset>
 
-<fieldset data-ship-only <%= misc ? "hidden" : "" %> class="fieldset"><legend>Packing list (P/L detail)</legend>
+<fieldset data-ship-only <%= misc ? "hidden" : "" %> class="fieldset" id="items"><legend>Packing list (P/L detail)</legend>
   <% const items = s.items && s.items.length ? s.items : [{}];
      const groups = {};
      items.filter((i) => i.description).forEach((i) => { const g = groups[i.buyer || '—'] = groups[i.buyer || '—'] || { invoices: new Set(), lines: 0, pkgs: 0, kg: 0, cbm: 0 };
@@ -231,3 +237,4 @@
   <button type="button" class="btn secondary small" data-add-row="item" style="margin-top:8px">+ Line</button>
   <span class="muted small">Lines are sorted by final buyer, then invoice, when saved.</span>
 </fieldset>
+</div>
