@@ -8,7 +8,7 @@
     <tr><td class="nowrap small"><%= fmtDateTime(e.created_at) %></td><td class="small"><%= e.kind %></td>
       <td><% if (e.shipment_id) { %><a href="/shipments/<%= e.shipment_id %>"><%= e.ref_no %></a><% } %></td>
       <td class="small"><%= e.to_addr %></td><td><a href="/outbox/<%= e.id %>"><%= e.subject %></a></td>
-      <td><span class="badge <%= e.status %>" title="<%= e.error || '' %>"><%= e.status %></span></td></tr>
+      <td><span class="badge <%= e.status %>" title="<%= e.error || '' %>"><%= e.status %></span><% if (e.status !== 'SENT' && e.error) { %><div class="small" style="color:var(--red);max-width:320px;margin-top:3px"><%= e.error %></div><% } %></td></tr>
   <% }) %>
 </table></div>
 <%- include('../partials/foot') %>

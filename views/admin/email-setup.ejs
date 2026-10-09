@@ -33,7 +33,7 @@
     <li>Open <b>entra.microsoft.com</b> (sign in with the Microsoft 365 admin account) → <b>Applications › App registrations › New registration</b>. Name: <code>GB Logix</code>, "Single tenant" → <b>Register</b>.</li>
     <li>On the app's <b>Overview</b> page copy <b>Application (client) ID</b> and <b>Directory (tenant) ID</b>.</li>
     <li><b>Certificates &amp; secrets › New client secret</b> (24 months) → copy the <b>Value</b> right away (it is shown only once). Put a reminder in your calendar before it expires.</li>
-    <li><b>API permissions › Add a permission › Microsoft Graph › Application permissions</b> → tick <b>Mail.Send</b> → Add.
+    <li><b>API permissions › Add a permission › Microsoft Graph › Application permissions</b> → tick <b>Mail.Send</b> and <b>Mail.ReadWrite</b> (needed when attachments are over 3 MB — B/L + P/L + C/I scans) → Add.
       Then press <b>Grant admin consent for …</b> (the status must turn green ✔).</li>
     <li>On the server PC open the <code>.env</code> file (next to start-windows.bat) and add — do not paste these anywhere else:
       <pre class="small" style="background:var(--soft);padding:8px;border-radius:6px">MS_TENANT_ID=…directory (tenant) id…

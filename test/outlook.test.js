@@ -67,3 +67,22 @@ test('Outlook intake: agent email with PDF becomes an intake; unknown senders ig
   assert.match(decodeURIComponent(list.url), /hasAttachments eq true/);
   assert.equal(list.opts.headers.Prefer, 'outlook.body-content-type="text"');
 });
+
+test('Outlook: a mail with big attachments is built as a draft, large files uploaded in pieces, then sent', async () => {
+  graph._reset();
+  const big = Buffer.alloc(4 * 1024 * 1024, 1); const small = Buffer.from('small pdf');
+  const f = mockFetch((url, o) => tokenRoute(url)
+    || (url.endsWith('/users/info%40gblogix.com/messages') && o.method === 'POST' ? { status: 201, body: { id: 'M1' } } : null)
+    || (url.endsWith('/messages/M1/attachments') ? { status: 201, body: {} } : null)
+    || (url.endsWith('/messages/M1/attachments/createUploadSession') ? { status: 201, body: { uploadUrl: 'https://upload.example/session' } } : null)
+    || (url === 'https://upload.example/session' ? { status: 200, body: {} } : null)
+    || (url.endsWith('/messages/M1/send') ? { status: 202 } : { status: 404, body: {} }));
+  await graph.sendMail({ to: ['a@x.com'], subject: 'Big', html: '<p>x</p>', attachments: [{ filename: 'HBL.pdf', content: big }, { filename: 'PL.pdf', content: small }] }, { fetchImpl: f });
+  const urls = f.calls.map((c) => c.url);
+  const puts = f.calls.filter((c) => c.url === 'https://upload.example/session');
+  assert.equal(puts.length, 2, '4 MB in two pieces');
+  assert.equal(puts[0].opts.headers['Content-Range'], `bytes 0-${3276800 - 1}/${big.length}`);
+  assert.ok(urls.some((u) => u.endsWith('/messages/M1/attachments')), 'small file attached directly');
+  assert.ok(urls[urls.length - 1].endsWith('/messages/M1/send'), 'sent last');
+  assert.ok(!urls.some((u) => u.endsWith('/sendMail')));
+});

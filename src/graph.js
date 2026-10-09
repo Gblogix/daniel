@@ -42,7 +42,7 @@ function explain(msg) {
   const m = String(msg);
   const tip = /AADSTS7000215|invalid_client|secret/i.test(m) ? 'the client secret is wrong or expired — make a new one (Certificates & secrets) and put it in MS_CLIENT_SECRET'
     : /AADSTS700016|AADSTS90002|not found in the directory|tenant/i.test(m) ? 'check MS_TENANT_ID and MS_CLIENT_ID (app registration › Overview)'
-      : /ErrorAccessDenied|Access is denied|Authorization_RequestDenied|403/i.test(m) ? 'give the app the Microsoft Graph APPLICATION permission Mail.Send and press "Grant admin consent"'
+      : /ErrorAccessDenied|Access is denied|Authorization_RequestDenied|403/i.test(m) ? 'give the app the Microsoft Graph APPLICATION permissions Mail.Send and Mail.ReadWrite (needed for large attachments) and press "Grant admin consent"'
         : /MailboxNotEnabledForRESTAPI|ResourceNotFound|ErrorInvalidUser|MailboxNotFound/i.test(m) ? 'MS_MAILBOX must be a real Microsoft 365 mailbox (e.g. info@gblogix.com)'
           : '';
   return tip ? `${m.trim()} → ${tip}` : m.trim();
@@ -50,22 +50,46 @@ function explain(msg) {
 
 const recipients = (list) => list.filter(Boolean).map((address) => ({ emailAddress: { address } }));
 
-/** Send an email from the configured mailbox (saved to its Sent Items). attachments: [{filename, content: Buffer}] */
+const SMALL = 3 * 1024 * 1024;        // Graph takes attachments inline up to ~3 MB per request
+const CHUNK = 320 * 1024 * 10;         // upload-session chunks must be multiples of 320 KiB
+
+/**
+ * Send an email from the configured mailbox (saved to its Sent Items). attachments: [{filename, content: Buffer}]
+ * Small mails go in one call; with bigger attachments (B/L + P/L + C/I scans add up) the mail is built as a draft,
+ * large files are uploaded in pieces, then it is sent.
+ */
 async function sendMail({ to, cc = [], bcc = [], replyTo = [], subject, html, attachments = [] }, { fetchImpl } = {}) {
-  const message = {
+  const head = {
     subject,
     body: { contentType: 'HTML', content: html },
     toRecipients: recipients(to),
     ccRecipients: recipients(cc),
     ...(bcc.length ? { bccRecipients: recipients(bcc) } : {}),
     ...(replyTo.length ? { replyTo: recipients(replyTo) } : {}),
-    attachments: attachments.map((a) => ({
-      '@odata.type': '#microsoft.graph.fileAttachment', name: a.filename, contentBytes: a.content.toString('base64'),
-    })),
   };
+  const inline = (a) => ({ '@odata.type': '#microsoft.graph.fileAttachment', name: a.filename, contentBytes: a.content.toString('base64') });
+  const mb = `/users/${encodeURIComponent(config.graph.mailbox)}`;
   const size = attachments.reduce((n, a) => n + a.content.length, 0);
-  if (size > 3 * 1024 * 1024) throw new Error('Attachments over 3 MB total — send a portal link instead');
-  await graph(`/users/${encodeURIComponent(config.graph.mailbox)}/sendMail`, { method: 'POST', body: { message, saveToSentItems: true }, fetchImpl });
+  if (size <= SMALL) {
+    await graph(`${mb}/sendMail`, { method: 'POST', body: { message: { ...head, attachments: attachments.map(inline) }, saveToSentItems: true }, fetchImpl });
+    return;
+  }
+  const draft = await graph(`${mb}/messages`, { method: 'POST', body: head, fetchImpl });
+  for (const a of attachments) {
+    if (a.content.length < SMALL) { await graph(`${mb}/messages/${draft.id}/attachments`, { method: 'POST', body: inline(a), fetchImpl }); continue; }
+    const s = await graph(`${mb}/messages/${draft.id}/attachments/createUploadSession`, {
+      method: 'POST', body: { AttachmentItem: { attachmentType: 'file', name: a.filename, size: a.content.length } }, fetchImpl,
+    });
+    for (let from = 0; from < a.content.length; from += CHUNK) {
+      const part = a.content.subarray(from, Math.min(from + CHUNK, a.content.length));
+      const res = await (fetchImpl || fetch)(s.uploadUrl, {
+        method: 'PUT', body: part,
+        headers: { 'Content-Length': String(part.length), 'Content-Range': `bytes ${from}-${from + part.length - 1}/${a.content.length}` },
+      });
+      if (!res.ok) throw new Error(`Uploading ${a.filename} failed (${res.status}) — the file may be too large for email; send a portal link instead`);
+    }
+  }
+  await graph(`${mb}/messages/${draft.id}/send`, { method: 'POST', fetchImpl });
 }
 
 /** Messages with attachments received after `since` (ISO), newest last, with file attachments expanded. */
