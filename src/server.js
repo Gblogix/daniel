@@ -59,6 +59,22 @@ function createApp() {
     delete req.session.flash;
     next();
   });
+  // Anything that sends email (A/N, D/O, invoices, statements…): if a message did not go out, say so instead of "sent".
+  app.use((req, res, next) => {
+    if (req.method !== 'POST' || !req.user) return next();
+    const notify = require('./notify');
+    let since;
+    try { since = notify.lastEmailId(); } catch { return next(); }
+    const redirect = res.redirect.bind(res);
+    res.redirect = (...args) => {
+      try {
+        const problem = notify.deliveryProblem(since);
+        if (problem && req.session && req.session.flash?.type !== 'err') req.session.flash = { type: 'err', msg: problem };
+      } catch { /* never block the redirect */ }
+      return redirect(...args);
+    };
+    next();
+  });
   // Signed in with a temporary password (new invite or a reset by an admin): choose a new one before anything else.
   app.use((req, res, next) => {
     if (!req.user?.must_change_pw || ['/account/password', '/logout'].includes(req.path)) return next();

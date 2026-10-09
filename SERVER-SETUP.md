@@ -81,7 +81,16 @@ BACKUP_DIR=C:\Users\(사용자이름)\OneDrive\GB Logix Backup
 - Admin → Users에서 고객 계정 초대 → 고객은 `https://app.gblogix.com` 에서 자기 화물만 봅니다.
 - 고객별로 숨길 항목(Empty return 등)은 Parties → 고객 편집 → "Hide on the customer portal".
 
-## 5. 평소 관리
+## 5. 이메일 연결 (A/N · D/O · 인보이스 발송)
+
+연결 전에는 이메일이 **보내지지 않고 Outbox에만 저장**됩니다.
+
+1. Administration → **Email setup** 화면의 안내대로 Microsoft 365(entra.microsoft.com)에서 앱 등록 → `Mail.Send`(Application) 권한 → **Grant admin consent**.
+2. `.env`에 `MS_TENANT_ID`, `MS_CLIENT_ID`, `MS_CLIENT_SECRET`, `MS_MAILBOX=info@gblogix.com` 추가 (이 값들은 채팅·이메일에 붙여넣지 마세요).
+3. `server-tools\restart-server.bat` (관리자 권한) → Email setup에서 **Send a test email** → 받은편지함 확인.
+4. 연결 전에 저장만 된 최근 3일 이메일은 **Send the held emails now**로 한 번에 발송.
+
+## 6. 평소 관리
 
 - 노트북이면: **항상 전원 연결**, 단단한 곳에(통풍), 화면 덮개는 닫아도 됩니다.
 - Windows 업데이트로 재부팅돼도 자동으로 다시 켜집니다.

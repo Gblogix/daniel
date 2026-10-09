@@ -1,6 +1,6 @@
 <%- include('../partials/head') %>
 <div class="pagehead"><h1>Email outbox</h1>
-  <% if (config.mailTransport === 'log') { %><span class="badge ARRIVED">Outlook / SMTP not configured — emails are logged, not sent</span><% } else { %><span class="badge SENT">Sending via <%= config.mailTransport === 'outlook' ? `Outlook (${config.graph.mailbox})` : `SMTP ${config.smtp.host}` %></span><% } %></div>
+  <% if (config.mailTransport === 'log') { %><span class="badge ARRIVED">Outlook / SMTP not configured — emails are logged, not sent</span> <a class="small" href="/admin/email-setup">Set up →</a><% } else { %><span class="badge SENT">Sending via <%= config.mailTransport === 'outlook' ? `Outlook (${config.graph.mailbox})` : `SMTP ${config.smtp.host}` %></span><% } %></div>
 <div class="tablewrap"><table class="t">
   <thead><tr><th>When</th><th>Kind</th><th>Shipment</th><th>To</th><th>Subject</th><th>Status</th></tr></thead>
   <% if (!rows.length) { %><tr><td colspan="6" class="muted">No emails yet.</td></tr><% } %>

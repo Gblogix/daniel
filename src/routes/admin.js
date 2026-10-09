@@ -2,6 +2,7 @@ const express = require('express');
 const store = require('../db');
 const auth = require('../auth');
 const notify = require('../notify');
+const config = require('../config');
 
 const router = express.Router();
 const PT = require('../partyTypes');
@@ -258,6 +259,34 @@ router.post('/admin/company', auth.requirePerm('settings'), (req, res) => {
   if (Number.isInteger(Number(req.body.ar_terms_days))) store.db.setSetting('ar_terms_days', Number(req.body.ar_terms_days));
   flash(req, 'ok', 'Company profile saved');
   res.redirect('/admin/company');
+});
+
+// ---------- email setup: is sending connected, send a test, re-send what was held ----------
+const heldSince = () => new Date(Date.now() - 3 * 86400000).toISOString().replace('T', ' ').slice(0, 19);
+router.get('/admin/email-setup', auth.requirePerm('settings'), (req, res) => {
+  const db = store.db;
+  const held = db.get("SELECT COUNT(*) AS n FROM emails WHERE status IN ('LOGGED', 'FAILED') AND created_at >= ?", heldSince()).n;
+  const heldAll = db.get("SELECT COUNT(*) AS n FROM emails WHERE status IN ('LOGGED', 'FAILED')").n;
+  const lastFail = db.get("SELECT id, subject, to_addr, error, created_at FROM emails WHERE status = 'FAILED' ORDER BY id DESC LIMIT 1");
+  const lastSent = db.get("SELECT id, subject, to_addr, sent_at FROM emails WHERE status = 'SENT' ORDER BY id DESC LIMIT 1");
+  res.render('admin/email-setup', { title: 'Email setup', held, heldAll, lastFail, lastSent, testTo: req.query.to || config.company.email });
+});
+router.post('/admin/email-setup/test', auth.requirePerm('settings'), async (req, res) => {
+  const to = String(req.body.to || '').trim();
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(to)) { flash(req, 'err', 'Enter an email address to send the test to'); return res.redirect('/admin/email-setup'); }
+  const id = await notify.queueEmail({ kind: 'TEST', to: [to], subject: 'GB Logix — test email', html: `<p>This is a test from GB Logix (${new Date().toISOString().slice(0, 16).replace('T', ' ')} UTC).</p><p>If you can read this, A/N, D/O, invoices and statements will be delivered too.</p>` });
+  const e = store.db.get('SELECT status, error FROM emails WHERE id = ?', id);
+  if (e.status === 'SENT') flash(req, 'ok', `✔ Test email sent to ${to} — check the inbox (and the junk folder the first time)`);
+  // LOGGED / FAILED: the general check after a POST shows why.
+  res.redirect(`/admin/email-setup?to=${encodeURIComponent(to)}`);
+});
+router.post('/admin/email-setup/resend', auth.requirePerm('settings'), async (req, res) => {
+  if (config.mailTransport === 'log') { flash(req, 'err', 'Connect the mailbox first (steps below), restart, then re-send'); return res.redirect('/admin/email-setup'); }
+  const rows = store.db.all("SELECT id FROM emails WHERE status IN ('LOGGED', 'FAILED') AND created_at >= ? ORDER BY id", heldSince());
+  for (const r of rows) await notify.deliver(r.id); // eslint-disable-line no-await-in-loop
+  const left = store.db.get(`SELECT COUNT(*) AS n FROM emails WHERE id IN (${rows.map((r) => r.id).join(',') || 0}) AND status <> 'SENT'`).n;
+  req.session.flash = { type: left ? 'err' : 'ok', msg: left ? `${rows.length - left} sent, ${left} still not sent — see the Outbox for the reason` : `✔ ${rows.length} held email(s) sent` };
+  res.redirect('/admin/email-setup');
 });
 
 // ---------- outbox — staff ----------

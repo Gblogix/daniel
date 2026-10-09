@@ -70,6 +70,7 @@ const MENU = [
     { head: 'Settings', items: [
       { id: 'settings', label: 'Automation / Smartsheet / tracking', href: '/admin/settings', perm: 'settings' },
       { id: 'company', label: 'Company profile & numbering', href: '/admin/company', perm: 'settings' },
+      { id: 'email-setup', label: 'Email setup — test sending', href: '/admin/email-setup', perm: 'settings' },
     ] },
   ] },
 ];

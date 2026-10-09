@@ -364,7 +364,10 @@ router.post('/shipments/:id/actions/:action', auth.requirePerm('send_notices'), 
   const id = Number(req.params.id);
   const fn = ACTIONS[req.params.action];
   if (!fn) return res.status(400).render('error', { title: 'Unknown action', message: 'Unknown action.' });
-  flash(req, 'ok', await fn(id, req.user));
+  const since = notify.lastEmailId();
+  const msg = await fn(id, req.user);
+  const problem = notify.deliveryProblem(since);
+  flash(req, problem ? 'err' : 'ok', problem || msg);
   res.redirect(safeBack(req.body.back) || `/shipments/${id}#emails`);
 });
 
@@ -414,11 +417,13 @@ router.post('/shipments/:id/email/:kind', auth.requirePerm('send_notices'), uplo
     extraDocs.push(store.db.get('SELECT * FROM documents WHERE id = ?', Number(r.lastInsertRowid)));
   }
   try {
+    const since = notify.lastEmailId();
     await notify.sendComposed({
       kind, shipmentId: id, to: addrList(b.to), cc: addrList([b.cc, ...me].join(',')), bcc: addrList(b.bcc), replyTo: addrList(b.reply_to),
       subject: String(b.subject || '').trim().slice(0, 300), html: String(b.html || ''), generate: arr(b.generate), docIds: arr(b.doc_ids).map(Number).filter(Boolean), extraDocs,
     }, { userId: req.user.id });
-    flash(req, 'ok', `Email sent — a copy is on the file${config.mailTransport === 'outlook' ? ' and in Outlook Sent Items' : ''}`);
+    const problem = notify.deliveryProblem(since);
+    flash(req, problem ? 'err' : 'ok', problem || `Email sent — a copy is on the file${config.mailTransport === 'outlook' ? ' and in Outlook Sent Items' : ''}`);
     res.redirect(`/shipments/${id}#emails`);
   } catch (e) {
     flash(req, 'err', e.message);

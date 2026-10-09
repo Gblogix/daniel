@@ -1,0 +1,47 @@
+<%- include('../partials/head') %>
+<% const on = config.mailTransport !== 'log'; %>
+<div class="pagehead"><h1>Email setup</h1><a class="btn secondary" href="/outbox">Outbox</a></div>
+
+<div class="card" style="max-width:860px">
+  <% if (on) { %>
+    <p><span class="badge SENT">✔ Connected</span> Sending from <b><%= config.mailTransport === 'outlook' ? config.graph.mailbox : config.smtp.from %></b>
+      <span class="muted small">(<%= config.mailTransport === 'outlook' ? 'Microsoft 365 / Outlook — copies land in Sent Items' : `SMTP ${config.smtp.host}` %>)</span></p>
+  <% } else { %>
+    <p><span class="badge unpaid">✗ Not connected</span> <b>Emails are not sent.</b> A/N, D/O, invoices and statements are only saved in the Outbox until the mailbox is connected (steps below).</p>
+  <% } %>
+  <% if (lastSent) { %><p class="small muted">Last sent: <%= fmtDateTime(lastSent.sent_at) %> UTC — “<%= lastSent.subject %>” to <%= lastSent.to_addr %></p><% } %>
+  <% if (lastFail) { %><p class="small" style="color:var(--red)">Last failure (<%= fmtDateTime(lastFail.created_at) %> UTC, to <%= lastFail.to_addr %>): <%= lastFail.error %></p><% } %>
+
+  <form method="post" action="/admin/email-setup/test" class="actions" style="margin-top:10px">
+    <input type="hidden" name="_csrf" value="<%= csrf %>">
+    <input name="to" type="email" value="<%= testTo %>" required style="max-width:300px" aria-label="Send the test to">
+    <button class="btn">✉ Send a test email</button>
+  </form>
+
+  <% if (held) { %>
+  <form method="post" action="/admin/email-setup/resend" style="margin-top:12px">
+    <input type="hidden" name="_csrf" value="<%= csrf %>">
+    <p class="small"><b><%= held %></b> email(s) from the last 3 days were not sent<%= heldAll > held ? ` (${heldAll - held} older ones stay in the Outbox — re-send those one by one if still needed)` : '' %>.</p>
+    <button class="btn secondary" <%= on ? '' : 'disabled' %> data-confirm="Send the <%= held %> held email(s) now?">↻ Send the held emails now</button>
+  </form><% } %>
+</div>
+
+<div class="card" style="max-width:860px">
+  <h2>Connect the Microsoft 365 mailbox (one time, about 10 minutes)</h2>
+  <p class="small muted">Done by the Microsoft 365 admin. The system then sends from <b><%= config.graph.mailbox %></b> and every email is also kept in its Sent Items.</p>
+  <ol class="small" style="line-height:1.7;padding-left:18px">
+    <li>Open <b>entra.microsoft.com</b> (sign in with the Microsoft 365 admin account) → <b>Applications › App registrations › New registration</b>. Name: <code>GB Logix</code>, "Single tenant" → <b>Register</b>.</li>
+    <li>On the app's <b>Overview</b> page copy <b>Application (client) ID</b> and <b>Directory (tenant) ID</b>.</li>
+    <li><b>Certificates &amp; secrets › New client secret</b> (24 months) → copy the <b>Value</b> right away (it is shown only once). Put a reminder in your calendar before it expires.</li>
+    <li><b>API permissions › Add a permission › Microsoft Graph › Application permissions</b> → tick <b>Mail.Send</b> → Add.
+      Then press <b>Grant admin consent for …</b> (the status must turn green ✔).</li>
+    <li>On the server PC open the <code>.env</code> file (next to start-windows.bat) and add — do not paste these anywhere else:
+      <pre class="small" style="background:var(--soft);padding:8px;border-radius:6px">MS_TENANT_ID=…directory (tenant) id…
+MS_CLIENT_ID=…application (client) id…
+MS_CLIENT_SECRET=…secret value…
+MS_MAILBOX=<%= config.graph.mailbox %></pre></li>
+    <li>Run <code>server-tools\restart-server.bat</code> as administrator, come back to this page and press <b>Send a test email</b>.</li>
+  </ol>
+  <p class="small muted">Optional, recommended: an Exchange "application access policy" can limit the app to this one mailbox. Reading agent emails into the Document hub needs Mail.Read as well (MS_MAIL_INTAKE=on).</p>
+</div>
+<%- include('../partials/foot') %>

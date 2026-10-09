@@ -138,6 +138,18 @@ async function deliver(emailId, { db = store.db } = {}) {
   }
 }
 
+/**
+ * What became of the emails written after `sinceId` (one action may write several): null when all went out,
+ * else a message for the screen — not set up (kept in the Outbox) or the delivery error.
+ */
+function deliveryProblem(sinceId, { db = store.db } = {}) {
+  const rows = db.all("SELECT status, error, to_addr FROM emails WHERE id > ? AND status IN ('LOGGED', 'FAILED')", sinceId);
+  if (!rows.length) return null;
+  if (rows.some((r) => r.status === 'LOGGED')) return 'Not sent — email sending is not set up yet, so it was only saved in the Outbox. An admin can connect the mailbox in Administration › Email setup, then press Re-send.';
+  return `Not sent to ${rows[0].to_addr}: ${rows[0].error || 'delivery failed'} (see Outbox — Re-send after fixing)`;
+}
+const lastEmailId = (db = store.db) => db.get('SELECT COALESCE(MAX(id), 0) AS id FROM emails').id;
+
 // ---------- email bodies ----------
 
 function progressHtml(s) {
@@ -322,6 +334,6 @@ async function sendComposed({ kind, shipmentId, to, cc = [], bcc = [], replyTo =
 }
 
 module.exports = { COMPOSE, composeDefaults, sendComposed,
-  docContext, storeGenerated, subjectLine, recipients, generateDocument, queueEmail, deliver, summaryHtml,
+  docContext, storeGenerated, subjectLine, recipients, generateDocument, queueEmail, deliver, summaryHtml, deliveryProblem, lastEmailId,
   sendBrokerPacket, sendCustomerUpdate, sendDeliveryOrder, onDocumentsApplied, onShipmentChanged,
 };
