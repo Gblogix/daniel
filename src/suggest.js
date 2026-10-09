@@ -18,10 +18,11 @@ const FIELDS = {
   country: [['companies', 'country']], new_party_name: [['companies', 'name']],
 };
 
-function suggest(field, q, { db = store.db, limit = 8 } = {}) {
+// all: an empty term lists the most used values (charge items open as a drop-down that shows them on click).
+function suggest(field, q, { db = store.db, limit = 8, all = false } = {}) {
   const src = FIELDS[field];
   const term = String(q || '').trim();
-  if (!src || term.length < 1) return [];
+  if (!src || (term.length < 1 && !all)) return [];
   const like = term.replace(/[\\%_]/g, (c) => `\\${c}`);
   const counts = new Map();
   for (const [table, col] of src) {

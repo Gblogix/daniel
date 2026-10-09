@@ -103,7 +103,8 @@ router.get('/parties/lookup.json', auth.requireInternal, (req, res) => {
 
 // Type-ahead for text fields (values used on earlier files).
 router.get('/suggest.json', auth.requireInternal, (req, res) => {
-  res.json(require('../suggest').suggest(String(req.query.f || ''), String(req.query.q || '').slice(0, 80)));
+  const all = req.query.all === '1';
+  res.json(require('../suggest').suggest(String(req.query.f || ''), String(req.query.q || '').slice(0, 80), all ? { all, limit: 40 } : {}));
 });
 
 router.get('/search.json', auth.requireInternal, (req, res) => {

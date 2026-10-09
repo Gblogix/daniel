@@ -21,6 +21,7 @@ test('suggests earlier values: starts-with first, then most used; whitelisted fi
   assert.deepEqual(suggest('carrier', 'sam'), ['SAMPLE LINES']);
   assert.deepEqual(suggest('password_hash', 'a'), []);
   assert.deepEqual(suggest('pol', ''), []);
+  assert.deepEqual(suggest('pod', '', { all: true }), ['LONG BEACH, CA', 'LOS ANGELES, CA'], 'drop-down on click: most used first');
   assert.deepEqual(suggest('l_desc', 'freight'), [], 'no history yet (the fixed charge items come with the page)');
   assert.deepEqual(suggest('pol', '%'), [], 'LIKE wildcards are literal');
   for (const f of Object.keys(FIELDS)) assert.doesNotThrow(() => suggest(f, 'x'), f);

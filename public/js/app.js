@@ -299,11 +299,12 @@ document.querySelectorAll('select[data-party-search], select:not([multiple])').f
     gbSuggestBox(input, async (q) => {
       const ql = q.toLowerCase();
       const local = fixed.filter((it) => !ql || it.label.toLowerCase().includes(ql) || it.sub.toLowerCase().includes(ql));
-      if (q.length < 2) return dl ? local : [];
+      if (q.length < 2 && !dl) return [];
+      // Fixed lists also show items typed on earlier invoices (not in the list) — at the top, so they are seen on click.
       const key = `${input.name}|${ql}`;
-      if (!cache.has(key)) cache.set(key, fetch(`/suggest.json?f=${encodeURIComponent(input.name)}&q=${encodeURIComponent(q)}`).then((r) => r.json()).catch(() => []));
-      const server = (await cache.get(key)).filter((v) => !fixed.some((it) => it.label === v)).map((v) => ({ label: v, sub: 'used before' }));
-      return [...local, ...server].filter((it) => it.label !== q).slice(0, dl ? 30 : 8);
+      if (!cache.has(key)) cache.set(key, fetch(`/suggest.json?f=${encodeURIComponent(input.name)}&q=${encodeURIComponent(q)}${dl ? '&all=1' : ''}`).then((r) => r.json()).catch(() => []));
+      const server = (await cache.get(key)).filter((v) => !fixed.some((it) => it.label.toLowerCase() === String(v).toLowerCase())).map((v) => ({ label: v, sub: 'used before' }));
+      return dl ? [...server, ...local].filter((it) => it.label !== q).slice(0, 80) : [...local, ...server].filter((it) => it.label !== q).slice(0, 8);
     }, (it) => { input.value = it.label; input.dispatchEvent(new Event('input', { bubbles: true })); input.dispatchEvent(new Event('change', { bubbles: true })); });
   };
   document.querySelectorAll('input[name]').forEach(attach);
@@ -444,8 +445,14 @@ document.querySelectorAll('input[data-dup-check]').forEach((inp) => {
     if (form.dataset.dupOk) return;
     e.preventDefault();
     const submitter = e.submitter;
+    // Re-submit on a fresh task: while the first submit event is still being dispatched (an A/R has nothing to check,
+    // so the await resolves at once) the browser silently ignores requestSubmit — the button then did nothing.
+    const go = () => setTimeout(() => {
+      form.dataset.dupOk = '1';
+      if (submitter && submitter.form === form) form.requestSubmit(submitter); else HTMLFormElement.prototype.submit.call(form);
+    }, 0);
     await check();
-    if (!last.same.length) { form.dataset.dupOk = '1'; return submitter ? form.requestSubmit(submitter) : form.submit(); }
+    if (!last.same.length) return go();
     const dlg = document.createElement('dialog');
     dlg.className = 'dup-dialog';
     dlg.innerHTML = `<h3>⚠ This invoice is already booked</h3>
@@ -463,8 +470,7 @@ document.querySelectorAll('input[data-dup-check]').forEach((inp) => {
       dlg.close(); dlg.remove();
       if (x === 'anyway') {
         const h = document.createElement('input'); h.type = 'hidden'; h.name = 'allow_duplicate'; h.value = '1'; form.appendChild(h);
-        form.dataset.dupOk = '1';
-        if (submitter) form.requestSubmit(submitter); else form.submit();
+        go();
       }
     });
   });
