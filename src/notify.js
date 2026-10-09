@@ -78,7 +78,8 @@ async function generateDocument(shipmentId, type, { db = store.db, userId = null
   if (!s) throw new Error('Shipment not found');
   // Re-issuing a document marks it as a revision (…_Rev, …_Rev2), as brokers expect.
   const revision = db.get("SELECT COUNT(*) AS n FROM documents WHERE shipment_id = ? AND doc_type = ? AND source = 'generated'", s.id, type).n;
-  const html = GENERATORS[type](s, { ...docContext(s, { db, userId }), revision, ...options });
+  // The A/N goes out without prices unless asked for (send window tick).
+  const html = GENERATORS[type](s, { ...docContext(s, { db, userId }), revision, ...(type === 'AN' ? { prices: false } : {}), ...options });
   // Nothing with charges on it is shown in the customer portal (the A/N is emailed; staff can share it per shipment).
   return storeGenerated(db, { shipmentId: s.id, type, base: fileName(type, s, revision), html, visible: false, userId, refNo: s.ref_no });
 }
@@ -184,7 +185,6 @@ ${progressHtml(s)}
 </table>
 ${items ? `<h4 style="margin:16px 0 4px">Packing list</h4><table style="border-collapse:collapse;font-size:13px">
 <tr><th ${td}>PO</th><th ${td}>Description</th><th ${td}>Qty</th><th ${td}>Pkgs</th></tr>${items}</table>` : ''}
-<p style="margin-top:16px"><a href="${config.baseUrl}/shipments/${s.id}" style="background:#0b3d91;color:#fff;padding:8px 14px;border-radius:6px;text-decoration:none">View live tracking</a></p>
 <p style="color:#666;font-size:12px">${esc(config.company.name)} · ${esc(config.company.email)}</p></div>`;
 }
 
@@ -318,7 +318,7 @@ function composeDefaults(kind, shipmentId, { db = store.db } = {}) {
 }
 
 /** Send what the person reviewed: generate the notices ticked, attach the files ticked, then the usual follow-ups. */
-async function sendComposed({ kind, shipmentId, to, cc = [], bcc = [], replyTo = [], subject, html, generate = [], docIds = [], extraDocs = [], anPrices = true }, { db = store.db, userId = null } = {}) {
+async function sendComposed({ kind, shipmentId, to, cc = [], bcc = [], replyTo = [], subject, html, generate = [], docIds = [], extraDocs = [], anPrices = false }, { db = store.db, userId = null } = {}) {
   const c = COMPOSE[kind];
   const s = S.find(shipmentId, null, { db });
   if (!to.length) throw new Error('Add at least one recipient');

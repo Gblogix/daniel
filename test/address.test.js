@@ -26,3 +26,22 @@ test('A/N without prices: no charges, no amount due, no invoice no.', () => {
   assert.doesNotMatch(without, /500\.00/);
   assert.doesNotMatch(without, /GBL-INV1/);
 });
+
+test('the A/N is generated without prices unless asked for', async () => {
+  const fs = require('node:fs'); const os = require('node:os'); const path = require('node:path');
+  process.env.UPLOAD_DIR = process.env.UPLOAD_DIR || fs.mkdtempSync(path.join(os.tmpdir(), 'gbl-an-'));
+  const store = require('../src/db');
+  store.db = store.open(':memory:');
+  require('../src/seed').seedDemo(store.db);
+  const S = require('../src/shipments'); const A = require('../src/accounting'); const notify = require('../src/notify');
+  const s = S.list({ role: 'staff' })[0];
+  A.saveInvoice({ kind: 'AR', shipment_id: s.id, company_id: s.customer_id || store.db.get("SELECT id FROM companies LIMIT 1").id, lines: [{ description: 'AIR FREIGHT', amount: 777 }] });
+  const read = (d) => fs.readFileSync(d.stored_path).toString('latin1');
+  const plain = await notify.generateDocument(s.id, 'AN');
+  const priced = await notify.generateDocument(s.id, 'AN', { options: { prices: true } });
+  if (plain.mime === 'text/html') {
+    assert.doesNotMatch(read(plain), /777\.00/);
+    assert.match(read(priced), /777\.00/);
+  }
+  await require('../src/docs/pdf').close?.();
+});

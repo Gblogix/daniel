@@ -384,14 +384,14 @@ router.get('/shipments/:id/preview/:type', auth.requireInternal, (req, res) => {
   const s = S.find(Number(req.params.id), null);
   if (!GENERATORS[type] || !s) return res.status(404).render('error', { title: 'Not found', message: 'Unknown document.' });
   res.set('Content-Security-Policy', "default-src 'none'; style-src 'unsafe-inline'; img-src data:");
-  res.type('html').send(GENERATORS[type](s, { ...notify.docContext(s, { userId: req.user.id }), ...(req.query.prices === '0' ? { prices: false } : {}) }));
+  res.type('html').send(GENERATORS[type](s, { ...notify.docContext(s, { userId: req.user.id }), ...(type === 'AN' ? { prices: req.query.prices === '1' } : {}) }));
 });
 
 // Issue (save) a document without emailing it — e.g. to download and send manually.
 router.post('/shipments/:id/issue/:type', auth.requirePerm('send_notices'), async (req, res) => {
   const type = req.params.type.toUpperCase();
   if (!['AN', 'DO', 'ATME'].includes(type)) return res.status(400).render('error', { title: 'Unknown document', message: 'Unknown document type.' });
-  const d = await notify.generateDocument(Number(req.params.id), type, { userId: req.user.id });
+  const d = await notify.generateDocument(Number(req.params.id), type, { userId: req.user.id, options: type === 'AN' ? { prices: req.body.prices === '1' } : {} });
   flash(req, 'ok', `${d.filename} issued`);
   res.redirect(`/shipments/${req.params.id}#docs`);
 });
@@ -436,7 +436,7 @@ router.get('/shipments/:id/doc/:type', auth.requireInternal, (req, res) => {
   const type = req.params.type.toUpperCase();
   const s = S.find(Number(req.params.id), null);
   if (!['AN', 'DO', 'ATME'].includes(type) || !s) return res.status(404).render('error', { title: 'Not found', message: 'Unknown document.' });
-  res.render('shipments/docview', { title: `${{ AN: 'Arrival notice', DO: 'Delivery order', ATME: 'ATME' }[type]} · ${s.ref_no}`, s, type, prices: req.query.prices !== '0' });
+  res.render('shipments/docview', { title: `${{ AN: 'Arrival notice', DO: 'Delivery order', ATME: 'ATME' }[type]} · ${s.ref_no}`, s, type, prices: req.query.prices === '1' });
 });
 
 // ---------- documents ----------

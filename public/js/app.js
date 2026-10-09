@@ -710,6 +710,6 @@ document.querySelectorAll('[data-an-prices]').forEach((box) => {
   const link = document.querySelector('[data-an-preview]');
   if (!link) return;
   const base = link.getAttribute('href').split('?')[0];
-  const sync = () => link.setAttribute('href', box.checked ? base : `${base}?prices=0`);
+  const sync = () => link.setAttribute('href', box.checked ? `${base}?prices=1` : base);
   box.addEventListener('change', sync); sync();
 });
