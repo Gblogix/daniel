@@ -736,17 +736,30 @@ document.querySelectorAll('[data-an-prices]').forEach((box) => {
   box.addEventListener('change', sync); sync();
 });
 
-// File form: the section bar shows where you are; Ctrl+S saves.
+// File form: OPUS-style tabs (the open tab is kept after saving); Ctrl+S saves.
 document.querySelectorAll('.fileform').forEach((wrap) => {
-  const nav = wrap.querySelector('.form-nav');
-  const links = nav ? [...nav.querySelectorAll('a')] : [];
-  if (links.length && 'IntersectionObserver' in window) {
-    const io = new IntersectionObserver((entries) => {
-      entries.forEach((en) => { if (en.isIntersecting) links.forEach((a) => a.classList.toggle('on', a.getAttribute('href') === `#${en.target.id}`)); });
-    }, { rootMargin: '-60px 0px -70% 0px' });
-    links.forEach((a) => { const el = wrap.querySelector(a.getAttribute('href')); if (el) io.observe(el); });
-  }
   const form = wrap.closest('form');
+  const tabs = [...wrap.querySelectorAll('.ff-tabs [data-tab]')];
+  const panes = [...wrap.querySelectorAll('.ff-pane')];
+  if (tabs.length) {
+    const key = `gb.tab.${location.pathname}`;
+    const show = (name) => {
+      if (!tabs.some((t) => t.dataset.tab === name && !t.hidden)) name = 'main'; // e.g. Containers after switching to air
+      tabs.forEach((t) => { const on = t.dataset.tab === name; t.classList.toggle('on', on); t.setAttribute('aria-selected', String(on)); });
+      panes.forEach((p) => { p.hidden = p.dataset.pane !== name; });
+      try { sessionStorage.setItem(key, name); } catch (err) { /* storage blocked */ }
+    };
+    tabs.forEach((t) => t.addEventListener('click', (e) => { e.preventDefault(); show(t.dataset.tab); }));
+    let first = 'main';
+    try { first = sessionStorage.getItem(key) || 'main'; } catch (err) { /* storage blocked */ }
+    show(first);
+    form?.querySelector('[name="mode"]')?.addEventListener('change', () => show(tabs.find((t) => t.classList.contains('on'))?.dataset.tab));
+    // A box the browser rejects on save may sit on a closed tab: open that tab so the message can show.
+    form?.addEventListener('invalid', (e) => { const p = e.target.closest?.('.ff-pane'); if (p && p.hidden) show(p.dataset.pane); }, true);
+    // Links to a section (#ctns, #items…) open its tab.
+    const fromHash = () => { const h = location.hash.slice(1); if (tabs.some((t) => t.dataset.tab === h)) { show(h); wrap.scrollIntoView({ block: 'start' }); } };
+    window.addEventListener('hashchange', fromHash); fromHash();
+  }
   if (form) document.addEventListener('keydown', (e) => {
     if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 's') { e.preventDefault(); const btn = form.querySelector('.save-bar .btn') || form.querySelector('button.btn:not([type=button])'); if (btn) btn.click(); }
   });

@@ -72,9 +72,20 @@
   </div>
 </div>
 
+<%# The file itself first, OPUS style: one screen with tabs. Work tools and history below. %>
+<form method="post" action="/shipments/<%= s.id %>">
+  <input type="hidden" name="_csrf" value="<%= csrf %>">
+  <fieldset class="plainset" <%= locked ? 'disabled' : '' %>>
+  <%- include('../partials/fields', { s }) %>
+  </fieldset>
+  <% if (locked) { %><p class="muted small">🔒 Locked — view only<%= isAdmin ? '. Unlock at the top of the page to make a change.' : '. Ask an admin to unlock it.' %></p><% } else if (can('shipments_edit')) { %><div class="actions save-bar"><button class="btn">Save changes</button><span class="muted small">Ctrl+S</span></div><% } else { %><p class="muted small">View only — you do not have the "Create / edit shipments" permission.</p><% } %>
+</form>
+
+<div class="grid file-below" style="grid-template-columns: minmax(0, 2fr) minmax(300px, 1fr); align-items: start">
+  <div>
 <div class="card next-actions <%= nextActions.length ? '' : 'clear' %>">
   <h2 style="margin-bottom:4px"><%= nextActions.length ? `Next actions (${nextActions.length})` : '✔ Nothing pending on this file' %>
-    <span class="muted small" style="font-weight:400"> · PIC: <a href="#pic"><%= s.owner_name || 'not assigned' %></a></span></h2>
+    <span class="muted small" style="font-weight:400"> · PIC: <a href="#file-form"><%= s.owner_name || 'not assigned' %></a></span></h2>
   <% nextActions.forEach((i) => { %><%- include('../partials/fu-item', { i, back: `/shipments/${s.id}`, showFile: false }) %><% }) %>
   <details class="addtask"><summary class="small">＋ Add a task for this file</summary>
     <form method="post" action="/tasks" class="taskform"><input type="hidden" name="_csrf" value="<%= csrf %>"><input type="hidden" name="shipment_id" value="<%= s.id %>"><input type="hidden" name="back" value="/shipments/<%= s.id %>">
@@ -230,15 +241,7 @@
   </form></details><% } %>
 </div>
 <% } %>
-
-<div class="grid" style="grid-template-columns: minmax(0, 2fr) minmax(300px, 1fr); align-items: start">
-  <form method="post" action="/shipments/<%= s.id %>">
-    <input type="hidden" name="_csrf" value="<%= csrf %>">
-    <fieldset class="plainset" <%= locked ? 'disabled' : '' %>>
-    <%- include('../partials/fields', { s }) %>
-    </fieldset>
-    <% if (locked) { %><p class="muted small">🔒 Locked — view only<%= isAdmin ? '. Unlock at the top of the page to make a change.' : '. Ask an admin to unlock it.' %></p><% } else if (can('shipments_edit')) { %><div class="actions save-bar"><button class="btn">Save changes</button><span class="muted small">Ctrl+S</span></div><% } else { %><p class="muted small">View only — you do not have the "Create / edit shipments" permission.</p><% } %>
-  </form>
+  </div>
 
   <div>
     <% if (!misc) { %><div class="card"><h2>Clearance & release</h2><%- include('../partials/checklist', { s }) %></div><% } %>
