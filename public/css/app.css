@@ -894,3 +894,4 @@ input.just-picked { outline: 2px solid #22c55e; outline-offset: 1px; }
 .ff-units { gap: 3px; }
 .ff-units > span { width: 22px; font-size: 10px; }
 .fileform.opus input.party-search.combo { padding-right: 24px; }
+input.party-search.missing-pick { border-color: #f87171; box-shadow: 0 0 0 3px rgba(248,113,113,.25); }

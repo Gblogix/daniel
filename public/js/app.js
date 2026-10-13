@@ -267,6 +267,22 @@ document.querySelectorAll('select[data-party-search], select:not([multiple])').f
     }, 160));
     sel.addEventListener('change', () => { if (document.activeElement !== box) box.value = chosen(); });
   }
+  // A name typed in the box but not picked from the list: on Save, pick the matching party instead of the browser
+  // silently refusing the form ("Please select an item" on the drop-down below the box).
+  if (sel.form && !sel.dataset.typedPick) {
+    sel.dataset.typedPick = '1';
+    sel.form.addEventListener('click', (e) => {
+      if (!e.target.closest?.('button:not([type=button]), input[type=submit]') || sel.value) return;
+      const t = box.value.trim().toLowerCase();
+      if (!t) return;
+      const all = opts();
+      const hit = all.find((o) => o.textContent.trim().toLowerCase() === t)
+        || ((m) => (m.length === 1 ? m[0] : null))(all.filter((o) => o.textContent.trim().toLowerCase().startsWith(t)))
+        || ((m) => (m.length === 1 ? m[0] : null))(all.filter((o) => o.textContent.trim().toLowerCase().includes(t)));
+      if (hit) { sel.value = hit.value; sel.dispatchEvent(new Event('change', { bubbles: true })); if (compact) box.value = chosen(); }
+    }, true);
+    sel.addEventListener('invalid', () => { box.classList.add('missing-pick'); box.focus(); setTimeout(() => box.classList.remove('missing-pick'), 2500); });
+  }
   gbSuggestBox(box, (q) => {
     const typed = compact && q === chosen() ? '' : q; // focusing a filled box lists everything
     if (!typed && !compact) return [];
@@ -449,7 +465,10 @@ document.querySelectorAll('input[data-dup-check]').forEach((inp) => {
     // so the await resolves at once) the browser silently ignores requestSubmit — the button then did nothing.
     const go = () => setTimeout(() => {
       form.dataset.dupOk = '1';
-      if (submitter && submitter.form === form) form.requestSubmit(submitter); else HTMLFormElement.prototype.submit.call(form);
+      if (submitter && submitter.form === form && form.requestSubmit) { form.requestSubmit(submitter); return; }
+      // Older browsers (no requestSubmit / e.submitter): send the pressed button's value along by hand.
+      if (submitter?.name) { const h = document.createElement('input'); h.type = 'hidden'; h.name = submitter.name; h.value = submitter.value; form.appendChild(h); }
+      HTMLFormElement.prototype.submit.call(form);
     }, 0);
     await check();
     if (!last.same.length) return go();
