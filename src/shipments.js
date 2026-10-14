@@ -134,6 +134,8 @@ function update(id, input, { db = store.db } = {}) {
     const sets = changes.map((c) => `${c.field} = ?`).join(', ');
     db.run(`UPDATE shipments SET ${sets}, updated_at = datetime('now') WHERE id = ?`, ...changes.map((c) => c.to), id);
     if (changes.some((c) => c.field === 'status')) refreshClosed(id, { db });
+    const ata = changes.find((c) => c.field === 'ata');
+    if (ata && (data.mode || current.mode) === 'AIR') closeOnAta(id, ata.to, { db });
   }
   if (!current.master_id || changes.some((c) => ['mbl_no', 'mode', 'master_id'].includes(c.field))) require('./masters').linkHouse(id, { db });
   if (changes.some((c) => AUTOFILL_KEYS.includes(c.field))) require('./autofill').apply(id, { db });
@@ -545,6 +547,23 @@ function refreshClosed(id, { db = store.db } = {}) {
     return 'reopened';
   }
   return null;
+}
+
+/**
+ * Air files: the ATA (actual arrival) finishes the file — it moves to Shipment history. Clearing the ATA brings it
+ * back if it was closed that way. closed_by = 0 marks a system close that refreshClosed leaves alone.
+ */
+function closeOnAta(id, ata, { db = store.db } = {}) {
+  const s = db.get('SELECT closed_at FROM shipments WHERE id = ?', id);
+  if (ata && !s.closed_at) {
+    db.run("UPDATE shipments SET closed_at = datetime('now'), closed_by = 0 WHERE id = ?", id);
+    addEvent(id, 'CLOSED', `File closed — ATA ${ata} entered (air; moved to Shipment history)`, { db, customerVisible: false });
+  } else if (!ata && s.closed_at) {
+    const last = db.get("SELECT message FROM events WHERE shipment_id = ? AND type IN ('CLOSED', 'REOPENED') ORDER BY id DESC LIMIT 1", id);
+    if (!/ATA/.test(last?.message || '')) return;
+    db.run('UPDATE shipments SET closed_at = NULL, closed_by = NULL WHERE id = ?', id);
+    addEvent(id, 'REOPENED', 'File reopened — ATA cleared', { db, customerVisible: false });
+  }
 }
 
 /** Manual close / reopen by accounting staff (e.g. no invoice needed, or written off). */

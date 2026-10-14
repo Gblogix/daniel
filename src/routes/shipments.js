@@ -256,7 +256,7 @@ router.post('/shipments/:id', auth.requirePerm('shipments_edit'), async (req, re
   const cur = store.db.get('SELECT eta, tracking_checked_at FROM shipments WHERE id = ?', id);
   if (changes.some((c) => c.field === 'mbl_no') || !cur?.eta || !cur?.tracking_checked_at) require('../tracking').refreshSoon(id, { userId: req.user.id });
   const miss = S.missingRequired(S.find(id, null));
-  flash(req, 'ok', `${changes.length ? `Saved (${changes.length} field${changes.length > 1 ? 's' : ''} changed)` : 'Saved'}${addedCustomer ? ` · ${addedCustomer} added to Parties as a new customer` : ''}${miss.length ? ` · still required: ${miss.join(', ')}` : ''}`);
+  flash(req, 'ok', `${changes.length ? `Saved (${changes.length} field${changes.length > 1 ? 's' : ''} changed)` : 'Saved'}${addedCustomer ? ` · ${addedCustomer} added to Parties as a new customer` : ''}${miss.length ? ` · still required: ${miss.join(', ')}` : ''}${ataClose(id, changes)}`);
   res.redirect(`/shipments/${id}`);
 });
 
@@ -315,6 +315,15 @@ router.post('/memos/:id/delete', auth.requireInternal, (req, res) => {
 
 // ---------- accounting inside the file ----------
 /** Quick entry from the shipment page: one invoice / vendor bill with its lines, booked to this file. */
+// Air: the ATA closes the file (S.update) — say so after saving.
+function ataClose(id, changes) {
+  const c = changes.find((x) => x.field === 'ata');
+  if (!c) return '';
+  const s = store.db.get('SELECT mode, closed_at FROM shipments WHERE id = ?', id);
+  if (s?.mode !== 'AIR') return '';
+  return c.to && s.closed_at ? ' · ATA entered — file closed (moved to Shipment history)' : !c.to && !s.closed_at ? ' · ATA cleared — file reopened' : '';
+}
+
 router.post('/shipments/:id/accounting', auth.requireAccounting, (req, res) => {
   const id = Number(req.params.id);
   const s = S.find(id, null);

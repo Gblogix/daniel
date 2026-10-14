@@ -118,3 +118,18 @@ test('start fresh: removes shipments, invoices and demo logins; keeps admin and 
   assert.equal(db.get('SELECT COUNT(*) AS n FROM companies').n, parties);
   assert.equal(db.get("SELECT COUNT(*) AS n FROM companies WHERE emails LIKE '%.example%'").n, 0);
 });
+
+test('air: entering the ATA closes the file, clearing it reopens; ocean files stay open', () => {
+  const air = S.create({ mode: 'AIR', hbl_no: 'ATA-T1', mbl_no: '999-11112222' });
+  S.update(air, { ata: '2026-10-13' });
+  const a = db.get('SELECT closed_at, closed_by FROM shipments WHERE id = ?', air);
+  assert.ok(a.closed_at, 'closed');
+  assert.equal(a.closed_by, 0);
+  S.refreshClosed(air);
+  assert.ok(db.get('SELECT closed_at FROM shipments WHERE id = ?', air).closed_at, 'not reopened by the paid / delivered check');
+  S.update(air, { ata: '' });
+  assert.equal(db.get('SELECT closed_at FROM shipments WHERE id = ?', air).closed_at, null, 'reopened');
+  const fcl = S.create({ mode: 'FCL', hbl_no: 'ATA-T2' });
+  S.update(fcl, { ata: '2026-10-13' });
+  assert.equal(db.get('SELECT closed_at FROM shipments WHERE id = ?', fcl).closed_at, null);
+});
