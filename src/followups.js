@@ -104,8 +104,8 @@ function shipmentItems(s, { now = new Date(), docs = new Set() } = {}) {
     add('lfd', lfd.days <= 0 ? 'critical' : 'high', lfd.days < 0 ? `LFD passed ${-lfd.days}d ago — storage running` : lfd.days === 0 ? 'LFD is TODAY' : `LFD in ${lfd.days} day(s)`,
       s.pickup_appt ? `Pick-up appointment ${String(s.pickup_appt).slice(0, 16)}` : 'No pick-up appointment yet — book with the trucker', lfd.date, { label: 'Open file', href: `${file}#pickup` }, lfd.date);
   }
-  if (s.delivery_date && d(s.delivery_date) < T) {
-    add('pod', 'high', 'Delivery date passed — confirm POD', `Scheduled ${md(s.delivery_date)}; mark delivered when the POD arrives`, s.delivery_date, { label: 'Open file', href: `${file}#pickup` }, s.delivery_date);
+  if (s.delivery_date && d(s.delivery_date) < T && !Number(s.pod_received) && !delivered) {
+    add('pod', 'high', 'Delivery date passed — confirm POD', `Scheduled ${md(s.delivery_date)}; tick "POD received" when it arrives`, s.delivery_date, { label: 'Open file', href: `${file}#pod` }, s.delivery_date);
   }
   // OPUS-required fields still empty.
   const missing = S.missingRequired(s).filter((l) => !/ETA|Arrival/.test(l));

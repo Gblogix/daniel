@@ -775,11 +775,84 @@ document.querySelectorAll('.fileform').forEach((wrap) => {
     form?.querySelector('[name="mode"]')?.addEventListener('change', () => show(tabs.find((t) => t.classList.contains('on'))?.dataset.tab));
     // A box the browser rejects on save may sit on a closed tab: open that tab so the message can show.
     form?.addEventListener('invalid', (e) => { const p = e.target.closest?.('.ff-pane'); if (p && p.hidden) show(p.dataset.pane); }, true);
-    // Links to a section (#ctns, #items…) open its tab.
-    const fromHash = () => { const h = location.hash.slice(1); if (tabs.some((t) => t.dataset.tab === h)) { show(h); wrap.scrollIntoView({ block: 'start' }); } };
+    // Links to a section (Next actions "Open file", #ctns, #pod…) open its tab and point at the box to fill.
+    const SPOT = { pic: ['main', 'owner_id'], routing: ['main', 'mbl_no'], cargo: ['main', 'packages'], pickup: ['clear', 'pickup_appt'],
+      delivery: ['clear', 'delivery_date'], pod: ['clear', 'pod_received'], ctns: ['ctns'], items: ['items'], notes: ['notes', 'notes'], main: ['main'], clear: ['clear'] };
+    const goTo = (h) => {
+      const spot = SPOT[h];
+      if (!spot) return false;
+      show(spot[0]);
+      const el = spot[1] && (wrap.querySelector(`#f_${spot[1]}_q`) || wrap.querySelector(`[name="${spot[1]}"]:not([type=hidden])`));
+      const target = el?.closest('.field, .check') || wrap;
+      target.scrollIntoView({ block: 'center' });
+      if (el) {
+        try { el.focus({ preventScroll: true }); } catch (err) { /* ignore */ }
+        target.classList.add('spot-flash'); setTimeout(() => target.classList.remove('spot-flash'), 2200);
+      }
+      return true;
+    };
+    const fromHash = () => goTo(location.hash.slice(1));
     window.addEventListener('hashchange', fromHash); fromHash();
+    // A link to this same page (e.g. "Open file" on the file itself) changes nothing in the address: handle it here.
+    document.addEventListener('click', (e) => {
+      const a = e.target.closest?.('a[href*="#"]');
+      if (!a || a.dataset.tab || e.ctrlKey || e.metaKey || e.shiftKey) return;
+      const u = new URL(a.href, location.href);
+      if (u.pathname !== location.pathname || !goTo(u.hash.slice(1))) return;
+      e.preventDefault();
+    });
   }
   if (form) document.addEventListener('keydown', (e) => {
     if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 's') { e.preventDefault(); const btn = form.querySelector('.save-bar .btn') || form.querySelector('button.btn:not([type=button])'); if (btn) btn.click(); }
   });
+});
+
+// Next actions / follow-ups: Done, Snooze and Bring back answer at once (the item fades out) without reloading the
+// page; if the server refuses, the reason is shown instead of nothing happening.
+document.addEventListener('submit', async (e) => {
+  const form = e.target;
+  if (!/\/followups\/(done|snooze|reopen)$/.test(form.getAttribute('action') || '')) return;
+  e.preventDefault();
+  const item = form.closest('.fu');
+  const btn = form.querySelector('button');
+  if (btn) btn.disabled = true;
+  try {
+    const r = await fetch(form.action, { method: 'POST', body: new URLSearchParams(new FormData(form)), credentials: 'same-origin' });
+    if (!r.ok || /\/login/.test(r.url)) throw new Error(r.status === 403 ? 'Not allowed — sign in again and retry.' : /\/login/.test(r.url) ? 'Signed out — sign in again.' : `Server error ${r.status}`);
+    if (item) {
+      item.style.transition = 'opacity .3s'; item.style.opacity = '0';
+      setTimeout(() => {
+        const box = item.parentElement; item.remove();
+        if (box && !box.querySelector('.fu')) location.reload(); // last one: show "Nothing pending"
+      }, 300);
+    } else location.reload();
+    try { window.top.gbChanged?.(); } catch (err) { /* not in the workspace */ }
+  } catch (err) {
+    if (btn) btn.disabled = false;
+    window.alert(`Could not save: ${err.message}`);
+  }
+});
+
+// The message after saving sits at the top of the page; when the page opens further down (#accounting…), show it
+// as a note in the corner too, so "nothing happened" never hides an error.
+(() => {
+  const f = document.querySelector('.flash');
+  if (!f) return;
+  requestAnimationFrame(() => setTimeout(() => {
+    const r = f.getBoundingClientRect();
+    if (r.bottom > 0 && r.top < window.innerHeight) return;
+    const t = f.cloneNode(true);
+    t.classList.add('flash-toast');
+    t.addEventListener('click', () => t.remove());
+    document.body.appendChild(t);
+    setTimeout(() => t.remove(), f.classList.contains('err') ? 12000 : 6000);
+  }, 150));
+})();
+
+// Quick accounting entry: a vendor bill needs the vendor's invoice number — ask for it before sending.
+document.querySelectorAll('[data-kind-select]').forEach((sel) => {
+  const num = sel.form.querySelector('input[name="number"]');
+  if (!num) return;
+  const apply = () => { num.required = sel.value === 'AP'; };
+  sel.addEventListener('change', apply); apply();
 });
