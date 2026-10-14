@@ -897,3 +897,5 @@ input.just-picked { outline: 2px solid #22c55e; outline-offset: 1px; }
 input.party-search.missing-pick { border-color: #f87171; box-shadow: 0 0 0 3px rgba(248,113,113,.25); }
 .spot-flash { outline: 3px solid #f59e0b; outline-offset: 2px; border-radius: 6px; transition: outline-color .4s; }
 .flash.flash-toast { position: fixed; top: 12px; right: 16px; left: auto; z-index: 300; max-width: min(520px, calc(100vw - 32px)); box-shadow: 0 10px 28px rgba(15,23,42,.22); cursor: pointer; margin: 0; }
+.file-ids { display: flex; flex-direction: column; gap: 0; font-size: 11.5px; color: var(--muted); line-height: 1.35; margin-top: 2px; max-width: 360px; }
+.file-ids b { color: #334155; font-weight: 600; }
