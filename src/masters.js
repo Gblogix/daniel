@@ -21,6 +21,7 @@ function clean(data) {
     if (v === '') v = null;
     if (f === 'agent_id' && v != null) v = Number(v) || null;
     if (f === 'mbl_no' && v) v = String(v).toUpperCase().replace(/\s+/g, '');
+    else if (typeof v === 'string' && require('./shipments').UPPER_FIELDS.has(f)) v = v.toUpperCase(); // B/L text in capitals
     out[f] = v;
   }
   return out;

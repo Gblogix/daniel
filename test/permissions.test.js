@@ -191,7 +191,7 @@ test('party lookup for Shipper / Consignee: Parties of the fitting type first, e
   S.create({ mode: 'FCL', status: 'BOOKED', shipper_name: 'Olive International Inc.', shipper_address: '14F, 398, Seocho-daero, Seoul' });
   const staff = await login('staff@gblogix.com');
   const ship = await (await staff('/parties/lookup.json?role=shipper&q=olive')).json();
-  assert.deepEqual(ship.map((r) => [r.name, r.address, r.source]), [['Olive International Inc.', '14F, 398, Seocho-daero, Seoul', 'file']]);
+  assert.deepEqual(ship.map((r) => [r.name, r.address, r.source]), [['OLIVE INTERNATIONAL INC.', '14F, 398, SEOCHO-DAERO, SEOUL', 'file']]);
   const cnee = await (await staff('/parties/lookup.json?role=consignee&q=unlo')).json();
   assert.equal(cnee[0].name, 'UNLOCKT BRANDS, INC');
   assert.equal(cnee[0].type, 'customer');

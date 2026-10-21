@@ -22,7 +22,7 @@ test('carrier / airline from the SCAC, the AWB prefix, the container owner — a
   assert.equal(AF.carrierFor({ mode: 'FCL', mbl_no: '261234567', containers: [{ container_no: 'MSKU1234565' }] }).carrier, 'Maersk');
   assert.equal(AF.carrierFor({ mode: 'FCL', mbl_no: 'QQQQ00012345' }), null);
   S.create({ mode: 'FCL', status: 'BOOKED', mbl_no: 'QQQQ00012345', carrier: 'Sample Lines' });
-  assert.equal(AF.carrierFor({ mode: 'FCL', mbl_no: 'QQQQ99999999' }).carrier, 'Sample Lines');
+  assert.equal(AF.carrierFor({ mode: 'FCL', mbl_no: 'QQQQ99999999' }).carrier, 'SAMPLE LINES', 'B/L text is saved in capitals');
   S.create({ mode: 'AIR', status: 'BOOKED', mbl_no: '999-00000011', carrier: 'Air China' });
   const d = mergeExtractions([{ doc_type: 'MBL', mbl_no: 'ONEYSELA00001', containers: [], items: [], warnings: [] }]);
   assert.equal(d.carrier, 'ONE');

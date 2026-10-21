@@ -137,6 +137,16 @@ if (require.main === module) {
       }
       db.setSetting('addresses_tidied', '1');
     }
+    // B/L text in capitals (as typed from now on): bring earlier files in line once.
+    if (!db.setting('bl_text_upper')) {
+      const { UPPER_FIELDS } = require('./shipments');
+      for (const table of ['shipments', 'masters']) {
+        const have = new Set(db.all(`PRAGMA table_info(${table})`).map((c) => c.name));
+        for (const f of UPPER_FIELDS) if (have.has(f)) db.run(`UPDATE ${table} SET ${f} = UPPER(${f}) WHERE ${f} IS NOT NULL AND ${f} <> UPPER(${f})`);
+      }
+      for (const f of ['seal_no', 'size_type']) db.run(`UPDATE containers SET ${f} = UPPER(${f}) WHERE ${f} IS NOT NULL AND ${f} <> UPPER(${f})`);
+      db.setSetting('bl_text_upper', '1');
+    }
     if (!db.setting('pickup_locations_learned')) {
       const n = require('./locations').backfill();
       db.setSetting('pickup_locations_learned', '1');

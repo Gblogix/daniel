@@ -899,3 +899,9 @@ input.party-search.missing-pick { border-color: #f87171; box-shadow: 0 0 0 3px r
 .flash.flash-toast { position: fixed; top: 12px; right: 16px; left: auto; z-index: 300; max-width: min(520px, calc(100vw - 32px)); box-shadow: 0 10px 28px rgba(15,23,42,.22); cursor: pointer; margin: 0; }
 .file-ids { display: flex; flex-direction: column; gap: 0; font-size: 11.5px; color: var(--muted); line-height: 1.35; margin-top: 2px; max-width: 360px; }
 .file-ids b { color: #334155; font-weight: 600; }
+/* B/L text shows in capitals at once (saved in capitals too) */
+.fileform input[name=shipper_name], .fileform textarea[name=shipper_address], .fileform input[name=consignee_name], .fileform textarea[name=consignee_address],
+.fileform input[name=notify_party], .fileform textarea[name=notify_address], .fileform input[name=carrier], .fileform input[name=vessel], .fileform input[name=voyage],
+.fileform input[name=pol], .fileform input[name=pod], .fileform input[name=place_of_delivery], .fileform input[name=final_destination],
+.fileform input[name=commodity], .fileform input[name=marks], .fileform input[name=package_unit] { text-transform: uppercase; }
+.fileform input::placeholder, .fileform textarea::placeholder { text-transform: none; }

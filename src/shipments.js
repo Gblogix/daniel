@@ -69,6 +69,11 @@ const NUMERIC_FIELDS = new Set(['owner_id', 'bill_to_id', 'sales_id', 'customer_
 const BOOL_FIELDS = new Set(['isf_filed', 'paid', 'direct_shipment', 'telex_release', 'freight_paid', 'pierpass_paid', 'carrier_released',
   'pod_received', 'tracking_enabled']);
 
+// What is written on the B/L / AWB: always capitals, however it was typed or read.
+const UPPER_FIELDS = new Set(['shipper_name', 'shipper_address', 'consignee_name', 'consignee_address', 'notify_party', 'notify_address',
+  'mbl_no', 'hbl_no', 'sub_bl_no', 'ams_bl_no', 'isf_no', 'carrier', 'scac', 'vessel', 'voyage', 'flight_no', 'pol', 'pod', 'place_of_delivery',
+  'final_destination', 'package_unit', 'commodity', 'marks', 'service_term', 'release_type']);
+
 function normalizeInput(input) {
   const out = {};
   for (const f of EDITABLE_FIELDS) {
@@ -80,6 +85,7 @@ function normalizeInput(input) {
     else if (f === 'available_for_pickup') v = v === '' || v == null ? null : v === '1' || v === 1 || v === true ? 1 : 0;
     else if (v === '' || v === undefined) v = null;
     else if (NUMERIC_FIELDS.has(f)) { v = Number(String(v).replace(/,/g, '')); if (!Number.isFinite(v)) v = null; }
+    else if (UPPER_FIELDS.has(f) && typeof v === 'string') v = v.toUpperCase();
     out[f] = v;
   }
   return out;
@@ -283,7 +289,7 @@ function saveLines(id, body, { db = store.db } = {}) {
         const prev = kept.get(no) || {};
         db.run(`INSERT INTO containers (shipment_id, container_no, seal_no, size_type, packages, weight_kg, cbm, pickup_lfd,
             available, holds, discharged_at, full_out_at, empty_returned_at, current_status, location, pickup_no, remark, internal_note, color_label) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-          id, no, arr(body.ctn_seal)[i] || null, arr(body.ctn_size)[i] || null,
+          id, no, String(arr(body.ctn_seal)[i] || '').trim().toUpperCase() || null, String(arr(body.ctn_size)[i] || '').trim().toUpperCase() || null,
           n(arr(body.ctn_pkgs)[i]), n(arr(body.ctn_kg)[i]), n(arr(body.ctn_cbm)[i]), arr(body.ctn_lfd)[i] || prev.pickup_lfd || null,
           prev.available ?? null, prev.holds ?? null, prev.discharged_at ?? null, prev.full_out_at ?? null,
           prev.empty_returned_at ?? null, prev.current_status ?? null, prev.location ?? null, arr(body.ctn_pickup)[i] || prev.pickup_no || null,
@@ -613,5 +619,5 @@ function setClosed(id, closed, { db = store.db, userId = null } = {}) {
 module.exports = { etaOrder,
   MODES, isMisc, REQUIRED, MASTER_REQUIRED, missingRequired, STATUSES, STATUS_INDEX, CUSTOMS_STATUSES, HOLD_TYPES, EDITABLE_FIELDS, checklist, lfdInfo,
   statusLabel, normalizeInput, saveLines, nextRefNo, create, update, addEvent, list, find, scopeFor, tracking,
-  inferStatus, mergeItems, guessCustomer, shortParty, fileName, billingState, stage, refreshClosed, setClosed, RECEIVABLE, timeline, costState, customerStep,
+  UPPER_FIELDS, inferStatus, mergeItems, guessCustomer, shortParty, fileName, billingState, stage, refreshClosed, setClosed, RECEIVABLE, timeline, costState, customerStep,
 };

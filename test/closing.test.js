@@ -133,3 +133,11 @@ test('air: entering the ATA closes the file, clearing it reopens; ocean files st
   S.update(fcl, { ata: '2026-10-13' });
   assert.equal(db.get('SELECT closed_at FROM shipments WHERE id = ?', fcl).closed_at, null);
 });
+
+test('B/L text is saved in capitals; notes and holds keep their case', () => {
+  const id = S.create({ mode: 'FCL', hbl_no: 'up-1', shipper_name: 'Olive Intl Inc.', pol: 'Busan, Korea', vessel: 'Sample Express', notes: 'Call Mr. Kim', holds: 'CBP hold' });
+  const s = db.get('SELECT * FROM shipments WHERE id = ?', id);
+  assert.deepEqual([s.hbl_no, s.shipper_name, s.pol, s.vessel], ['UP-1', 'OLIVE INTL INC.', 'BUSAN, KOREA', 'SAMPLE EXPRESS']);
+  assert.equal(s.notes, 'Call Mr. Kim');
+  assert.equal(s.holds, 'CBP hold');
+});

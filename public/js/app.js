@@ -896,3 +896,23 @@ document.querySelectorAll('input[data-location-lookup]').forEach((loc) => {
     if (r) { firms.value = c; put(loc, r.name, true); put(addr, r.address, false); put(tel, r.tel, false); }
   });
 });
+
+// B/L / AWB text in capitals while typing (shipper, consignee, ports, vessel, numbers, containers…), like OPUS.
+(() => {
+  const NAMES = new Set(['shipper_name', 'shipper_address', 'consignee_name', 'consignee_address', 'notify_party', 'notify_address',
+    'mbl_no', 'hbl_no', 'sub_bl_no', 'ams_bl_no', 'isf_no', 'carrier', 'scac', 'vessel', 'voyage', 'flight_no', 'pol', 'pod', 'place_of_delivery',
+    'final_destination', 'package_unit', 'commodity', 'marks', 'ctn_no', 'ctn_seal', 'ctn_size']);
+  const upper = (el) => {
+    const v = el.value; const u = v.toUpperCase();
+    if (v === u) return;
+    const a = el.selectionStart; const b = el.selectionEnd;
+    el.value = u;
+    try { el.setSelectionRange(a, b); } catch (err) { /* not a text box */ }
+  };
+  document.addEventListener('input', (e) => {
+    const el = e.target;
+    if (!el.name || !NAMES.has(el.name) || !el.closest?.('.fileform, form[action^="/masters"]') || e.isComposing) return;
+    upper(el);
+  }, true);
+  document.addEventListener('compositionend', (e) => { if (e.target.name && NAMES.has(e.target.name)) upper(e.target); }, true);
+})();
