@@ -108,7 +108,15 @@ function create(input, { db = store.db, userId } = {}) {
   addEvent(id, 'CREATED', `Shipment ${ref} created`, { db, userId, customerVisible: false });
   require('./masters').linkHouse(id, { db });
   require('./autofill').apply(id, { db });
+  learnPickup(id, { db });
   return id;
+}
+
+// Pick-up location + FIRMS code typed on a file go to the location list (name ↔ FIRMS look-up).
+const PICKUP_KEYS = ['cfs_location', 'firms_code', 'cfs_address', 'freight_location_tel'];
+function learnPickup(id, { db = store.db } = {}) {
+  const s = db.get('SELECT cfs_location, firms_code, cfs_address, freight_location_tel, mode FROM shipments WHERE id = ?', id);
+  if (s?.cfs_location) require('./locations').learn({ name: s.cfs_location, firms_code: s.firms_code, address: s.cfs_address, tel: s.freight_location_tel, mode: s.mode }, { db });
 }
 
 // A change to any of these can make the history suggest a carrier / pick-up location / delivery address.
@@ -140,6 +148,7 @@ function update(id, input, { db = store.db } = {}) {
   if (!current.master_id || changes.some((c) => ['mbl_no', 'mode', 'master_id'].includes(c.field))) require('./masters').linkHouse(id, { db });
   if (changes.some((c) => AUTOFILL_KEYS.includes(c.field))) require('./autofill').apply(id, { db });
   if (changes.some((c) => c.field === 'cfs_location' || c.field === 'cfs_address')) require('./autofill').spreadPickup(id, { db });
+  if (changes.some((c) => PICKUP_KEYS.includes(c.field))) learnPickup(id, { db });
   return changes;
 }
 

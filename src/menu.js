@@ -60,7 +60,8 @@ const MENU = [
     ] },
   ] },
   { key: 'master', label: 'Master Code', icon: '🗂', cols: [
-    { head: 'Parties', items: [{ id: 'parties', label: 'Parties (customers, agents, vendors)', href: '/companies' }] },
+    { head: 'Parties', items: [{ id: 'parties', label: 'Parties (customers, agents, vendors)', href: '/companies' },
+      { id: 'pickup-locations', label: 'Pickup locations & FIRMS codes', href: '/pickup-locations' }] },
   ] },
   { key: 'admin', label: 'Administration', icon: '⚙', cols: [
     { head: 'Users', items: [

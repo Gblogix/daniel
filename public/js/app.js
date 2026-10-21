@@ -305,7 +305,7 @@ document.querySelectorAll('select[data-party-search], select:not([multiple])').f
   const fields = new Set(meta.content.split(','));
   const cache = new Map();
   const attach = (input) => {
-    if (input.dataset.sugg || input.dataset.partyLookup !== undefined || !fields.has(input.name) || !/^(text|search|)$/.test(input.type || '')) return;
+    if (input.dataset.sugg || input.dataset.partyLookup !== undefined || input.dataset.locationLookup !== undefined || input.dataset.locationFirms !== undefined || !fields.has(input.name) || !/^(text|search|)$/.test(input.type || '')) return;
     input.dataset.sugg = '1';
     const dl = input.getAttribute('list') && document.getElementById(input.getAttribute('list'));
     if (dl) input.removeAttribute('list'); // our list replaces the browser's (its values are merged in below)
@@ -855,4 +855,44 @@ document.querySelectorAll('[data-kind-select]').forEach((sel) => {
   if (!num) return;
   const apply = () => { num.required = sel.value === 'AP'; };
   sel.addEventListener('change', apply); apply();
+});
+
+// Pick-up location ↔ FIRMS code: type a terminal / CFS name or its FIRMS code, pick it, and the other box follows
+// (address and tel too, unless typed by hand). A name or code typed in full without picking is matched on leaving the box.
+document.querySelectorAll('input[data-location-lookup]').forEach((loc) => {
+  const form = loc.form;
+  const box = (n) => form?.querySelector(`[name="${n}"]`);
+  const firms = box('firms_code'); const addr = box('cfs_address'); const tel = box('freight_location_tel');
+  const mode = () => box('mode')?.value || '';
+  const cache = new Map();
+  const get = (q) => {
+    const k = `${mode()}|${q.toLowerCase()}`;
+    if (!cache.has(k)) cache.set(k, fetch(`/locations.json?q=${encodeURIComponent(q)}&mode=${encodeURIComponent(mode())}`).then((r) => r.json()).catch(() => []));
+    return cache.get(k);
+  };
+  const auto = new WeakMap(); // what we filled last, so a later pick may replace it (but never a hand-typed value)
+  const put = (el, v, always) => {
+    if (!el || !v || el.value === v) return;
+    if (!always && el.value.trim() && el.value !== auto.get(el)) return;
+    el.value = v; auto.set(el, v);
+    el.dispatchEvent(new Event('input', { bubbles: true }));
+    el.classList.add('just-picked'); setTimeout(() => el.classList.remove('just-picked'), 900);
+  };
+  const fill = (r) => { put(loc, r.name, true); put(firms, r.firms_code, true); put(addr, r.address, false); put(tel, r.tel, false); };
+  const label = (r) => ({ label: r.name, sub: [r.firms_code || 'no FIRMS yet', r.mode === 'AIR' ? 'air' : r.mode === 'OCEAN' ? 'ocean' : ''].filter(Boolean).join(' · '), r });
+  loc.dataset.suggestOnFocus = '';
+  gbSuggestBox(loc, async (q) => (await get(q)).filter((r) => r.name !== q || r.firms_code !== firms?.value).map(label), (it) => fill(it.r));
+  if (firms) gbSuggestBox(firms, async (q) => (q ? (await get(q)).filter((r) => r.firms_code).map((r) => ({ label: r.firms_code, sub: r.name, r })) : []), (it) => fill(it.r));
+  loc.addEventListener('change', async () => {
+    const t = loc.value.trim().toLowerCase();
+    if (!t) return;
+    const r = (await get(loc.value.trim())).find((x) => x.name.toLowerCase() === t);
+    if (r) fill(r);
+  });
+  firms?.addEventListener('change', async () => {
+    const c = firms.value.trim().toUpperCase();
+    if (!c) return;
+    const r = (await get(c)).find((x) => String(x.firms_code).toUpperCase() === c);
+    if (r) { firms.value = c; put(loc, r.name, true); put(addr, r.address, false); put(tel, r.tel, false); }
+  });
 });

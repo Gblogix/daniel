@@ -1,0 +1,34 @@
+<%- include('partials/head') %>
+<div class="pagehead"><div><h1 style="margin-bottom:4px">Pickup locations &amp; FIRMS codes</h1>
+  <p class="muted small" style="margin:0">Terminals, CFS / CES and airline warehouses. In a file, type the location name or the FIRMS code — the other is filled in, with the address and tel. New places are added here by themselves when a file is saved.</p></div></div>
+<% const canEdit = can('shipments_edit'); %>
+<% if (canEdit) { %><form method="post" action="/pickup-locations" class="card loc-add">
+  <input type="hidden" name="_csrf" value="<%= csrf %>">
+  <div class="grid g4" style="grid-template-columns: 2fr 1fr 1fr 2.5fr 1.4fr auto; align-items:end; gap: 8px">
+    <div class="field"><label>Location name</label><input name="name" required placeholder="e.g. TraPac Los Angeles"></div>
+    <div class="field"><label>FIRMS code</label><input name="firms_code" class="mono" placeholder="e.g. Y258" maxlength="8"></div>
+    <div class="field"><label>For</label><select name="mode"><option value="">Both</option><option value="OCEAN">Ocean</option><option value="AIR">Air</option></select></div>
+    <div class="field"><label>Address</label><input name="address"></div>
+    <div class="field"><label>Tel</label><input name="tel"></div>
+    <div class="field"><button class="btn">＋ Add</button></div>
+  </div></form><% } %>
+<div class="card"><div class="tablewrap"><table class="t">
+  <thead><tr><th>Location</th><th>FIRMS</th><th>For</th><th>Address</th><th>Tel</th><th class="right">Files</th><th></th></tr></thead>
+  <tbody>
+  <% if (!rows.length) { %><tr><td colspan="7" class="muted">Nothing yet — add your usual terminals above, or they appear as files are saved.</td></tr><% } %>
+  <% rows.forEach((r) => { if (canEdit && edit === r.id) { %>
+    <tr><td colspan="7"><form method="post" action="/pickup-locations" class="grid" style="grid-template-columns: 2fr 1fr 1fr 2.5fr 1.4fr auto; gap: 6px; align-items:center">
+      <input type="hidden" name="_csrf" value="<%= csrf %>"><input type="hidden" name="id" value="<%= r.id %>">
+      <input name="name" value="<%= r.name %>" required aria-label="Name"><input name="firms_code" value="<%= r.firms_code || '' %>" class="mono" aria-label="FIRMS code">
+      <select name="mode" aria-label="For"><option value="">Both</option><option value="OCEAN" <%= r.mode === 'OCEAN' ? 'selected' : '' %>>Ocean</option><option value="AIR" <%= r.mode === 'AIR' ? 'selected' : '' %>>Air</option></select>
+      <input name="address" value="<%= r.address || '' %>" aria-label="Address"><input name="tel" value="<%= r.tel || '' %>" aria-label="Tel">
+      <span class="nowrap"><button class="btn small">Save</button> <a class="btn secondary small" href="/pickup-locations">Cancel</a></span></form></td></tr>
+  <% } else { %>
+    <tr><td><b><%= r.name %></b></td><td class="mono"><%= r.firms_code || '' %><% if (!r.firms_code) { %><span class="muted small">— add</span><% } %></td>
+      <td class="small"><%= r.mode === 'AIR' ? 'Air' : r.mode === 'OCEAN' ? 'Ocean' : 'Both' %></td>
+      <td class="small" style="white-space:pre-line"><%= r.address || '' %></td><td class="small nowrap"><%= r.tel || '' %></td><td class="right small"><%= r.uses %></td>
+      <td class="nowrap"><% if (canEdit) { %><a class="btn secondary small" href="/pickup-locations?edit=<%= r.id %>">Edit</a>
+        <form method="post" action="/pickup-locations" class="inline"><input type="hidden" name="_csrf" value="<%= csrf %>"><button class="btn secondary small" name="delete" value="<%= r.id %>" data-confirm="Remove <%= r.name %> from the list? Files keep what they have.">✕</button></form><% } %></td></tr>
+  <% } }) %>
+  </tbody></table></div></div>
+<%- include('partials/foot') %>

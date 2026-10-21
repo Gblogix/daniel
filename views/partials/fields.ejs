@@ -80,10 +80,10 @@
 
   <div class="ff-col" data-ship-only <%= misc ? 'hidden' : '' %>>
     <h4>Pick-up &amp; I.T.</h4>
-    <%- inp('cfs_location', isAir ? 'Cargo location' : 'CY / CFS', 'text', `title="${isAir ? 'Airline warehouse / cargo terminal' : 'Freight location: terminal / CFS / CES'}"`) %>
+    <%- inp('cfs_location', isAir ? 'Cargo location' : 'CY / CFS', 'text', `title="${isAir ? 'Airline warehouse / cargo terminal' : 'Freight location: terminal / CFS / CES'} — type the name or the FIRMS code" data-location-lookup placeholder="Name or FIRMS code"`) %>
     <div class="field"><label for="f_cfs_address">Location addr.</label><textarea id="f_cfs_address" name="cfs_address" rows="2" placeholder="Address of the <%= isAir ? 'cargo terminal / warehouse' : 'terminal / CFS' %>"><%= s.cfs_address || '' %></textarea></div>
     <%- inp('freight_location_tel', 'Location tel') %>
-    <%- inp('firms_code', 'Firms code') %>
+    <%- inp('firms_code', 'Firms code', 'text', 'data-location-firms class="mono" placeholder="e.g. Y258"') %>
     <%- oc(inp('devan_location', 'Devan location')) %>
     <%- inp('available_date', 'Available', 'date') %>
     <%- inp('last_free_day', 'LFD', 'date') %>

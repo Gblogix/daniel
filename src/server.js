@@ -137,6 +137,11 @@ if (require.main === module) {
       }
       db.setSetting('addresses_tidied', '1');
     }
+    if (!db.setting('pickup_locations_learned')) {
+      const n = require('./locations').backfill();
+      db.setSetting('pickup_locations_learned', '1');
+      if (n) console.log(`Pickup locations: ${n} learned from earlier files`);
+    }
   }
   const linked = require('./masters').backfill();
   if (linked) console.log(`Masters: ${linked} file(s) grouped under their master B/L`);

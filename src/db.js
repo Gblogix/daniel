@@ -294,6 +294,17 @@ CREATE TABLE IF NOT EXISTS followup_state (
   done_at TEXT,
   user_id INTEGER REFERENCES users(id)
 );
+-- Pick-up places (terminal / CFS / airline warehouse) with their FIRMS code: learned from files, editable.
+CREATE TABLE IF NOT EXISTS pickup_locations (
+  id INTEGER PRIMARY KEY,
+  name TEXT NOT NULL UNIQUE COLLATE NOCASE,
+  firms_code TEXT,
+  address TEXT,
+  tel TEXT,
+  mode TEXT,
+  uses INTEGER NOT NULL DEFAULT 0,
+  updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
 CREATE TABLE IF NOT EXISTS settings (
   key TEXT PRIMARY KEY,
   value TEXT

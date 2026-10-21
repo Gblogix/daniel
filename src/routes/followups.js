@@ -5,6 +5,7 @@ const S = require('../shipments');
 const F = require('../followups');
 
 const router = express.Router();
+const flash = (req, type, msg) => { req.session.flash = { type, msg }; };
 const safeBack = (v) => (typeof v === 'string' && /^\/(?!\/)/.test(v) ? v : null);
 
 router.get('/followups', auth.requireInternal, (req, res) => {
@@ -99,6 +100,22 @@ router.get('/parties/lookup.json', auth.requireInternal, (req, res) => {
   const rank = (r) => { const k = P.norm(r.name); return k.startsWith(n) ? 0 : ` ${k}`.includes(` ${n}`) ? 1 : 2; };
   out.sort((a, b) => rank(a) - rank(b));
   res.json(out.slice(0, 10).map((r) => ({ ...r, address: require('../address').tidy(r.address || '', r.name) })));
+});
+
+// Pick-up location ↔ FIRMS code look-up (file form) and the editable list (Master Code › Pickup locations).
+router.get('/locations.json', auth.requireInternal, (req, res) => {
+  res.json(require('../locations').search(String(req.query.q || '').slice(0, 80), { mode: String(req.query.mode || '') })
+    .map((r) => ({ name: r.name, firms_code: r.firms_code || '', address: r.address || '', tel: r.tel || '', mode: r.mode || '', uses: r.uses })));
+});
+router.get('/pickup-locations', auth.requireInternal, (req, res) => {
+  res.render('pickup-locations', { title: 'Pickup locations', rows: require('../locations').list(), edit: Number(req.query.edit) || 0 });
+});
+router.post('/pickup-locations', auth.requirePerm('shipments_edit'), (req, res) => {
+  const L = require('../locations');
+  try {
+    if (req.body.delete) { L.remove(Number(req.body.delete)); flash(req, 'ok', 'Location removed'); } else { L.save(Number(req.body.id) || 0, req.body); flash(req, 'ok', 'Location saved'); }
+  } catch (e) { flash(req, 'err', /UNIQUE/.test(e.message) ? 'A location with this name is already on the list' : e.message); }
+  res.redirect('/pickup-locations');
 });
 
 // Type-ahead for text fields (values used on earlier files).
