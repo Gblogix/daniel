@@ -114,6 +114,27 @@
     else renderTabs();
   }
 
+  // Ctrl+Q closes the open tab (also when the key is pressed inside the page: app.js calls gbCloseTab).
+  window.gbCloseTab = () => {
+    const t = tabs.find((x) => x.id === active);
+    if (!t || t.home) return;
+    if (dirty(t) && !window.confirm('This tab has changes that are not saved. Close it anyway?')) return;
+    close(t.id);
+  };
+  document.addEventListener('keydown', (e) => {
+    if ((e.ctrlKey || e.metaKey) && !e.shiftKey && !e.altKey && e.key.toLowerCase() === 'q') { e.preventDefault(); window.gbCloseTab(); }
+  });
+  // ⌨ shortcut list in the top bar.
+  {
+    const kb = document.getElementById('keybtn'); const kp = document.getElementById('keypanel');
+    if (kb && kp) {
+      const set = (on) => { kp.hidden = !on; kb.setAttribute('aria-expanded', String(on)); };
+      kb.addEventListener('click', (e) => { e.stopPropagation(); set(kp.hidden); });
+      document.addEventListener('click', (e) => { if (!kp.hidden && !kp.contains(e.target)) set(false); });
+      document.addEventListener('keydown', (e) => { if (e.key === 'Escape') set(false); });
+    }
+  }
+
   // Pages inside tabs report a save, so the other tabs refresh when they are shown again.
   window.gbChanged = () => { lastChange = Date.now(); const cur = tabs.find((x) => x.id === active); if (cur) cur.loadedAt = lastChange + 1; };
 

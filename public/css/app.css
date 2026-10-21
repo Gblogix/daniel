@@ -905,3 +905,14 @@ input.party-search.missing-pick { border-color: #f87171; box-shadow: 0 0 0 3px r
 .fileform input[name=pol], .fileform input[name=pod], .fileform input[name=place_of_delivery], .fileform input[name=final_destination],
 .fileform input[name=commodity], .fileform input[name=marks], .fileform input[name=package_unit] { text-transform: uppercase; }
 .fileform input::placeholder, .fileform textarea::placeholder { text-transform: none; }
+/* ⌨ keyboard shortcut list (top bar) */
+.shell-top .keyhelp { margin-left: auto; position: relative; flex: none; }
+.shell-top .keyhelp + .bell { margin-left: 0; }
+.keybtn { background: none; border: 0; color: #fff; font-size: 18px; line-height: 1; padding: 5px 7px; border-radius: 6px; cursor: pointer; }
+.keybtn:hover, .keybtn[aria-expanded=true] { background: rgba(255,255,255,.16); }
+.keypanel { position: absolute; right: 0; top: calc(100% + 8px); z-index: 300; width: 400px; max-width: calc(100vw - 32px); background: #fff; color: var(--ink); border: 1px solid #c7d4ea; border-radius: 10px; box-shadow: 0 12px 30px rgba(15,23,42,.22); padding: 12px 14px; }
+.keypanel h3 { margin: 0 0 8px; font-size: 14px; color: var(--navy); }
+.keypanel table { width: 100%; border-collapse: collapse; font-size: 13px; }
+.keypanel td { padding: 5px 4px; border-top: 1px solid var(--line); vertical-align: top; }
+.keypanel td:first-child { white-space: nowrap; width: 1%; padding-right: 12px; }
+.keypanel kbd { display: inline-block; min-width: 20px; text-align: center; font: 600 11.5px/1.6 ui-monospace, SFMono-Regular, Consolas, monospace; background: #f1f5f9; border: 1px solid #cbd5e1; border-bottom-width: 2px; border-radius: 4px; padding: 0 5px; }

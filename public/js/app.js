@@ -916,3 +916,9 @@ document.querySelectorAll('input[data-location-lookup]').forEach((loc) => {
   }, true);
   document.addEventListener('compositionend', (e) => { if (e.target.name && NAMES.has(e.target.name)) upper(e.target); }, true);
 })();
+
+// Ctrl+Q inside a page: close its workspace tab.
+document.addEventListener('keydown', (e) => {
+  if (!(e.ctrlKey || e.metaKey) || e.shiftKey || e.altKey || e.key.toLowerCase() !== 'q') return;
+  try { if (window.top !== window && window.top.gbCloseTab) { e.preventDefault(); window.top.gbCloseTab(); } } catch (err) { /* not in the workspace */ }
+});
