@@ -7,6 +7,12 @@
   const conv = (unit, v) => (v == null || v === '' || Number.isNaN(Number(v)) ? '' : (Math.round(Number(v) * (unit === 'lbs' ? 2.20462 : 35.3147) * 100) / 100));
   const sel = (k, label, opts, blank = true) => `<div class="field"><label for="f_${k}">${label}</label><select id="f_${k}" name="${k}">${blank ? '<option value="">—</option>' : ''}${opts.map((o) => `<option value="${e(o.id)}" ${String(s[k]) === String(o.id) ? 'selected' : ''}>${e(o.name)}</option>`).join('')}</select></div>`;
 %>
+<%# Customer / Bill to: customers first, then every other party (an agent, forwarder or vendor can be the one who pays — trucking files especially). %>
+<% const payerOpts = (k) => { const opt = (o) => `<option value="${e(o.id)}" ${String(s[k]) === String(o.id) ? 'selected' : ''}>${e(o.name)}</option>`;
+     const mine = new Set(customers.map((o) => String(o.id)));
+     const rest = (locals.allParties || []).filter((o) => !mine.has(String(o.id)));
+     return customers.map(opt).join('') + (rest.length ? `<optgroup label="Other parties">${rest.map(opt).join('')}</optgroup>` : ''); };
+   const payer = (k, label) => `<div class="field"><label for="f_${k}">${label}</label><select id="f_${k}" name="${k}"><option value="">—</option>${payerOpts(k)}</select></div>`; %>
 <% const misc = s.mode === 'OTHER'; const ship = (html) => html.replace('<div class="field">', `<div class="field" data-ship-only ${misc ? 'hidden' : ''}>`); %>
 <%# Air files have no ISF, vessel, containers, OBL…: those boxes are hidden (and come back if the mode is changed). %>
 <% const isAir = s.mode === 'AIR'; const only = (attr, hide) => (html) => html.replace('<div class="field"', `<div ${attr} ${hide ? 'hidden' : ''} class="field"`);
@@ -32,15 +38,15 @@
     <% if (locals.newCustomer) { const nc = newCustomer; %>
     <div class="field"><label for="f_customer_id">Customer</label><select id="f_customer_id" name="customer_id" data-new-party>
       <option value="">—</option><option value="new" <%= s.customer_id ? '' : 'selected' %>>＋ New customer from documents: <%= nc.name %></option>
-      <% customers.forEach((o) => { %><option value="<%= o.id %>" <%= String(s.customer_id) === String(o.id) ? 'selected' : '' %>><%= o.name %></option><% }) %></select>
+      <%- payerOpts('customer_id') %></select>
       <div class="new-party" data-new-party-box <%= s.customer_id ? 'hidden' : '' %>>
         <span class="small muted">Not on Parties yet — added as a customer when you apply (edit if needed):</span>
         <input name="new_party_name" value="<%= nc.name %>" placeholder="Company name">
         <textarea name="new_party_address" rows="2" placeholder="Address"><%= nc.address || '' %></textarea>
         <input name="new_party_email" value="<%= nc.email || '' %>" placeholder="Notice / billing email (optional)">
         <input type="hidden" name="new_party_phone" value="<%= nc.phone || '' %>"><input type="hidden" name="new_party_type" value="customer"></div></div>
-    <% } else { %><%- sel('customer_id', 'Customer', customers) %><% } %>
-    <%- sel('bill_to_id', 'Bill to', customers) %>
+    <% } else { %><%- payer('customer_id', 'Customer') %><% } %>
+    <%- payer('bill_to_id', 'Bill to') %>
     <div data-ship-only <%= misc ? 'hidden' : '' %>>
       <%- inp('shipper_name', 'Shipper', 'text', 'data-party-lookup="shipper" data-address="f_shipper_address" autocomplete="off"') %><%- ta('shipper_address', '<span class="sr">Shipper </span>Address') %>
       <%- inp('consignee_name', 'Consignee', 'text', 'data-party-lookup="consignee" data-address="f_consignee_address" autocomplete="off"') %><%- ta('consignee_address', '<span class="sr">Consignee </span>Address') %>

@@ -17,6 +17,7 @@ const companies = (type) => store.db.all(`SELECT id, name FROM companies WHERE $
 const partyLists = () => ({
   customers: companies('customer'), agents: companies('agent'), brokers: companies('broker'),
   truckers: companies('trucker'), deliveries: companies('delivery'),
+  allParties: store.db.all('SELECT id, name FROM companies ORDER BY name'),
   staffUsers: store.db.all("SELECT id, name FROM users WHERE role IN ('admin', 'staff') AND active = 1 ORDER BY name"),
 });
 const safeBack = (v) => (typeof v === 'string' && /^\/(?!\/)/.test(v) ? v : null);

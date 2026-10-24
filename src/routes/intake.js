@@ -169,6 +169,7 @@ router.get('/intakes/:id', auth.requireInternal, (req, res) => {
     brokers: db.all(`SELECT id, name FROM companies WHERE ${PT.sql('broker')} ORDER BY name`),
     truckers: db.all(`SELECT id, name FROM companies WHERE ${PT.sql('trucker')} ORDER BY name`),
     deliveries: db.all(`SELECT id, name FROM companies WHERE ${PT.sql('delivery')} ORDER BY name`),
+    allParties: db.all('SELECT id, name FROM companies ORDER BY name'),
   };
   const openShipments = db.all("SELECT id, ref_no, mbl_no, hbl_no FROM shipments WHERE status <> 'DELIVERED' ORDER BY id DESC LIMIT 200");
   res.render('intakes/review', { title: `Intake #${intake.id}`, intake, draft, perDoc, docs, target, s, sources, openShipments, newCustomer, ...lists });
