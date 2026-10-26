@@ -510,13 +510,18 @@ router.post('/documents/delete', auth.requirePerm('shipments_edit'), (req, res) 
   const db = store.db;
   const arr = (v) => (Array.isArray(v) ? v : v == null ? [] : [v]);
   const ids = (req.body.one ? [req.body.one] : arr(req.body.doc_ids)).map(Number).filter(Boolean);
-  const back = `/shipments/${Number(req.body.shipment_id) || ''}#docs`;
+  const sid = Number(req.body.shipment_id) || null;
+  // A master's documents (MAWB / MB/L) show on every house file and on the master page: deletable from both.
+  const mid = Number(req.body.master_id) || (sid ? db.get('SELECT master_id FROM shipments WHERE id = ?', sid)?.master_id : null) || null;
+  const back = sid ? `/shipments/${sid}#docs` : mid ? `/masters/${mid}` : '/shipments';
   if (!ids.length) { flash(req, 'err', 'Tick the documents to delete first'); return res.redirect(back); }
   const files = [];
   let n = 0;
   db.tx(() => {
     for (const id of ids) {
-      const d = db.get('SELECT * FROM documents WHERE id = ? AND shipment_id = ?', id, Number(req.body.shipment_id));
+      // On a file: its own documents and the master's; on the master page: anything filed under the master.
+      const d = db.get(`SELECT * FROM documents WHERE id = ? AND ((shipment_id IS NOT NULL AND shipment_id = ?)
+        OR (master_id IS NOT NULL AND master_id = ? AND (shipment_id IS NULL OR ? IS NULL)))`, id, sid, mid, sid);
       if (!d) continue;
       if (auth.ACCOUNTING_DOCS.includes(d.doc_type) && !auth.canAccounting(req.user)) continue;
       db.run('UPDATE invoices SET document_id = NULL WHERE document_id = ?', d.id);
@@ -526,8 +531,9 @@ router.post('/documents/delete', auth.requirePerm('shipments_edit'), (req, res) 
     }
   });
   for (const f of [...new Set(files)]) { try { fs.unlinkSync(f); } catch { /* already gone */ } }
-  if (n) S.addEvent(Number(req.body.shipment_id), 'DOCS_DELETED', `${n} document(s) deleted`, { userId: req.user.id, customerVisible: false });
-  flash(req, 'ok', `${n} document${n === 1 ? '' : 's'} deleted`);
+  if (n && sid) S.addEvent(sid, 'DOCS_DELETED', `${n} document(s) deleted`, { userId: req.user.id, customerVisible: false });
+  if (n) flash(req, 'ok', `${n} document${n === 1 ? '' : 's'} deleted`);
+  else flash(req, 'err', 'Nothing deleted — the document is no longer on this file (refresh the page), or it is an accounting document you may not change');
   res.redirect(back);
 });
 

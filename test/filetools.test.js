@@ -101,3 +101,22 @@ test('master page shows house cards', async () => {
   assert.match(page, /class="hcard c0"/);
   assert.match(page, /CARD-H1/);
 });
+
+test('documents: a master document can be deleted from a house file or the master page; nothing deleted says why', async () => {
+  const get = await admin();
+  const csrf = await get.csrf();
+  const mid = M.create({ mode: 'AIR', mbl_no: '999-00001111' });
+  const sid = S.create({ mode: 'AIR', hbl_no: 'H-DEL', master_id: mid });
+  const add = () => Number(db.run("INSERT INTO documents (master_id, doc_type, filename) VALUES (?, 'MAWB', 'mawb.pdf')", mid).lastInsertRowid);
+  const d1 = add(); const d2 = add();
+  const r1 = await get.form('/documents/delete', { _csrf: csrf, shipment_id: sid, one: d1 });
+  assert.equal(r1.headers.get('location'), `/shipments/${sid}#docs`);
+  assert.equal(db.get('SELECT 1 FROM documents WHERE id = ?', d1), undefined, 'deleted from the house file');
+  const r2 = await get.form('/documents/delete', { _csrf: csrf, master_id: mid, one: d2 });
+  assert.equal(r2.headers.get('location'), `/masters/${mid}`);
+  assert.equal(db.get('SELECT 1 FROM documents WHERE id = ?', d2), undefined, 'deleted from the master page');
+  const other = S.create({ mode: 'AIR', hbl_no: 'H-OTHER' });
+  const d3 = add();
+  await get.form('/documents/delete', { _csrf: csrf, shipment_id: other, one: d3 });
+  assert.ok(db.get('SELECT 1 FROM documents WHERE id = ?', d3), 'not from a file of another master');
+});
