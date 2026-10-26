@@ -272,3 +272,13 @@ test('air waybill box titles are not read as the port / airport', () => {
   const r = extractRules(T, 'awb.pdf');
   assert.notEqual(r.pol, 'CURRENCY CHGS WT/VAL OTHER');
 });
+
+test('documents print the ocean MB/L with its SCAC (as OPUS): from the SCAC box, container owner or carrier name', () => {
+  const { mblWithScac } = require('../src/tracking/codes');
+  assert.equal(mblWithScac({ mode: 'FCL', mbl_no: '279223711', containers: [{ container_no: 'MRKU3245865' }] }), 'MAEU279223711');
+  assert.equal(mblWithScac({ mode: 'FCL', mbl_no: '279223711', scac: 'maeu' }), 'MAEU279223711');
+  assert.equal(mblWithScac({ mode: 'LCL', mbl_no: '279223711', carrier: 'MAERSK' }), 'MAEU279223711');
+  assert.equal(mblWithScac({ mode: 'FCL', mbl_no: 'HDMUSELA12345678' }), 'HDMUSELA12345678', 'already has its prefix');
+  assert.equal(mblWithScac({ mode: 'FCL', mbl_no: '123456' }), '123456', 'no SCAC known: as typed');
+  assert.equal(mblWithScac({ mode: 'AIR', mbl_no: '180-12345675', carrier: 'KOREAN AIR' }), '180-12345675');
+});

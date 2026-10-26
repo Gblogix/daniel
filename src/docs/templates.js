@@ -15,6 +15,7 @@ const esc = (v) => String(v ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '
 const nl = (v) => esc(v).replace(/\n/g, '<br>');
 const n = (v, d = 2) => (v == null || v === '' ? '' : Number(v).toLocaleString('en-US', { minimumFractionDigits: d, maximumFractionDigits: d }));
 const lbs = (kg) => (kg == null || kg === '' ? '' : `${n(Number(kg) * 2.20462)} LBS`);
+const mbl = (s) => require('../tracking/codes').mblWithScac(s); // MB/L with the carrier SCAC in front, as OPUS prints it
 const addr = (v, name) => require('../address').tidy(v || '', name || '');
 const up = (v) => esc(String(v ?? '').toUpperCase());
 /** 2026-09-16 -> 09/16/2026 (forms use US dates) */
@@ -108,7 +109,7 @@ function arrivalNotice(s, { company: co, preparedBy = '', revision = 0, invoice:
 <table class="b" style="table-layout:fixed">
   <colgroup><col style="width:45%"><col style="width:13%"><col style="width:13%"><col style="width:16%"><col style="width:13%"></colgroup>
   <tr><td rowspan="3"><span class="lbl">Shipper</span><span class="val">${up(s.shipper_name)}</span><b>${nl(String(addr(s.shipper_address, s.shipper_name)).toUpperCase())}</b></td>
-    ${cell(air ? 'MASTER AWB NO.' : 'MASTER B/L NO.', up(s.mbl_no), 'colspan="2" class="big"')}${cell(air ? 'HOUSE AWB NO.' : 'HOUSE B/L NO.', up(s.direct_shipment ? '' : s.hbl_no), 'colspan="2"')}</tr>
+    ${cell(air ? 'MASTER AWB NO.' : 'MASTER B/L NO.', up(mbl(s)), 'colspan="2" class="big"')}${cell(air ? 'HOUSE AWB NO.' : 'HOUSE B/L NO.', up(s.direct_shipment ? '' : s.hbl_no), 'colspan="2"')}</tr>
   <tr>${cell('FILING NO.', esc(s.ref_no), 'colspan="2"')}${cell('CUSTOMER REFERENCE NO.', esc(s.customer_ref), 'colspan="2"')}</tr>
   <tr>${cell(air ? 'AMS AWB NO.' : 'AMS B/L NO.', esc(s.ams_bl_no), 'colspan="2"')}${cell('ISF NO.', esc(s.isf_no), 'colspan="2"')}</tr>
   <tr><td rowspan="3"><span class="lbl">Consignee</span><span class="val">${up(s.consignee_name || s.customer_name)}</span><b>${nl(String(addr(s.consignee_address, s.consignee_name || s.customer_name)).toUpperCase())}</b></td>
@@ -178,7 +179,7 @@ function deliveryOrder(s, { company: co, preparedBy = '', revision = 0 } = {}) {
   <colgroup><col style="width:49%"><col style="width:21%"><col style="width:12%"><col style="width:18%"></colgroup>
   <tr><td rowspan="3"><span class="lbl">Pickup</span><span class="val">${nl(String(pickup || '').toUpperCase())}</span>${s.firms_code ? `<b>FIRMS CODE: ${up(s.firms_code)}</b>` : ''}${s.css_no ? `<br><b>CES / CSS#: ${esc(s.css_no)}</b>` : ''}</td>
     ${cell('TRUCKER', `${up(s.trucker_name)}${s.service_term ? ` (${up(s.service_term.replace('CFS/CFS', 'CFS / CFS').replace('CY/CY', 'CY / CY'))})` : ''}`, 'colspan="3"')}</tr>
-  <tr>${cell(air ? 'MAWB No.' : 'MB/L No.', up(s.mbl_no))}${cell(air ? 'HAWB No.' : 'HB/L No.', up(s.direct_shipment ? '' : s.hbl_no), 'colspan="2"')}</tr>
+  <tr>${cell(air ? 'MAWB No.' : 'MB/L No.', up(mbl(s)))}${cell(air ? 'HAWB No.' : 'HB/L No.', up(s.direct_shipment ? '' : s.hbl_no), 'colspan="2"')}</tr>
   <tr>${cell(air ? 'AMS AWB No.' : 'AMS B/L No.', esc(s.ams_bl_no))}${cell('CUSTOMER REFERENCE No.', esc(s.customer_ref), 'colspan="2"')}</tr>
   <tr><td rowspan="3"><span class="lbl">Delivery ( Appointment is required prior delivery )</span><span class="val">${nl(deliverTo.toUpperCase())}</span>
       ${s.delivery_date ? `<b>APPT: ${us(s.delivery_date)} ${esc(s.delivery_time || '')}</b>` : ''}</td>
@@ -226,7 +227,7 @@ function authorityToMakeEntry(s, { preparedBy = '' } = {}) {
 <table><tr><td>Merchandise Imported at</td><td><b>${up(s.pod)}</b></td><td>on</td><td><b>${us(s.ata || s.eta)}</b></td><td>Via</td><td><b>${up(s.carrier || s.vessel)}</b></td></tr></table>${hr}
 <table>
   ${row('FILING NO.', esc(s.ref_no), 'DATE', t.date)}
-  ${row(air ? 'MAWB NO.' : 'MB/L NO.', up(s.mbl_no), 'PREP. BY', esc(preparedBy))}
+  ${row(air ? 'MAWB NO.' : 'MB/L NO.', up(mbl(s)), 'PREP. BY', esc(preparedBy))}
   ${row(air ? 'SUB-AWB NO.' : 'SUB B/L NO.', esc(s.sub_bl_no), air ? 'DEP. AIRPORT' : 'PORT OF LOADING', up(s.pol), `${s.atd ? 'ATD' : 'ETD'} : <b>${us(s.atd || s.etd)}</b>`)}
   ${row(air ? 'HAWB NO.' : 'HB/L NO.', up(s.direct_shipment ? docRef(s) : s.hbl_no), 'ENTRY PORT', up(s.it_place), `ETA : <b>${us(s.eta)}</b>`)}
   ${row('MANIFEST NO.', esc(s.ams_bl_no), air ? 'DEST. AIRPORT' : 'PORT OF DISCHARGE', up(s.pod), `ETA : <b>${us(s.ata || s.eta)}</b>`)}
@@ -269,7 +270,7 @@ function refBlock(s, inv, leftExtra = '') {
   const ctn = s ? (s.containers.length ? s.containers.map((c) => c.container_no).join(', ') : '') : '';
   return `<table style="margin-top:6px;table-layout:fixed"><tr><td style="padding:0"><table>
     ${leftExtra}
-    ${kv(air ? 'MASTER AWB NO.' : 'MASTER B/L NO.', up(s?.mbl_no))}${kv(air ? 'HOUSE AWB NO.' : 'HOUSE B/L NO.', up(s?.hbl_no))}
+    ${kv(air ? 'MASTER AWB NO.' : 'MASTER B/L NO.', up(s ? mbl(s) : ''))}${kv(air ? 'HOUSE AWB NO.' : 'HOUSE B/L NO.', up(s?.hbl_no))}
     ${kv('Vessel(Flight) NO.', up(air ? s?.flight_no : [s?.vessel, s?.voyage].filter(Boolean).join(' ')))}
     ${kv('POL / ETD', s ? `${up(s.pol)}${s.etd ? ` / ${us(s.etd)}` : ''}` : '')}${kv('POD / ETA', s ? `${up(s.pod)}${s.eta ? ` / ${us(s.eta)}` : ''}` : '')}
     ${kv('F.DEST. / ETA', s?.final_destination ? `${up(s.final_destination)} / ${us(s.eta)}` : '')}${kv('COMMODITY', up(s?.commodity))}</table></td>

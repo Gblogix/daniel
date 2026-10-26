@@ -68,4 +68,16 @@ function trackUrl(s) {
   return url ? { url, label: scac && pages[scac] ? `${CARRIERS[scac] || scac} tracking` : 'Container tracking (SeaRates)' } : null;
 }
 
-module.exports = { scacFromBl, parseAwb, detectScac, trackUrl, CARRIERS, AIRLINES };
+/**
+ * Ocean MB/L as carriers and OPUS print it: SCAC + number ("MAEU279223711"). The SCAC comes from the file's SCAC box,
+ * the B/L prefix, the container owner or the carrier name. A number that already starts with letters stays as it is.
+ */
+function mblWithScac(s) {
+  const bl = String(s?.mbl_no || '').toUpperCase().replace(/\s+/g, '');
+  if (!bl || s.mode === 'AIR' || /^[A-Z]{4}/.test(bl)) return bl;
+  const byName = Object.entries(CARRIERS).find(([, n]) => s.carrier && String(s.carrier).toUpperCase().replace(/[^A-Z]/g, '') === n.toUpperCase().replace(/[^A-Z]/g, ''))?.[0];
+  const scac = detectScac(s) || byName;
+  return scac ? `${scac}${bl}` : bl;
+}
+
+module.exports = { scacFromBl, parseAwb, detectScac, trackUrl, mblWithScac, CARRIERS, AIRLINES };
