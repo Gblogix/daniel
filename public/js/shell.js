@@ -121,8 +121,12 @@
     if (dirty(t) && !window.confirm('This tab has changes that are not saved. Close it anyway?')) return;
     close(t.id);
   };
+  // Physical key (e.code): also works with the Korean keyboard in 한글 mode.
+  const isKey = (e, l) => (e.ctrlKey || e.metaKey) && !e.shiftKey && !e.altKey && (e.code === `Key${l.toUpperCase()}` || String(e.key).toLowerCase() === l);
   document.addEventListener('keydown', (e) => {
-    if ((e.ctrlKey || e.metaKey) && !e.shiftKey && !e.altKey && e.key.toLowerCase() === 'q') { e.preventDefault(); window.gbCloseTab(); }
+    if (isKey(e, 'q')) { e.preventDefault(); window.gbCloseTab(); }
+    // Ctrl+S with the focus on the top bar / tab strip: save the page in the open tab.
+    if (isKey(e, 's')) { e.preventDefault(); const t = tabs.find((x) => x.id === active); try { t?.frame.contentWindow.gbSave?.(); } catch (err) { /* PDF tab */ } }
   });
   // ⌨ shortcut list in the top bar.
   {
@@ -234,7 +238,7 @@
   gr.addEventListener('mousedown', (e) => { const a = e.target.closest('a[data-i]'); if (a) { e.preventDefault(); go(results[Number(a.dataset.i)]); } });
   gs.addEventListener('blur', () => setTimeout(() => { gr.hidden = true; }, 150));
   const focusSearch = (e) => {
-    const t = e.target; if (e.key !== '/' || /INPUT|TEXTAREA|SELECT/.test(t.tagName) || t.isContentEditable) return;
+    const t = e.target; if ((e.key !== '/' && e.code !== 'Slash') || e.ctrlKey || e.metaKey || e.altKey || /INPUT|TEXTAREA|SELECT/.test(t.tagName) || t.isContentEditable) return;
     e.preventDefault(); gs.focus();
   };
   document.addEventListener('keydown', focusSearch);

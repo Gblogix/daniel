@@ -127,7 +127,7 @@ document.querySelectorAll('form[data-bill]').forEach((form) => {
 // Inside a workspace tab: "/" jumps to the global search; saving anything refreshes the bell.
 if (document.documentElement.classList.contains('embedded')) {
   document.addEventListener('keydown', (e) => {
-    if (e.key !== '/' || /INPUT|TEXTAREA|SELECT/.test(e.target.tagName) || e.target.isContentEditable) return;
+    if ((e.key !== '/' && e.code !== 'Slash') || e.ctrlKey || e.metaKey || e.altKey || /INPUT|TEXTAREA|SELECT/.test(e.target.tagName) || e.target.isContentEditable) return;
     if (window.top.gbFocusSearch) { e.preventDefault(); window.top.gbFocusSearch(); }
   });
   if (window.top.gbRefreshBell) window.top.gbRefreshBell();
@@ -802,9 +802,6 @@ document.querySelectorAll('.fileform').forEach((wrap) => {
       e.preventDefault();
     });
   }
-  if (form) document.addEventListener('keydown', (e) => {
-    if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 's') { e.preventDefault(); const btn = form.querySelector('.save-bar .btn') || form.querySelector('button.btn:not([type=button])'); if (btn) btn.click(); }
-  });
 });
 
 // Next actions / follow-ups: Done, Snooze and Bring back answer at once (the item fades out) without reloading the
@@ -917,8 +914,34 @@ document.querySelectorAll('input[data-location-lookup]').forEach((loc) => {
   document.addEventListener('compositionend', (e) => { if (e.target.name && NAMES.has(e.target.name)) upper(e.target); }, true);
 })();
 
+// ---------- keyboard shortcuts (the list is under ⌨ in the top bar) ----------
+// The physical key decides (e.code), so they also work with the Korean keyboard in 한글 mode (Ctrl+ㅂ / Ctrl+ㄴ).
+const gbKey = (e, letter) => (e.ctrlKey || e.metaKey) && !e.shiftKey && !e.altKey
+  && (e.code === `Key${letter.toUpperCase()}` || String(e.key).toLowerCase() === letter);
+
+// Ctrl+S: save what is on screen — the form being typed in, else the page's Save button. Never the browser's
+// "Save page as…" box.
+const SAVE_WORDS = /\b(save|create|book|apply|update|confirm|add)\b/i;
+window.gbSave = () => {
+  const pick = (f) => {
+    if (!f || (f.getAttribute('method') || '').toLowerCase() !== 'post') return null;
+    return f.querySelector('.save-bar .btn') || [...f.querySelectorAll('button:not([type=button]), input[type=submit]')]
+      .find((b) => !b.disabled && !b.classList.contains('danger') && !b.hasAttribute('formaction') && SAVE_WORDS.test(b.textContent || b.value || '')) || null;
+  };
+  const here = document.activeElement?.closest?.('form');
+  const btn = pick(here) || document.querySelector('.save-bar .btn:not([disabled])')
+    || [...document.querySelectorAll('main form, .content form, form')].map(pick).find(Boolean);
+  if (btn) { btn.click(); return true; }
+  return false;
+};
+document.addEventListener('keydown', (e) => {
+  if (!gbKey(e, 's')) return;
+  e.preventDefault();
+  window.gbSave();
+});
+
 // Ctrl+Q inside a page: close its workspace tab.
 document.addEventListener('keydown', (e) => {
-  if (!(e.ctrlKey || e.metaKey) || e.shiftKey || e.altKey || e.key.toLowerCase() !== 'q') return;
+  if (!gbKey(e, 'q')) return;
   try { if (window.top !== window && window.top.gbCloseTab) { e.preventDefault(); window.top.gbCloseTab(); } } catch (err) { /* not in the workspace */ }
 });
