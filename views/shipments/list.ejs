@@ -6,11 +6,16 @@
 <form class="filters" method="get">
   <% if (isInternal && !history) { %>
     <div class="seg">
-      <% Object.entries(STAGES).forEach(([k, label]) => { %><a class="<%= stage === k && !bill ? 'on' : '' %>" href="?stage=<%= k %><%= mode ? `&mode=${mode}` : '' %><%= mine ? '&mine=1' : '' %>"><%= label %></a><% }) %>
+      <% Object.entries(STAGES).forEach(([k, label]) => { %><a class="<%= stage === k && !bill ? 'on' : '' %>" href="?stage=<%= k %><%= mode ? `&mode=${mode}` : '' %>"><%= label %></a><% }) %>
       <a href="/history">History (closed)</a>
     </div>
-    <label class="check small" style="margin:0"><input type="checkbox" name="mine" value="1" <%= mine ? 'checked' : '' %> onchange="this.form.submit()"> My files only</label>
     <input type="hidden" name="stage" value="<%= stage %>">
+  <% } %>
+  <% if (isInternal && locals.counts) { const keep = (m) => `?${new URLSearchParams({ ...(history ? {} : { stage }), ...(q ? { q } : {}), ...(status ? { status } : {}), ...(mode ? { mode } : {}), ...(bill ? { bill } : {}), ...(sort ? { sort } : {}), mine: m })}`; %>
+    <div class="seg mine-seg" role="group" aria-label="Whose files">
+      <a class="<%= mine ? '' : 'on' %>" href="<%= keep('0') %>">All files <span class="count"><%= counts.all %></span></a>
+      <a class="<%= mine ? 'on' : '' %>" href="<%= keep('1') %>" title="Files where you are the OP (person in charge)">👤 My files <span class="count"><%= counts.mine %></span></a>
+    </div>
   <% } %>
   <input name="q" value="<%= q %>" placeholder="Search shipper, container, MBL, HBL, customer, file no…">
   <% if (!history) { %><select name="status"><option value="">All statuses</option><% S.STATUSES.forEach((x) => { %><option value="<%= x.code %>" <%= status === x.code ? 'selected' : '' %>><%= x.label %></option><% }) %></select><% } %>
