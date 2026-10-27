@@ -383,7 +383,7 @@ const MIGRATIONS = {
   companies: { code: 'TEXT', contact: 'TEXT', fax: 'TEXT', tax_id: 'TEXT', portal_hide: 'TEXT', credit_limit: 'REAL', credit_hold: 'INTEGER NOT NULL DEFAULT 0', credit_note: 'TEXT', lost_ignored: 'INTEGER NOT NULL DEFAULT 0', types: 'TEXT', qbo_customer_id: 'TEXT', qbo_vendor_id: 'TEXT', billing_emails: 'TEXT', terms_days: 'INTEGER', short_name: 'TEXT', default_pic_id: 'INTEGER', report_frequency: 'TEXT', report_emails: 'TEXT', report_last: 'TEXT' },
   invoices: { document_id: 'INTEGER', reviewed_at: 'TEXT', reviewed_by: 'INTEGER',
     qbo_id: 'TEXT', qbo_type: 'TEXT', qbo_hash: 'TEXT', qbo_synced_at: 'TEXT', qbo_error: 'TEXT' }, // QuickBooks Online sync
-  emails: { bcc_addr: 'TEXT', reply_to: 'TEXT' },
+  emails: { bcc_addr: 'TEXT', reply_to: 'TEXT', from_addr: 'TEXT', sent_from: 'TEXT' }, // from_addr = wanted sender, sent_from = mailbox it went out from
   payments: { qbo_id: 'TEXT', qbo_synced_at: 'TEXT', qbo_error: 'TEXT' },
   documents: { invoice_id: 'INTEGER', company_id: 'INTEGER', master_id: 'INTEGER' },
   masters: { containers: 'TEXT' }, // container nos. on the MB/L (comma list) — finds the master of a house B/L without MB/L no.
@@ -407,6 +407,7 @@ const DEFAULT_SETTINGS = {
   smartsheet_sync: '1',         // pull shared Smartsheet sheets (needs SMARTSHEET_TOKEN)
   smartsheet_push: '0',         // write ETA back into the customer-shared sheets (opt-in)
   auto_send_reviewed: '0',      // email an invoice / D/N to its party as soon as it is marked reviewed
+  send_as_user: '1',            // emails go out from the signed-in person's own Microsoft 365 mailbox (falls back to the company one)
   auto_status: '1',             // advance the status from dates (ATD, ATA, customs release, pick-up, POD)
   daily_digest: '1',            // 7am email to each staff member with their follow-ups
   customer_reports: '1',        // scheduled shipment reports to customers (per party: daily / weekly)

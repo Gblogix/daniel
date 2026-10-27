@@ -86,3 +86,50 @@ test('Outlook: a mail with big attachments is built as a draft, large files uplo
   assert.ok(urls[urls.length - 1].endsWith('/messages/M1/send'), 'sent last');
   assert.ok(!urls.some((u) => u.endsWith('/sendMail')));
 });
+
+test('emails go out from the signed-in staff member\'s mailbox; the company mailbox when that one cannot be used', async () => {
+  const notify = require('../src/notify');
+  const ctx = require('../src/requestContext');
+  const db = store.db;
+  const uid = Number(db.run("INSERT INTO users (email, name, role, password_hash) VALUES ('james.test@gblogix.com', 'James Test', 'staff', 'x')").lastInsertRowid);
+  const james = db.get('SELECT * FROM users WHERE id = ?', uid);
+  const real = global.fetch;
+  let mode = 'ok'; const sentVia = [];
+  global.fetch = async (url, opts = {}) => {
+    const t = tokenRoute(url); if (t) return { ok: true, status: 200, json: async () => t.body };
+    const m = /\/users\/([^/]+)\/sendMail$/.exec(url);
+    if (m) {
+      const box = decodeURIComponent(m[1]); sentVia.push({ box, body: JSON.parse(opts.body) });
+      if (mode === 'nobox' && box !== 'info@gblogix.com') return { ok: false, status: 404, json: async () => ({ error: { code: 'ErrorInvalidUser', message: 'The requested user is invalid.' } }) };
+      return { ok: true, status: 202, json: async () => ({}) };
+    }
+    return { ok: false, status: 404, json: async () => ({}) };
+  };
+  graph._reset();
+  try {
+    const send = () => ctx.run({ user: james }, () => notify.queueEmail({ kind: 'TEST', to: ['cust@example.com'], subject: 'A/N', html: '<p>x</p>' }));
+    let id = await send();
+    let e = db.get('SELECT * FROM emails WHERE id = ?', id);
+    assert.deepEqual([e.status, e.from_addr, e.sent_from, sentVia.at(-1).box], ['SENT', 'james.test@gblogix.com', 'james.test@gblogix.com', 'james.test@gblogix.com']);
+
+    mode = 'nobox';
+    id = await send();
+    e = db.get('SELECT * FROM emails WHERE id = ?', id);
+    assert.equal(e.status, 'SENT');
+    assert.equal(sentVia.at(-1).box, 'info@gblogix.com', 'fell back to the company mailbox');
+    assert.deepEqual(sentVia.at(-1).body.message.replyTo, [{ emailAddress: { address: 'james.test@gblogix.com' } }], 'replies still reach James');
+    assert.match(e.sent_from, /^info@gblogix\.com \(james\.test@gblogix\.com could not be used/);
+    mode = 'ok';
+
+    // Automatic email (no one signed in): the file's OP.
+    const S = require('../src/shipments');
+    const sid = S.create({ mode: 'FCL', hbl_no: 'FROM-OP', owner_id: uid });
+    assert.equal(notify.senderFor(sid), 'james.test@gblogix.com');
+    assert.equal(notify.senderFor(null), null, 'no file, no one signed in: company mailbox');
+    // Not our domain, or switched off: company mailbox.
+    assert.equal(ctx.run({ user: { ...james, email: 'james@gmail.com' } }, () => notify.senderFor(null)), null);
+    db.setSetting('send_as_user', '0');
+    assert.equal(ctx.run({ user: james }, () => notify.senderFor(null)), null);
+    db.setSetting('send_as_user', '1');
+  } finally { global.fetch = real; graph._reset(); }
+});

@@ -54,11 +54,11 @@ const SMALL = 3 * 1024 * 1024;        // Graph takes attachments inline up to ~3
 const CHUNK = 320 * 1024 * 10;         // upload-session chunks must be multiples of 320 KiB
 
 /**
- * Send an email from the configured mailbox (saved to its Sent Items). attachments: [{filename, content: Buffer}]
+ * Send an email from the configured mailbox, or `from` (saved to that mailbox's Sent Items). attachments: [{filename, content: Buffer}]
  * Small mails go in one call; with bigger attachments (B/L + P/L + C/I scans add up) the mail is built as a draft,
  * large files are uploaded in pieces, then it is sent.
  */
-async function sendMail({ to, cc = [], bcc = [], replyTo = [], subject, html, attachments = [] }, { fetchImpl } = {}) {
+async function sendMail({ to, cc = [], bcc = [], replyTo = [], subject, html, attachments = [], from = '' }, { fetchImpl } = {}) {
   const head = {
     subject,
     body: { contentType: 'HTML', content: html },
@@ -68,7 +68,8 @@ async function sendMail({ to, cc = [], bcc = [], replyTo = [], subject, html, at
     ...(replyTo.length ? { replyTo: recipients(replyTo) } : {}),
   };
   const inline = (a) => ({ '@odata.type': '#microsoft.graph.fileAttachment', name: a.filename, contentBytes: a.content.toString('base64') });
-  const mb = `/users/${encodeURIComponent(config.graph.mailbox)}`;
+  // from: a staff member's own mailbox in the same Microsoft 365 (Mail.Send as an application permission covers it).
+  const mb = `/users/${encodeURIComponent(from || config.graph.mailbox)}`;
   const size = attachments.reduce((n, a) => n + a.content.length, 0);
   if (size <= SMALL) {
     await graph(`${mb}/sendMail`, { method: 'POST', body: { message: { ...head, attachments: attachments.map(inline) }, saveToSentItems: true }, fetchImpl });

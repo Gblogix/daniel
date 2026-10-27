@@ -423,7 +423,9 @@ const addrList = (v) => [...new Set(String(v || '').split(/[,;\s]+/).map((e) => 
 router.get('/shipments/:id/email/:kind', auth.requirePerm('send_notices'), (req, res) => {
   const d = notify.composeDefaults(req.params.kind.toUpperCase(), Number(req.params.id));
   if (!d) return res.status(404).render('error', { title: 'Not found', message: 'Unknown email.' });
-  res.render('shipments/compose', { title: `Send email · ${d.s.ref_no}`, d, me: req.user, mailbox: config.mailTransport === 'outlook' ? config.graph.mailbox : config.mailTransport === 'smtp' ? config.smtp.from : null });
+  res.render('shipments/compose', { title: `Send email · ${d.s.ref_no}`, d, me: req.user, mailbox: config.mailTransport === 'log' ? null
+    : (() => { const own = notify.senderFor(d.s.id); const base = config.mailTransport === 'outlook' ? config.graph.mailbox : config.smtp.from;
+      return own ? (config.mailTransport === 'outlook' ? `${own} (your mailbox — if it can't be used: ${base}, replies to you)` : `${base} (replies to ${own})`) : base; })() });
 });
 router.post('/shipments/:id/email/:kind', auth.requirePerm('send_notices'), upload.array('files', 10), auth.checkCsrf, async (req, res) => {
   const id = Number(req.params.id);

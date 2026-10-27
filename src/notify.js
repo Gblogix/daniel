@@ -103,10 +103,27 @@ function latestDocs(shipmentId, types, db = store.db) {
   return out;
 }
 
-async function queueEmail({ shipmentId = null, kind, to, cc = [], bcc = [], replyTo = [], subject, html, documents = [] }, { db = store.db } = {}) {
+/**
+ * Whose mailbox an email goes out from: the signed-in staff member (A/N, D/O… sent by James come from James), for
+ * automatic emails the file's OP — when that address is in the company's own email domain. null = the company mailbox.
+ */
+function senderFor(shipmentId, { db = store.db, from = '' } = {}) {
+  if (db.setting('send_as_user') === '0') return null;
+  const base = String(config.mailTransport === 'outlook' ? config.graph.mailbox : (config.smtp.from || '')).toLowerCase();
+  const domain = (/@([^>\s]+)/.exec(base) || [])[1];
+  const ok = (v) => { const a = String(v || '').trim().toLowerCase(); return domain && a.endsWith(`@${domain}`) && !base.includes(a) ? a : null; };
+  if (from) return ok(from);
+  const u = require('./requestContext').currentUser();
+  if (u && ['admin', 'staff'].includes(u.role)) return ok(u.email);
+  const op = shipmentId && db.get("SELECT u.email FROM shipments s JOIN users u ON u.id = s.owner_id WHERE s.id = ? AND u.role IN ('admin', 'staff') AND u.active = 1", shipmentId);
+  return ok(op?.email);
+}
+
+async function queueEmail({ shipmentId = null, kind, to, cc = [], bcc = [], replyTo = [], subject, html, documents = [], from = '' }, { db = store.db } = {}) {
   const attachments = documents.map((d) => ({ id: d.id, filename: d.filename, path: d.stored_path }));
-  const res = db.run(`INSERT INTO emails (shipment_id, kind, to_addr, cc_addr, bcc_addr, reply_to, subject, body_html, attachments_json)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`, shipmentId, kind, to.join(', '), cc.join(', '), bcc.join(', ') || null, replyTo.join(', ') || null, subject, html, JSON.stringify(attachments));
+  const sender = senderFor(shipmentId, { db, from });
+  const res = db.run(`INSERT INTO emails (shipment_id, kind, to_addr, cc_addr, bcc_addr, reply_to, subject, body_html, attachments_json, from_addr)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`, shipmentId, kind, to.join(', '), cc.join(', '), bcc.join(', ') || null, replyTo.join(', ') || null, subject, html, JSON.stringify(attachments), sender);
   const id = Number(res.lastInsertRowid);
   await deliver(id, { db });
   return id;
@@ -125,15 +142,26 @@ async function deliver(emailId, { db = store.db } = {}) {
     const cc = (e.cc_addr || '').split(/,\s*/).filter(Boolean);
     const bcc = (e.bcc_addr || '').split(/,\s*/).filter(Boolean);
     const replyTo = (e.reply_to || '').split(/,\s*/).filter(Boolean);
+    let sentFrom;
     if (config.mailTransport === 'outlook') {
-      await require('./graph').sendMail({
-        to, cc, bcc, replyTo, subject: e.subject, html: e.body_html,
-        attachments: files.map((f) => ({ filename: f.filename, content: fs.readFileSync(f.path) })),
-      });
+      const msg = { to, cc, bcc, replyTo, subject: e.subject, html: e.body_html, attachments: files.map((f) => ({ filename: f.filename, content: fs.readFileSync(f.path) })) };
+      const graph = require('./graph');
+      sentFrom = e.from_addr || config.graph.mailbox;
+      try {
+        await graph.sendMail({ ...msg, from: e.from_addr || '' });
+      } catch (err) {
+        // The person's own mailbox can't be used (no Microsoft 365 mailbox, or the app is limited to the company
+        // mailbox): send from the company mailbox instead, with replies going to that person.
+        if (!e.from_addr || !/ErrorInvalidUser|MailboxNotEnabled|MailboxNotFound|ResourceNotFound|ErrorAccessDenied|Access is denied|ErrorSendAsDenied|AccessDenied|403|404/i.test(err.message)) throw err;
+        await graph.sendMail({ ...msg, replyTo: replyTo.length ? replyTo : [e.from_addr] });
+        sentFrom = `${config.graph.mailbox} (${e.from_addr} could not be used: ${String(err.message).replace(/\s*→.*$/, '').slice(0, 140)})`;
+      }
     } else {
-      await getTransport().sendMail({ from: config.smtp.from, to, cc: cc.length ? cc : undefined, bcc: bcc.length ? bcc : undefined, replyTo: replyTo.length ? replyTo.join(', ') : undefined, subject: e.subject, html: e.body_html, attachments: files });
+      const rt = replyTo.length ? replyTo : e.from_addr ? [e.from_addr] : [];
+      await getTransport().sendMail({ from: config.smtp.from, to, cc: cc.length ? cc : undefined, bcc: bcc.length ? bcc : undefined, replyTo: rt.length ? rt.join(', ') : undefined, subject: e.subject, html: e.body_html, attachments: files });
+      sentFrom = `${config.smtp.from}${e.from_addr ? ` (replies to ${e.from_addr})` : ''}`;
     }
-    db.run("UPDATE emails SET status = 'SENT', error = NULL, sent_at = datetime('now') WHERE id = ?", emailId);
+    db.run("UPDATE emails SET status = 'SENT', error = NULL, sent_at = datetime('now'), sent_from = ? WHERE id = ?", sentFrom, emailId);
   } catch (err) {
     db.run("UPDATE emails SET status = 'FAILED', error = ? WHERE id = ?", String(err.message).slice(0, 500), emailId);
   }
@@ -333,7 +361,7 @@ async function sendComposed({ kind, shipmentId, to, cc = [], bcc = [], replyTo =
   return id;
 }
 
-module.exports = { COMPOSE, composeDefaults, sendComposed,
+module.exports = { senderFor, COMPOSE, composeDefaults, sendComposed,
   docContext, storeGenerated, subjectLine, recipients, generateDocument, queueEmail, deliver, summaryHtml, deliveryProblem, lastEmailId,
   sendBrokerPacket, sendCustomerUpdate, sendDeliveryOrder, onDocumentsApplied, onShipmentChanged,
 };

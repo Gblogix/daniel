@@ -269,7 +269,12 @@ router.get('/admin/email-setup', auth.requirePerm('settings'), (req, res) => {
   const heldAll = db.get("SELECT COUNT(*) AS n FROM emails WHERE status IN ('LOGGED', 'FAILED')").n;
   const lastFail = db.get("SELECT id, subject, to_addr, error, created_at FROM emails WHERE status = 'FAILED' ORDER BY id DESC LIMIT 1");
   const lastSent = db.get("SELECT id, subject, to_addr, sent_at FROM emails WHERE status = 'SENT' ORDER BY id DESC LIMIT 1");
-  res.render('admin/email-setup', { title: 'Email setup', held, heldAll, lastFail, lastSent, testTo: req.query.to || config.company.email });
+  res.render('admin/email-setup', { title: 'Email setup', held, heldAll, lastFail, lastSent, testTo: req.query.to || config.company.email, sendAsUser: db.setting('send_as_user') !== '0' });
+});
+router.post('/admin/email-setup/sender', auth.requirePerm('settings'), (req, res) => {
+  store.db.setSetting('send_as_user', req.body.send_as_user === '1' ? '1' : '0');
+  flash(req, 'ok', req.body.send_as_user === '1' ? 'Emails now go out from the sender\'s own mailbox' : `Emails now go out from ${config.mailTransport === 'outlook' ? config.graph.mailbox : 'the company address'}`);
+  res.redirect('/admin/email-setup');
 });
 router.post('/admin/email-setup/test', auth.requirePerm('settings'), async (req, res) => {
   const to = String(req.body.to || '').trim();

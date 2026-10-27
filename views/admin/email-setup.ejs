@@ -12,6 +12,13 @@
   <% if (lastSent) { %><p class="small muted">Last sent: <%= fmtDateTime(lastSent.sent_at) %> UTC — “<%= lastSent.subject %>” to <%= lastSent.to_addr %></p><% } %>
   <% if (lastFail) { %><p class="small" style="color:var(--red)">Last failure (<%= fmtDateTime(lastFail.created_at) %> UTC, to <%= lastFail.to_addr %>): <%= lastFail.error %></p><% } %>
 
+  <form method="post" action="/admin/email-setup/sender" style="margin-top:10px">
+    <input type="hidden" name="_csrf" value="<%= csrf %>">
+    <label class="check"><input type="checkbox" name="send_as_user" value="1" <%= sendAsUser ? 'checked' : '' %> onchange="this.form.submit()">
+      <span><b>Send from the person's own mailbox</b> — an A/N or D/O sent by James goes out from James's address (copy in his Sent Items); automatic emails come from the file's OP.
+      If that mailbox can't be used, the email goes from <%= config.mailTransport === 'outlook' ? config.graph.mailbox : 'the company address' %> with replies to the person.</span></label>
+  </form>
+
   <form method="post" action="/admin/email-setup/test" class="actions" style="margin-top:10px">
     <input type="hidden" name="_csrf" value="<%= csrf %>">
     <input name="to" type="email" value="<%= testTo %>" required style="max-width:300px" aria-label="Send the test to">
@@ -42,6 +49,6 @@ MS_CLIENT_SECRET=…secret value…
 MS_MAILBOX=<%= config.graph.mailbox %></pre></li>
     <li>Run <code>server-tools\restart-server.bat</code> as administrator, come back to this page and press <b>Send a test email</b>.</li>
   </ol>
-  <p class="small muted">Optional, recommended: an Exchange "application access policy" can limit the app to this one mailbox. Reading agent emails into the Document hub needs Mail.Read as well (MS_MAIL_INTAKE=on).</p>
+  <p class="small muted">Optional: an Exchange "application access policy" can limit the app to chosen mailboxes — then put the company mailbox <b>and the staff mailboxes</b> in its group, or emails go from the company mailbox only. Reading agent emails into the Document hub needs Mail.Read as well (MS_MAIL_INTAKE=on).</p>
 </div>
 <%- include('../partials/foot') %>

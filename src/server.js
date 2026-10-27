@@ -48,6 +48,7 @@ function createApp() {
     cookie: { httpOnly: true, sameSite: 'lax', secure: config.baseUrl.startsWith('https://'), maxAge: 7 * 86400000 },
   }));
   app.use(auth.loadUser);
+  app.use(require('./requestContext').middleware);
   app.use(auth.csrf);
   app.use((req, res, next) => {
     Object.assign(res.locals, {

@@ -2,6 +2,7 @@
 <div class="pagehead"><h1 style="font-size:18px"><%= e.subject %></h1><a class="btn secondary" href="/outbox">← Outbox</a></div>
 <div class="card">
   <table class="t">
+    <tr><th>From</th><td><%= e.sent_from || e.from_addr || (config.mailTransport === 'outlook' ? config.graph.mailbox : config.smtp.from) %></td></tr>
     <tr><th>To</th><td><%= e.to_addr %></td></tr>
     <% if (e.cc_addr) { %><tr><th>CC</th><td><%= e.cc_addr %></td></tr><% } %>
     <tr><th>Status</th><td><span class="badge <%= e.status %>"><%= e.status %></span> <span class="small muted"><%= e.error || '' %></span></td></tr>

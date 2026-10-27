@@ -2,11 +2,12 @@
 <div class="pagehead"><h1>Email outbox</h1>
   <% if (config.mailTransport === 'log') { %><span class="badge ARRIVED">Outlook / SMTP not configured — emails are logged, not sent</span> <a class="small" href="/admin/email-setup">Set up →</a><% } else { %><span class="badge SENT">Sending via <%= config.mailTransport === 'outlook' ? `Outlook (${config.graph.mailbox})` : `SMTP ${config.smtp.host}` %></span><% } %></div>
 <div class="tablewrap"><table class="t">
-  <thead><tr><th>When</th><th>Kind</th><th>Shipment</th><th>To</th><th>Subject</th><th>Status</th></tr></thead>
-  <% if (!rows.length) { %><tr><td colspan="6" class="muted">No emails yet.</td></tr><% } %>
+  <thead><tr><th>When</th><th>Kind</th><th>Shipment</th><th>From</th><th>To</th><th>Subject</th><th>Status</th></tr></thead>
+  <% if (!rows.length) { %><tr><td colspan="7" class="muted">No emails yet.</td></tr><% } %>
   <% rows.forEach((e) => { %>
     <tr><td class="nowrap small"><%= fmtDateTime(e.created_at) %></td><td class="small"><%= e.kind %></td>
       <td><% if (e.shipment_id) { %><a href="/shipments/<%= e.shipment_id %>"><%= e.ref_no %></a><% } %></td>
+      <td class="small" title="<%= e.sent_from || '' %>"><%= String(e.sent_from || e.from_addr || (config.mailTransport === 'outlook' ? config.graph.mailbox : '')).split(' (')[0] %><%= /could not be used/.test(e.sent_from || '') ? ' ⚠' : '' %></td>
       <td class="small"><%= e.to_addr %></td><td><a href="/outbox/<%= e.id %>"><%= e.subject %></a></td>
       <td><span class="badge <%= e.status %>" title="<%= e.error || '' %>"><%= e.status %></span><% if (e.status !== 'SENT' && e.error) { %><div class="small" style="color:var(--red);max-width:320px;margin-top:3px"><%= e.error %></div><% } %></td></tr>
   <% }) %>
