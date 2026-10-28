@@ -111,11 +111,11 @@ function senderFor(shipmentId, { db = store.db, from = '' } = {}) {
   if (db.setting('send_as_user') === '0') return null;
   const base = String(config.mailTransport === 'outlook' ? config.graph.mailbox : (config.smtp.from || '')).toLowerCase();
   const domain = (/@([^>\s]+)/.exec(base) || [])[1];
-  const ok = (v) => { const a = String(v || '').trim().toLowerCase(); return domain && a.endsWith(`@${domain}`) && !base.includes(a) ? a : null; };
+  const ok = (v) => { const raw = String(v || '').trim(); const a = raw.toLowerCase(); return domain && a.endsWith(`@${domain}`) && !base.includes(a) ? raw : null; };
   if (from) return ok(from);
   const u = require('./requestContext').currentUser();
-  if (u && ['admin', 'staff'].includes(u.role)) return ok(u.email);
-  const op = shipmentId && db.get("SELECT u.email FROM shipments s JOIN users u ON u.id = s.owner_id WHERE s.id = ? AND u.role IN ('admin', 'staff') AND u.active = 1", shipmentId);
+  if (u && ['admin', 'staff'].includes(u.role)) return ok(u.mail_from || u.email);
+  const op = shipmentId && db.get("SELECT COALESCE(NULLIF(u.mail_from, ''), u.email) AS email FROM shipments s JOIN users u ON u.id = s.owner_id WHERE s.id = ? AND u.role IN ('admin', 'staff') AND u.active = 1", shipmentId);
   return ok(op?.email);
 }
 

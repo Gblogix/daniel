@@ -130,11 +130,14 @@ router.post('/admin/users', auth.requirePerm('users'), (req, res) => {
   if (req.user.role !== 'admin' && (role === 'admin' || target?.role === 'admin')) { flash(req, 'err', 'Only an admin can manage admin accounts'); return res.redirect('/admin/users'); }
   const external = !auth.INTERNAL.includes(role);
   const companyId = Number(company_id) || null;
+  // Microsoft 365 mailbox the person's emails go out from (when it differs from the sign-in email).
+  const mailFrom = external ? null : String(req.body.mail_from || '').trim() || null;
+  if (mailFrom && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(mailFrom)) { flash(req, 'err', 'Send-from mailbox must be an email address'); return res.redirect('/admin/users'); }
   if (external && !companyId) { flash(req, 'err', 'Customer / agent / broker / trucker users must belong to a company'); return res.redirect('/admin/users'); }
   try {
     if (id) {
       if (Number(id) === req.user.id && (role !== 'admin' || !active)) { flash(req, 'err', 'You cannot remove your own admin access'); return res.redirect('/admin/users'); }
-      store.db.run('UPDATE users SET email = ?, name = ?, role = ?, company_id = ?, active = ? WHERE id = ?', email, name, role, companyId, active ? 1 : 0, Number(id));
+      store.db.run('UPDATE users SET email = ?, name = ?, role = ?, company_id = ?, active = ?, mail_from = ? WHERE id = ?', email, name, role, companyId, active ? 1 : 0, mailFrom, Number(id));
       if (role !== 'staff') store.db.run('UPDATE users SET can_accounting = 0 WHERE id = ?', Number(id));
       // A password typed here is temporary: the user picks their own at the next sign-in (not when you change your own).
       if (password) {
@@ -143,7 +146,7 @@ router.post('/admin/users', auth.requirePerm('users'), (req, res) => {
       }
     } else {
       if (!password || password.length < 8) { flash(req, 'err', 'Password must be at least 8 characters'); return res.redirect('/admin/users'); }
-      store.db.run('INSERT INTO users (email, name, role, company_id, password_hash, can_accounting, must_change_pw) VALUES (?, ?, ?, ?, ?, ?, 1)', email, name, role, companyId, auth.hashPassword(password), acct);
+      store.db.run('INSERT INTO users (email, name, role, company_id, password_hash, can_accounting, must_change_pw, mail_from) VALUES (?, ?, ?, ?, ?, ?, 1, ?)', email, name, role, companyId, auth.hashPassword(password), acct, mailFrom);
     }
     flash(req, 'ok', 'User saved');
   } catch (e) {

@@ -133,3 +133,23 @@ test('emails go out from the signed-in staff member\'s mailbox; the company mail
     db.setSetting('send_as_user', '1');
   } finally { global.fetch = real; graph._reset(); }
 });
+
+test('staff send-from mailboxes: James and Jay matched once by name; a set mailbox is used for sending', () => {
+  const { assignMailboxes } = require('../src/staffMail');
+  const notify = require('../src/notify');
+  const ctx = require('../src/requestContext');
+  const db = store.db;
+  db.run("DELETE FROM users WHERE email LIKE 'james%' OR email LIKE 'jay%' OR name LIKE 'James%' OR name LIKE 'Jae%'");
+  const add = (email, name) => Number(db.run("INSERT INTO users (email, name, role, password_hash) VALUES (?, ?, 'staff', 'x')", email, name).lastInsertRowid);
+  const james = add('james@gblogix.com', 'James Park');
+  const jay = add('jaeho@gblogix.com', 'Jaeho Lee');
+  const r = assignMailboxes();
+  assert.deepEqual(r.map((x) => x.how), ['set', 'set']);
+  assert.equal(db.get('SELECT mail_from FROM users WHERE id = ?', james).mail_from, 'jamesp@gblogix.com');
+  assert.equal(db.get('SELECT mail_from FROM users WHERE id = ?', jay).mail_from, 'JayL@gblogix.com');
+  const u = db.get('SELECT * FROM users WHERE id = ?', james);
+  assert.equal(ctx.run({ user: u }, () => notify.senderFor(null)), 'jamesp@gblogix.com');
+  add('james.k@gblogix.com', 'James Kim');
+  db.run('UPDATE users SET mail_from = NULL');
+  assert.match(assignMailboxes()[0].how, /2 possible users/, 'two Jameses: left to the admin');
+});

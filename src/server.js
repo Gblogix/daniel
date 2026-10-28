@@ -148,6 +148,11 @@ if (require.main === module) {
       for (const f of ['seal_no', 'size_type']) db.run(`UPDATE containers SET ${f} = UPPER(${f}) WHERE ${f} IS NOT NULL AND ${f} <> UPPER(${f})`);
       db.setSetting('bl_text_upper', '1');
     }
+    // Staff mailboxes given by the owner (James, Jay): once.
+    if (!db.setting('staff_mailboxes_set')) {
+      for (const r of require('./staffMail').assignMailboxes()) console.log(`Send-from mailbox ${r.mailbox}: ${r.user ? `${r.user} — ` : ''}${r.how}`);
+      db.setSetting('staff_mailboxes_set', '1');
+    }
     if (!db.setting('pickup_locations_learned')) {
       const n = require('./locations').backfill();
       db.setSetting('pickup_locations_learned', '1');
