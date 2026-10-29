@@ -329,6 +329,22 @@ const COMPOSE = {
 };
 
 /** Everything the send window starts with. */
+/**
+ * A/N recipients remembered per shipper: the To / CC / BCC of the last A/N sent on another file of the same shipper
+ * (name compared without Co., Ltd. etc.). Typed once in the send window, filled in from then on.
+ */
+const shipperKey = (name) => S.shortParty(name || '').toUpperCase().replace(/[^A-Z0-9]/g, '');
+function rememberedRecipients(s, emailKind, { db = store.db } = {}) {
+  const key = shipperKey(s.shipper_name);
+  if (key.length < 3) return null;
+  const rows = db.all(`SELECT e.to_addr, e.cc_addr, e.bcc_addr, e.created_at, sh.id AS sid, sh.ref_no, sh.shipper_name FROM emails e JOIN shipments sh ON sh.id = e.shipment_id
+    WHERE e.kind = ? AND e.status <> 'FAILED' AND sh.id <> ? AND sh.shipper_name IS NOT NULL ORDER BY e.id DESC LIMIT 500`, emailKind, s.id);
+  const hit = rows.find((r) => shipperKey(r.shipper_name) === key);
+  if (!hit) return null;
+  const list = (v) => String(v || '').split(/[,;\s]+/).map((x) => x.trim()).filter((x) => /.+@.+\..+/.test(x));
+  return { to: list(hit.to_addr), cc: list(hit.cc_addr), bcc: list(hit.bcc_addr), from: { id: hit.sid, ref_no: hit.ref_no, date: hit.created_at, shipper: hit.shipper_name } };
+}
+
 function composeDefaults(kind, shipmentId, { db = store.db } = {}) {
   const c = COMPOSE[kind];
   if (!c) return null;
@@ -339,9 +355,13 @@ function composeDefaults(kind, shipmentId, { db = store.db } = {}) {
   const used = db.all('SELECT to_addr, cc_addr FROM emails WHERE shipment_id = ? ORDER BY id DESC LIMIT 50', s.id).flatMap((e) => `${e.to_addr},${e.cc_addr || ''}`.split(/[,;\s]+/));
   const partyMails = ['customer_id', 'broker_id', 'trucker_id', 'agent_id', 'delivery_company_id', 'bill_to_id'].flatMap((k) => recipients(s[k], db));
   const suggestions = [...new Set([...partyMails, ...used].map((e) => e.trim().toLowerCase()).filter((e) => /.+@.+\..+/.test(e)))];
+  // A/N: this file's own last A/N wins (re-send), else the shipper's last A/N, else the broker's address.
+  const own = kind === 'AN' && db.get('SELECT 1 FROM emails WHERE shipment_id = ? AND kind = ?', s.id, c.emailKind);
+  const memo = kind === 'AN' && !own ? rememberedRecipients(s, c.emailKind, { db }) : null;
   return {
-    kind, label: c.label, s, to: recipients(s[c.party], db), cc: [], subject: subjectLine(s, c.subject), html: summaryHtml(s, c.intro(s)),
-    generate: c.generate(s), docs: docs.map((d) => ({ ...d, checked: latest.includes(d.id) })), suggestions, partyMissing: !s[c.party],
+    kind, label: c.label, s, to: memo?.to.length ? memo.to : recipients(s[c.party], db), cc: memo?.cc || [], bcc: memo?.bcc || [], remembered: memo?.from || null,
+    subject: subjectLine(s, c.subject), html: summaryHtml(s, c.intro(s)),
+    generate: c.generate(s), docs: docs.map((d) => ({ ...d, checked: latest.includes(d.id) })), suggestions, partyMissing: !s[c.party] && !memo?.to.length,
   };
 }
 
@@ -361,7 +381,7 @@ async function sendComposed({ kind, shipmentId, to, cc = [], bcc = [], replyTo =
   return id;
 }
 
-module.exports = { senderFor, COMPOSE, composeDefaults, sendComposed,
+module.exports = { senderFor, rememberedRecipients, COMPOSE, composeDefaults, sendComposed,
   docContext, storeGenerated, subjectLine, recipients, generateDocument, queueEmail, deliver, summaryHtml, deliveryProblem, lastEmailId,
   sendBrokerPacket, sendCustomerUpdate, sendDeliveryOrder, onDocumentsApplied, onShipmentChanged,
 };

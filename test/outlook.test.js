@@ -153,3 +153,19 @@ test('staff send-from mailboxes: James and Jay matched once by name; a set mailb
   db.run('UPDATE users SET mail_from = NULL');
   assert.match(assignMailboxes()[0].how, /2 possible users/, 'two Jameses: left to the admin');
 });
+
+test('A/N recipients are remembered per shipper: the next file of the same shipper gets them filled in', async () => {
+  const notify = require('../src/notify');
+  const S = require('../src/shipments');
+  const db = store.db;
+  const a = S.create({ mode: 'FCL', hbl_no: 'MEM-1', shipper_name: 'Seorin Company Co., Ltd.' });
+  const b = S.create({ mode: 'FCL', hbl_no: 'MEM-2', shipper_name: 'SEORIN COMPANY' });
+  const c = S.create({ mode: 'FCL', hbl_no: 'MEM-3', shipper_name: 'Other Maker Inc.' });
+  assert.equal(notify.composeDefaults('AN', b).remembered, null, 'nothing sent yet');
+  db.run("INSERT INTO emails (shipment_id, kind, to_addr, cc_addr, bcc_addr, subject, body_html, status) VALUES (?, 'BROKER_PACKET', 'ops@broker.example, cs@seorin.example', 'jamesp@gblogix.com', 'audit@gblogix.com', 'A/N', 'x', 'SENT')", a);
+  const d = notify.composeDefaults('AN', b);
+  assert.deepEqual([d.to, d.cc, d.bcc], [['ops@broker.example', 'cs@seorin.example'], ['jamesp@gblogix.com'], ['audit@gblogix.com']]);
+  assert.equal(d.remembered.ref_no, S.find(a, null).ref_no);
+  assert.equal(notify.composeDefaults('AN', c).remembered, null, 'another shipper: not used');
+  assert.equal(notify.composeDefaults('DO', b).remembered, null, 'A/N only');
+});
