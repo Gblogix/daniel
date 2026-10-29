@@ -330,19 +330,24 @@ const COMPOSE = {
 
 /** Everything the send window starts with. */
 /**
- * A/N recipients remembered per shipper: the To / CC / BCC of the last A/N sent on another file of the same shipper
- * (name compared without Co., Ltd. etc.). Typed once in the send window, filled in from then on.
+ * Recipients remembered from the last email of the same kind on another file: A/N per shipper (name compared without
+ * Co., Ltd. etc.), D/O per trucker. Typed once in the send window, filled in from then on.
  */
 const shipperKey = (name) => S.shortParty(name || '').toUpperCase().replace(/[^A-Z0-9]/g, '');
-function rememberedRecipients(s, emailKind, { db = store.db } = {}) {
-  const key = shipperKey(s.shipper_name);
-  if (key.length < 3) return null;
-  const rows = db.all(`SELECT e.to_addr, e.cc_addr, e.bcc_addr, e.created_at, sh.id AS sid, sh.ref_no, sh.shipper_name FROM emails e JOIN shipments sh ON sh.id = e.shipment_id
-    WHERE e.kind = ? AND e.status <> 'FAILED' AND sh.id <> ? AND sh.shipper_name IS NOT NULL ORDER BY e.id DESC LIMIT 500`, emailKind, s.id);
-  const hit = rows.find((r) => shipperKey(r.shipper_name) === key);
+const REMEMBER = {
+  AN: { emailKind: 'BROKER_PACKET', ready: (s) => shipperKey(s.shipper_name).length >= 3, same: (s, r) => shipperKey(r.shipper_name) === shipperKey(s.shipper_name), label: (r) => r.shipper_name },
+  DO: { emailKind: 'DELIVERY_ORDER', ready: (s) => Boolean(s.trucker_id), same: (s, r) => r.trucker_id === s.trucker_id, label: (r) => r.trucker_name || 'this trucker' },
+};
+function rememberedRecipients(s, kind, { db = store.db } = {}) {
+  const m = REMEMBER[kind];
+  if (!m || !m.ready(s)) return null;
+  const rows = db.all(`SELECT e.to_addr, e.cc_addr, e.bcc_addr, e.created_at, sh.id AS sid, sh.ref_no, sh.shipper_name, sh.trucker_id, t.name AS trucker_name
+    FROM emails e JOIN shipments sh ON sh.id = e.shipment_id LEFT JOIN companies t ON t.id = sh.trucker_id
+    WHERE e.kind = ? AND e.status <> 'FAILED' AND sh.id <> ? ORDER BY e.id DESC LIMIT 500`, m.emailKind, s.id);
+  const hit = rows.find((r) => m.same(s, r));
   if (!hit) return null;
   const list = (v) => String(v || '').split(/[,;\s]+/).map((x) => x.trim()).filter((x) => /.+@.+\..+/.test(x));
-  return { to: list(hit.to_addr), cc: list(hit.cc_addr), bcc: list(hit.bcc_addr), from: { id: hit.sid, ref_no: hit.ref_no, date: hit.created_at, shipper: hit.shipper_name } };
+  return { to: list(hit.to_addr), cc: list(hit.cc_addr), bcc: list(hit.bcc_addr), from: { id: hit.sid, ref_no: hit.ref_no, date: hit.created_at, who: m.label(hit), kind } };
 }
 
 function composeDefaults(kind, shipmentId, { db = store.db } = {}) {
@@ -355,9 +360,10 @@ function composeDefaults(kind, shipmentId, { db = store.db } = {}) {
   const used = db.all('SELECT to_addr, cc_addr FROM emails WHERE shipment_id = ? ORDER BY id DESC LIMIT 50', s.id).flatMap((e) => `${e.to_addr},${e.cc_addr || ''}`.split(/[,;\s]+/));
   const partyMails = ['customer_id', 'broker_id', 'trucker_id', 'agent_id', 'delivery_company_id', 'bill_to_id'].flatMap((k) => recipients(s[k], db));
   const suggestions = [...new Set([...partyMails, ...used].map((e) => e.trim().toLowerCase()).filter((e) => /.+@.+\..+/.test(e)))];
-  // A/N: this file's own last A/N wins (re-send), else the shipper's last A/N, else the broker's address.
-  const own = kind === 'AN' && db.get('SELECT 1 FROM emails WHERE shipment_id = ? AND kind = ?', s.id, c.emailKind);
-  const memo = kind === 'AN' && !own ? rememberedRecipients(s, c.emailKind, { db }) : null;
+  // A/N / D/O: this file's own last one wins (re-send), else the shipper's last A/N / the trucker's last D/O,
+  // else the party's address.
+  const own = REMEMBER[kind] && db.get('SELECT 1 FROM emails WHERE shipment_id = ? AND kind = ?', s.id, c.emailKind);
+  const memo = REMEMBER[kind] && !own ? rememberedRecipients(s, kind, { db }) : null;
   return {
     kind, label: c.label, s, to: memo?.to.length ? memo.to : recipients(s[c.party], db), cc: memo?.cc || [], bcc: memo?.bcc || [], remembered: memo?.from || null,
     subject: subjectLine(s, c.subject), html: summaryHtml(s, c.intro(s)),

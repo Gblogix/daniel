@@ -9,7 +9,7 @@
   <datalist id="addr-suggest"><% d.suggestions.forEach((a) => { %><option value="<%= a %>"><% }) %></datalist>
   <div class="crow"><label>From</label><div class="cfield muted"><%= mailbox || 'Email sending not set up — the message is kept in the Outbox' %></div></div>
   <div class="crow"><label for="reply_to">Reply to</label><div class="cfield"><input id="reply_to" name="reply_to" list="addr-suggest" placeholder="Optional — where replies should go" value="<%= me.email || '' %>"></div></div>
-  <% if (d.remembered) { %><div class="infobox small">✉ Recipients filled from the last A/N for <b><%= d.remembered.shipper %></b> (<a href="/shipments/<%= d.remembered.id %>" target="_blank"><%= d.remembered.ref_no %></a>, <%= fmtDate(d.remembered.date) %>) — change them if needed; what you send now is remembered for this shipper.</div><% } %>
+  <% if (d.remembered) { %><div class="infobox small">✉ Recipients filled from the last <%= d.remembered.kind === 'DO' ? 'D/O to' : 'A/N for' %> <b><%= d.remembered.who %></b> (<a href="/shipments/<%= d.remembered.id %>" target="_blank"><%= d.remembered.ref_no %></a>, <%= fmtDate(d.remembered.date) %>) — change them if needed; what you send now is remembered for this <%= d.remembered.kind === 'DO' ? 'trucker' : 'shipper' %>.</div><% } %>
   <% [['to', 'To', d.to], ['cc', 'CC', d.cc], ['bcc', 'BCC', d.bcc || []]].forEach(([k, label, list]) => { %>
   <div class="crow"><label><%= label %></label><div class="cfield chips-input" data-chips="<%= k %>">
     <% list.forEach((a) => { %><span class="chip" data-v="<%= a %>"><%= a %><button type="button" aria-label="Remove <%= a %>">×</button></span><% }) %>

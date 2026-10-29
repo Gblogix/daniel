@@ -167,5 +167,24 @@ test('A/N recipients are remembered per shipper: the next file of the same shipp
   assert.deepEqual([d.to, d.cc, d.bcc], [['ops@broker.example', 'cs@seorin.example'], ['jamesp@gblogix.com'], ['audit@gblogix.com']]);
   assert.equal(d.remembered.ref_no, S.find(a, null).ref_no);
   assert.equal(notify.composeDefaults('AN', c).remembered, null, 'another shipper: not used');
-  assert.equal(notify.composeDefaults('DO', b).remembered, null, 'A/N only');
+  assert.equal(notify.composeDefaults('DO', b).remembered, null, 'no D/O sent yet');
+  assert.equal(d.remembered.who, 'SEORIN COMPANY CO., LTD.');
+});
+
+test('D/O recipients are remembered per trucker', () => {
+  const notify = require('../src/notify');
+  const S = require('../src/shipments');
+  const db = store.db;
+  const t1 = Number(db.run("INSERT INTO companies (name, type, emails) VALUES ('Sample Trucking', 'trucker', 'dispatch@sampletruck.example')").lastInsertRowid);
+  const t2 = Number(db.run("INSERT INTO companies (name, type) VALUES ('Other Trucking', 'trucker')").lastInsertRowid);
+  const a = S.create({ mode: 'FCL', hbl_no: 'DOM-1', trucker_id: t1 });
+  const b = S.create({ mode: 'LCL', hbl_no: 'DOM-2', trucker_id: t1 });
+  const c = S.create({ mode: 'FCL', hbl_no: 'DOM-3', trucker_id: t2 });
+  assert.deepEqual(notify.composeDefaults('DO', b).to, ['dispatch@sampletruck.example'], 'nothing sent yet: the party email');
+  db.run("INSERT INTO emails (shipment_id, kind, to_addr, cc_addr, subject, body_html, status) VALUES (?, 'DELIVERY_ORDER', 'dispatch@sampletruck.example, mike@sampletruck.example', 'jayl@gblogix.com', 'D/O', 'x', 'SENT')", a);
+  const d = notify.composeDefaults('DO', b);
+  assert.deepEqual([d.to, d.cc], [['dispatch@sampletruck.example', 'mike@sampletruck.example'], ['jayl@gblogix.com']]);
+  assert.equal(d.remembered.who, 'Sample Trucking');
+  assert.equal(notify.composeDefaults('DO', c).remembered, null, 'another trucker');
+  assert.equal(notify.composeDefaults('AN', b).remembered, null, 'D/O addresses are not used for the A/N');
 });
