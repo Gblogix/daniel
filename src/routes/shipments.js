@@ -97,11 +97,24 @@ router.post('/shipments/:id/profit-note', auth.requireRole('admin'), (req, res) 
 });
 
 // ---------- list ----------
-// "My files" (where I am the OP / PIC): chosen with ?mine=1 / ?mine=0 and kept for the next visits (per login).
-function mineFilter(req) {
-  if (!auth.INTERNAL.includes(req.user.role)) return false;
-  if (req.query.mine === '1' || req.query.mine === '0') req.session.mineFiles = req.query.mine === '1';
-  return Boolean(req.session.mineFiles);
+// Files by person in charge (OP / PIC): ?op=me | <user id> | none | '' (everyone). Kept for the next visits (per
+// login). The older ?mine=1 / ?mine=0 links (menu "My files") still work.
+function opFilter(req) {
+  if (!auth.INTERNAL.includes(req.user.role)) return '';
+  let v = req.query.op;
+  if (v === undefined && req.query.mine !== undefined) v = req.query.mine === '1' ? 'me' : '';
+  if (v !== undefined) req.session.opFilter = ['me', 'none', ''].includes(v) || /^\d+$/.test(v) ? v : '';
+  return req.session.opFilter || '';
+}
+function byOp(req, rows) {
+  const sel = opFilter(req);
+  const staff = store.db.all("SELECT id, name FROM users WHERE role IN ('admin', 'staff') AND active = 1 ORDER BY name");
+  const n = (fn) => rows.filter(fn).length;
+  const opCounts = { all: rows.length, none: n((r) => !r.owner_id), me: n((r) => r.owner_id === req.user.id) };
+  for (const u of staff) opCounts[u.id] = n((r) => r.owner_id === u.id);
+  const want = sel === 'me' ? req.user.id : /^\d+$/.test(sel) ? Number(sel) : null;
+  const out = sel === 'none' ? rows.filter((r) => !r.owner_id) : want ? rows.filter((r) => r.owner_id === want) : rows;
+  return { rows: out, op: sel, opCounts, opStaff: staff };
 }
 
 const STAGES = { open: 'All open', active: 'Active (before delivery)', delivered: 'Delivered — billing open', all: 'All' };
@@ -110,12 +123,10 @@ router.get('/shipments', auth.requireLogin, (req, res) => {
   const { q = '', status = '', mode = '' } = req.query;
   const internal = auth.INTERNAL.includes(req.user.role);
   const stage = internal && STAGES[req.query.stage] ? req.query.stage : internal ? 'open' : 'all';
-  const mine = mineFilter(req);
   const sort = ['asc', 'desc'].includes(req.query.sort) ? req.query.sort : '';
   const noCustomer = req.query.nocust === '1';
-  let rows = S.list(req.user, { q, status, mode, stage: stage === 'all' ? null : stage, sort, noCustomer });
-  const counts = { all: rows.length, mine: rows.filter((r) => r.owner_id === req.user.id).length };
-  if (mine) rows = rows.filter((r) => r.owner_id === req.user.id);
+  const ops = byOp(req, S.list(req.user, { q, status, mode, stage: stage === 'all' ? null : stage, sort, noCustomer }));
+  let { rows } = ops;
   // Accounting follow-up filters on delivered files.
   const bill = auth.canAccounting(req.user) ? req.query.bill || '' : '';
   if (bill) {
@@ -126,20 +137,18 @@ router.get('/shipments', auth.requireLogin, (req, res) => {
   res.locals.pickupCount = pickupCount;
   res.locals.journey = (s) => require('../stages').stages(s, s.containers?.[0] || {});
   res.locals.staffUsers = internal ? store.db.all("SELECT id, name FROM users WHERE role IN ('admin', 'staff') AND active = 1 ORDER BY name") : [];
-  res.render('shipments/list', { title: { OCEAN: 'House B/L list · Ocean', AIR: 'HAWB list · Air', TRUCK: 'Truck files', OTHER: 'Other files' }[mode] || 'Shipments', rows, q, status, mode, stage, STAGES, bill, history: false, mine, counts, sort });
+  res.render('shipments/list', { title: { OCEAN: 'House B/L list · Ocean', AIR: 'HAWB list · Air', TRUCK: 'Truck files', OTHER: 'Other files' }[mode] || 'Shipments', rows, q, status, mode, stage, STAGES, bill, history: false, ...ops, rows, sort });
 });
 
 /** Shipment history: closed files (customer paid), kept for look-up later. */
 router.get('/history', auth.requireInternal, (req, res) => {
   const { q = '', mode = '' } = req.query;
   const sort = req.query.sort === 'asc' ? 'asc' : 'desc';
-  const mine = mineFilter(req);
-  let rows = S.list(req.user, { q, mode, stage: 'closed', sort });
-  const counts = { all: rows.length, mine: rows.filter((r) => r.owner_id === req.user.id).length };
-  if (mine) rows = rows.filter((r) => r.owner_id === req.user.id);
+  const ops = byOp(req, S.list(req.user, { q, mode, stage: 'closed', sort }));
+  const { rows } = ops;
   const A = require('../accounting');
   if (auth.canAccounting(req.user)) for (const r of rows) r.pl = A.shipmentProfit(r.id);
-  res.render('shipments/list', { title: 'Shipment history', rows, q, status: '', mode, stage: 'closed', STAGES, bill: '', history: true, mine, counts, sort });
+  res.render('shipments/list', { title: 'Shipment history', rows, q, status: '', mode, stage: 'closed', STAGES, bill: '', history: true, ...ops, sort });
 });
 
 /** Form helper: what past files suggest for the fields still empty (carrier, pick-up location, delivery). */

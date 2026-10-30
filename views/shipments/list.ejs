@@ -11,11 +11,14 @@
     </div>
     <input type="hidden" name="stage" value="<%= stage %>">
   <% } %>
-  <% if (isInternal && locals.counts) { const keep = (m) => `?${new URLSearchParams({ ...(history ? {} : { stage }), ...(q ? { q } : {}), ...(status ? { status } : {}), ...(mode ? { mode } : {}), ...(bill ? { bill } : {}), ...(sort ? { sort } : {}), mine: m })}`; %>
-    <div class="seg mine-seg" role="group" aria-label="Whose files">
-      <a class="<%= mine ? '' : 'on' %>" href="<%= keep('0') %>">All files <span class="count"><%= counts.all %></span></a>
-      <a class="<%= mine ? 'on' : '' %>" href="<%= keep('1') %>" title="Files where you are the OP (person in charge)">👤 My files <span class="count"><%= counts.mine %></span></a>
-    </div>
+  <% if (isInternal && locals.opCounts) { const c = opCounts; %>
+    <label class="op-pick" title="Show the files of one person in charge (OP)"><span>OP</span>
+      <select name="op" onchange="this.form.submit()" aria-label="Person in charge">
+        <option value="" <%= op === '' ? 'selected' : '' %>>Everyone (<%= c.all %>)</option>
+        <option value="me" <%= op === 'me' ? 'selected' : '' %>>👤 Me — <%= user.name %> (<%= c.me %>)</option>
+        <optgroup label="Person in charge"><% opStaff.forEach((u) => { %><option value="<%= u.id %>" <%= op === String(u.id) ? 'selected' : '' %>><%= u.name %> (<%= c[u.id] || 0 %>)</option><% }) %></optgroup>
+        <option value="none" <%= op === 'none' ? 'selected' : '' %>>— Not assigned (<%= c.none %>)</option>
+      </select></label>
   <% } %>
   <input name="q" value="<%= q %>" placeholder="Search shipper, container, MBL, HBL, customer, file no…">
   <% if (!history) { %><select name="status"><option value="">All statuses</option><% S.STATUSES.forEach((x) => { %><option value="<%= x.code %>" <%= status === x.code ? 'selected' : '' %>><%= x.label %></option><% }) %></select><% } %>
