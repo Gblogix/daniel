@@ -919,3 +919,5 @@ input.party-search.missing-pick { border-color: #f87171; box-shadow: 0 0 0 3px r
 .infobox { background: #eef6ff; border: 1px solid #bfdbfe; color: #1e3a8a; border-radius: 8px; padding: 8px 12px; margin: 0 0 10px; }
 .op-pick { display: inline-flex; align-items: center; gap: 6px; margin: 0; font-weight: 600; font-size: 13px; color: var(--navy); }
 .op-pick select { min-width: 200px; }
+.keytest { margin-top: 8px; padding: 6px 8px; background: #f8fafc; border: 1px dashed #cbd5e1; border-radius: 6px; font-size: 12.5px; }
+.keytest span { font-family: ui-monospace, Consolas, monospace; }

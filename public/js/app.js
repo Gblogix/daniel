@@ -940,6 +940,12 @@ document.addEventListener('keydown', (e) => {
   window.gbSave();
 });
 
+// Tell the ⌨ box which keys reach the page (diagnosis when a shortcut seems dead).
+document.addEventListener('keydown', (e) => {
+  if (!(e.ctrlKey || e.metaKey || e.key === '/')) return;
+  try { window.top.gbKeySeen?.(e, 'in the page'); } catch (err) { /* not in the workspace */ }
+}, true);
+
 // Ctrl+Q inside a page: close its workspace tab.
 document.addEventListener('keydown', (e) => {
   if (!gbKey(e, 'q')) return;

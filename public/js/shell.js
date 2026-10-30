@@ -128,6 +128,15 @@
     // Ctrl+S with the focus on the top bar / tab strip: save the page in the open tab.
     if (isKey(e, 's')) { e.preventDefault(); const t = tabs.find((x) => x.id === active); try { t?.frame.contentWindow.gbSave?.(); } catch (err) { /* PDF tab */ } }
   });
+  // ⌨ box: shows the last shortcut-like key the browser handed over (from this window or a page in a tab), so a
+  // shortcut that "does nothing" can be told apart from one the browser / computer never passes on.
+  window.gbKeySeen = (e, where) => {
+    const out = document.getElementById('keyseen');
+    if (!out) return;
+    const mods = [e.ctrlKey && 'Ctrl', e.metaKey && 'Cmd', e.altKey && 'Alt', e.shiftKey && 'Shift'].filter(Boolean);
+    out.textContent = `${[...mods, e.code || e.key].join(' + ')} (“${e.key}”) — received ${where}`;
+  };
+  document.addEventListener('keydown', (e) => { if (e.ctrlKey || e.metaKey || e.key === '/') window.gbKeySeen(e, 'in the top bar'); }, true);
   // ⌨ shortcut list in the top bar.
   {
     const kb = document.getElementById('keybtn'); const kp = document.getElementById('keypanel');
