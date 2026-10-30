@@ -5,17 +5,22 @@ const gbKey = (e, letter) => (e.ctrlKey || e.metaKey) && !e.shiftKey && !e.altKe
 
 // Ctrl+S: save what is on screen — the form being typed in, else the page's Save button. Never the browser's
 // "Save page as…" box.
-const SAVE_WORDS = /\b(save|create|book|apply|update|confirm|add)\b/i;
+const SAVE_WORDS = /\b(save|create|book|apply|update|confirm|add)\b/i; // a form you are typing in
+const MAIN_SAVE = /\b(save|create|book)\b/i; // nothing selected: the page's own Save button only
 window.gbSave = () => {
-  const pick = (f) => {
-    if (!f || (f.getAttribute('method') || '').toLowerCase() !== 'post') return null;
-    return f.querySelector('.save-bar .btn') || [...f.querySelectorAll('button:not([type=button]), input[type=submit]')]
-      .find((b) => !b.disabled && !b.classList.contains('danger') && !b.hasAttribute('formaction') && SAVE_WORDS.test(b.textContent || b.value || '')) || null;
+  const buttons = (f, words) => {
+    if (!f || (f.getAttribute('method') || '').toLowerCase() !== 'post') return [];
+    return [...f.querySelectorAll('button:not([type=button]), input[type=submit]')]
+      .filter((b) => !b.disabled && !b.classList.contains('danger') && !b.hasAttribute('formaction') && words.test(b.textContent || b.value || '') && b.offsetParent !== null);
   };
   const here = document.activeElement?.closest?.('form');
-  const btn = pick(here) || document.querySelector('.save-bar .btn:not([disabled])')
-    || [...document.querySelectorAll('main form, .content form, form')].map(pick).find(Boolean);
-  if (btn) { btn.click(); return true; }
+  const inForm = here && (here.querySelector('.save-bar .btn') || buttons(here, SAVE_WORDS)[0]);
+  if (inForm) { inForm.click(); return true; }
+  const bar = document.querySelector('.save-bar .btn:not([disabled])');
+  if (bar) { bar.click(); return true; }
+  // Only when the page has exactly one Save / Create / Book button — never a random "Add" (a task, a memo…).
+  const all = [...document.querySelectorAll('form')].flatMap((f) => buttons(f, MAIN_SAVE));
+  if (all.length === 1) { all[0].click(); return true; }
   return false;
 };
 window.addEventListener('keydown', (e) => {
@@ -29,6 +34,39 @@ window.addEventListener('keydown', (e) => {
   if (!(e.ctrlKey || e.metaKey || e.altKey || e.key === '/')) return;
   try { window.top.gbKeySeen?.(e, 'in the page'); } catch (err) { /* not in the workspace */ }
 }, true);
+
+// Alt+S: save, then close this tab — only once the save came back fine (an error keeps the tab open to read it).
+const gbAlt = (e, letter) => e.altKey && !e.ctrlKey && !e.metaKey && !e.shiftKey && (e.code === `Key${letter.toUpperCase()}` || String(e.key).toLowerCase() === letter);
+window.gbSaveAndClose = () => {
+  let frame = null;
+  try { frame = window.top !== window && window.top.gbCloseFrame ? window.frameElement : null; } catch (err) { frame = null; }
+  const pc = frame ? { frame, at: Date.now() } : null;
+  if (pc) {
+    window.top.gbPendingClose = pc;
+    // Nothing loaded (a box the browser refused, a duplicate-invoice question left open): forget it, so a later
+    // ordinary save does not close the tab.
+    setTimeout(() => { try { if (window.top.gbPendingClose === pc) window.top.gbPendingClose = null; } catch (err) { /* gone */ } }, 15000);
+  }
+  if (window.gbSave()) return true;
+  if (frame) window.top.gbPendingClose = null;
+  try { window.top.gbToast?.('Alt+S — nothing to save on this screen'); } catch (err) { /* not in the workspace */ }
+  return false;
+};
+window.addEventListener('keydown', (e) => {
+  if (!gbAlt(e, 's')) return;
+  e.preventDefault();
+  window.gbSaveAndClose();
+}, true);
+// The page after an Alt+S save: close the tab when it says saved.
+try {
+  const pc = window.top !== window && window.top.gbPendingClose;
+  if (pc && pc.frame === window.frameElement) {
+    window.top.gbPendingClose = null;
+    const ok = document.querySelector('.flash.ok') && !document.querySelector('.flash.err');
+    if (ok && Date.now() - pc.at < 120000) { window.gbDirty = false; setTimeout(() => window.top.gbCloseFrame(window.frameElement, 'Saved and closed'), 500); }
+    else window.top.gbToast?.('Not closed — the save needs a look (see the message)');
+  }
+} catch (err) { /* not in the workspace */ }
 
 // Ctrl+Q inside a page: close its workspace tab.
 window.addEventListener('keydown', (e) => {

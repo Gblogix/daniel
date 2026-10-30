@@ -122,6 +122,13 @@
     el.textContent = msg; el.classList.add('on');
     clearTimeout(window.gbToast.t); window.gbToast.t = setTimeout(() => el.classList.remove('on'), 2200);
   };
+  // Alt+S finished in a page: close that page's tab (even if another tab was picked meanwhile).
+  window.gbCloseFrame = (frame, note) => {
+    const t = tabs.find((x) => x.frame === frame);
+    if (!t || t.home) return;
+    close(t.id);
+    if (note) window.gbToast(note);
+  };
   window.gbCloseTab = () => {
     const t = tabs.find((x) => x.id === active);
     if (!t || t.home) { window.gbToast('Ctrl+Q — the Main tab stays open'); return; }
@@ -135,6 +142,11 @@
     // Alt+W as well: on some PCs another program or the browser takes Ctrl+Q before the page sees it.
     if (isKey(e, 'q') || window.gbAltW(e)) { e.preventDefault(); window.gbCloseTab(); }
     // Ctrl+S with the focus on the top bar / tab strip: save the page in the open tab.
+    if (e.altKey && !e.ctrlKey && !e.metaKey && !e.shiftKey && (e.code === 'KeyS' || String(e.key).toLowerCase() === 's')) {
+      e.preventDefault(); const t = tabs.find((x) => x.id === active);
+      let done = false; try { done = Boolean(t?.frame.contentWindow.gbSaveAndClose?.()); } catch (err) { /* PDF tab */ }
+      if (!done && !t?.frame) window.gbToast('Alt+S — nothing to save on this screen');
+    }
     if (isKey(e, 's')) {
       e.preventDefault(); const t = tabs.find((x) => x.id === active);
       let done = false; try { done = Boolean(t?.frame.contentWindow.gbSave?.()); } catch (err) { /* PDF tab */ }
