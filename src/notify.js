@@ -350,6 +350,23 @@ function rememberedRecipients(s, kind, { db = store.db } = {}) {
   return { to: list(hit.to_addr), cc: list(hit.cc_addr), bcc: list(hit.bcc_addr), from: { id: hit.sid, ref_no: hit.ref_no, date: hit.created_at, who: m.label(hit), kind } };
 }
 
+/**
+ * The greeting used last time for these recipients ("Dear Sarah," / "Dear Mr. Kim,"): taken from the newest email
+ * that went to any of the addresses, on any file. null when none had a named greeting.
+ */
+function rememberedGreeting(to, { db = store.db } = {}) {
+  const want = new Set(to.map((a) => a.toLowerCase()));
+  if (!want.size) return null;
+  const rows = db.all("SELECT to_addr, body_html FROM emails WHERE status <> 'FAILED' AND body_html LIKE '%Dear %' ORDER BY id DESC LIMIT 400");
+  for (const r of rows) {
+    if (!String(r.to_addr || '').split(/[,;\s]+/).some((a) => want.has(a.trim().toLowerCase()))) continue;
+    const m = /Dear\s+([^<,\n]{1,60}?)\s*,/i.exec(String(r.body_html).replace(/&nbsp;/g, ' '));
+    if (m && m[1].trim()) return m[1].replace(/<[^>]*>/g, '').trim();
+  }
+  return null;
+}
+const setGreeting = (html, name) => (name ? html.replace(/Dear\s+[^<,\n]*,/i, `Dear ${esc(name)},`) : html);
+
 function composeDefaults(kind, shipmentId, { db = store.db } = {}) {
   const c = COMPOSE[kind];
   if (!c) return null;
@@ -364,9 +381,11 @@ function composeDefaults(kind, shipmentId, { db = store.db } = {}) {
   // else the party's address.
   const own = REMEMBER[kind] && db.get('SELECT 1 FROM emails WHERE shipment_id = ? AND kind = ?', s.id, c.emailKind);
   const memo = REMEMBER[kind] && !own ? rememberedRecipients(s, kind, { db }) : null;
+  const to = memo?.to.length ? memo.to : recipients(s[c.party], db);
+  const greeting = rememberedGreeting(to, { db });
   return {
-    kind, label: c.label, s, to: memo?.to.length ? memo.to : recipients(s[c.party], db), cc: memo?.cc || [], bcc: memo?.bcc || [], remembered: memo?.from || null,
-    subject: subjectLine(s, c.subject), html: summaryHtml(s, c.intro(s)),
+    kind, label: c.label, s, to, cc: memo?.cc || [], bcc: memo?.bcc || [], remembered: memo?.from || null, greeting,
+    subject: subjectLine(s, c.subject), html: setGreeting(summaryHtml(s, c.intro(s)), greeting),
     generate: c.generate(s), docs: docs.map((d) => ({ ...d, checked: latest.includes(d.id) })), suggestions, partyMissing: !s[c.party] && !memo?.to.length,
   };
 }
@@ -387,7 +406,7 @@ async function sendComposed({ kind, shipmentId, to, cc = [], bcc = [], replyTo =
   return id;
 }
 
-module.exports = { senderFor, rememberedRecipients, COMPOSE, composeDefaults, sendComposed,
+module.exports = { senderFor, rememberedRecipients, rememberedGreeting, COMPOSE, composeDefaults, sendComposed,
   docContext, storeGenerated, subjectLine, recipients, generateDocument, queueEmail, deliver, summaryHtml, deliveryProblem, lastEmailId,
   sendBrokerPacket, sendCustomerUpdate, sendDeliveryOrder, onDocumentsApplied, onShipmentChanged,
 };

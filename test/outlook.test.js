@@ -188,3 +188,18 @@ test('D/O recipients are remembered per trucker', () => {
   assert.equal(notify.composeDefaults('DO', c).remembered, null, 'another trucker');
   assert.equal(notify.composeDefaults('AN', b).remembered, null, 'D/O addresses are not used for the A/N');
 });
+
+test('send window: the greeting used last time for these recipients is filled in', () => {
+  const notify = require('../src/notify');
+  const S = require('../src/shipments');
+  const db = store.db;
+  const br = Number(db.run("INSERT INTO companies (name, type, emails) VALUES ('Sample Customs Broker', 'broker', 'sarah@samplebroker.example')").lastInsertRowid);
+  const a = S.create({ mode: 'FCL', hbl_no: 'GRT-1', broker_id: br, shipper_name: 'GREETING MAKER ONE' });
+  const b = S.create({ mode: 'FCL', hbl_no: 'GRT-2', broker_id: br, shipper_name: 'GREETING MAKER TWO' });
+  assert.equal(notify.composeDefaults('AN', b).greeting, null, 'nothing sent yet');
+  db.run("INSERT INTO emails (shipment_id, kind, to_addr, subject, body_html, status) VALUES (?, 'BROKER_PACKET', 'sarah@samplebroker.example', 'A/N', '<p>Dear Sarah,<br>Please find attached…</p>', 'SENT')", a);
+  const d = notify.composeDefaults('AN', b);
+  assert.equal(d.greeting, 'Sarah');
+  assert.match(d.html, /Dear Sarah,/);
+  assert.doesNotMatch(d.html, /Dear Sample Customs Broker/);
+});

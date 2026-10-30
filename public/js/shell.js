@@ -115,19 +115,30 @@
   }
 
   // Ctrl+Q closes the open tab (also when the key is pressed inside the page: app.js calls gbCloseTab).
+  // Short note at the bottom of the screen: a shortcut was received but had nothing to do.
+  window.gbToast = (msg) => {
+    let el = document.getElementById('gb-toast');
+    if (!el) { el = document.createElement('div'); el.id = 'gb-toast'; el.className = 'gb-toast'; el.setAttribute('role', 'status'); document.body.appendChild(el); }
+    el.textContent = msg; el.classList.add('on');
+    clearTimeout(window.gbToast.t); window.gbToast.t = setTimeout(() => el.classList.remove('on'), 2200);
+  };
   window.gbCloseTab = () => {
     const t = tabs.find((x) => x.id === active);
-    if (!t || t.home) return;
+    if (!t || t.home) { window.gbToast('Ctrl+Q — the Main tab stays open'); return; }
     if (dirty(t) && !window.confirm('This tab has changes that are not saved. Close it anyway?')) return;
     close(t.id);
   };
   // Physical key (e.code): also works with the Korean keyboard in 한글 mode.
   const isKey = (e, l) => (e.ctrlKey || e.metaKey) && !e.shiftKey && !e.altKey && (e.code === `Key${l.toUpperCase()}` || String(e.key).toLowerCase() === l);
-  document.addEventListener('keydown', (e) => {
+  window.addEventListener('keydown', (e) => {
     if (isKey(e, 'q')) { e.preventDefault(); window.gbCloseTab(); }
     // Ctrl+S with the focus on the top bar / tab strip: save the page in the open tab.
-    if (isKey(e, 's')) { e.preventDefault(); const t = tabs.find((x) => x.id === active); try { t?.frame.contentWindow.gbSave?.(); } catch (err) { /* PDF tab */ } }
-  });
+    if (isKey(e, 's')) {
+      e.preventDefault(); const t = tabs.find((x) => x.id === active);
+      let done = false; try { done = Boolean(t?.frame.contentWindow.gbSave?.()); } catch (err) { /* PDF tab */ }
+      if (!done) window.gbToast('Ctrl+S — nothing to save on this screen');
+    }
+  }, true);
   // ⌨ box: shows the last shortcut-like key the browser handed over (from this window or a page in a tab), so a
   // shortcut that "does nothing" can be told apart from one the browser / computer never passes on.
   window.gbKeySeen = (e, where) => {
@@ -250,7 +261,7 @@
     const t = e.target; if ((e.key !== '/' && e.code !== 'Slash') || e.ctrlKey || e.metaKey || e.altKey || /INPUT|TEXTAREA|SELECT/.test(t.tagName) || t.isContentEditable) return;
     e.preventDefault(); gs.focus();
   };
-  document.addEventListener('keydown', focusSearch);
+  window.addEventListener('keydown', focusSearch, true);
   window.gbFocusSearch = () => gs.focus();
 
   // ---------- bell: my follow-ups ----------

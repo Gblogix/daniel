@@ -1,3 +1,47 @@
+// ---------- keyboard shortcuts (the list is under ⌨ in the top bar) ----------
+// The physical key decides (e.code), so they also work with the Korean keyboard in 한글 mode (Ctrl+ㅂ / Ctrl+ㄴ).
+const gbKey = (e, letter) => (e.ctrlKey || e.metaKey) && !e.shiftKey && !e.altKey
+  && (e.code === `Key${letter.toUpperCase()}` || String(e.key).toLowerCase() === letter);
+
+// Ctrl+S: save what is on screen — the form being typed in, else the page's Save button. Never the browser's
+// "Save page as…" box.
+const SAVE_WORDS = /\b(save|create|book|apply|update|confirm|add)\b/i;
+window.gbSave = () => {
+  const pick = (f) => {
+    if (!f || (f.getAttribute('method') || '').toLowerCase() !== 'post') return null;
+    return f.querySelector('.save-bar .btn') || [...f.querySelectorAll('button:not([type=button]), input[type=submit]')]
+      .find((b) => !b.disabled && !b.classList.contains('danger') && !b.hasAttribute('formaction') && SAVE_WORDS.test(b.textContent || b.value || '')) || null;
+  };
+  const here = document.activeElement?.closest?.('form');
+  const btn = pick(here) || document.querySelector('.save-bar .btn:not([disabled])')
+    || [...document.querySelectorAll('main form, .content form, form')].map(pick).find(Boolean);
+  if (btn) { btn.click(); return true; }
+  return false;
+};
+window.addEventListener('keydown', (e) => {
+  if (!gbKey(e, 's')) return;
+  e.preventDefault();
+  if (!window.gbSave()) { try { window.top.gbToast?.('Ctrl+S — nothing to save on this screen'); } catch (err) { /* not in the workspace */ } }
+}, true);
+
+// Tell the ⌨ box which keys reach the page (diagnosis when a shortcut seems dead).
+window.addEventListener('keydown', (e) => {
+  if (!(e.ctrlKey || e.metaKey || e.key === '/')) return;
+  try { window.top.gbKeySeen?.(e, 'in the page'); } catch (err) { /* not in the workspace */ }
+}, true);
+
+// Ctrl+Q inside a page: close its workspace tab.
+window.addEventListener('keydown', (e) => {
+  if (!gbKey(e, 'q')) return;
+  try { if (window.top !== window && window.top.gbCloseTab) { e.preventDefault(); window.top.gbCloseTab(); } } catch (err) { /* not in the workspace */ }
+}, true);
+
+// "/" inside a page: jump to the workspace search box.
+window.addEventListener('keydown', (e) => {
+  if ((e.key !== '/' && e.code !== 'Slash') || e.ctrlKey || e.metaKey || e.altKey || /INPUT|TEXTAREA|SELECT/.test(e.target.tagName) || e.target.isContentEditable) return;
+  try { if (window.top !== window && window.top.gbFocusSearch) { e.preventDefault(); window.top.gbFocusSearch(); } } catch (err) { /* not in the workspace */ }
+}, true);
+
 // Small progressive enhancements: add/remove rows in line tables, confirm buttons.
 document.addEventListener('click', (e) => {
   const add = e.target.closest('[data-add-row]');
@@ -124,14 +168,8 @@ document.querySelectorAll('form[data-bill]').forEach((form) => {
   form.addEventListener('change', calc);
 });
 
-// Inside a workspace tab: "/" jumps to the global search; saving anything refreshes the bell.
-if (document.documentElement.classList.contains('embedded')) {
-  document.addEventListener('keydown', (e) => {
-    if ((e.key !== '/' && e.code !== 'Slash') || e.ctrlKey || e.metaKey || e.altKey || /INPUT|TEXTAREA|SELECT/.test(e.target.tagName) || e.target.isContentEditable) return;
-    if (window.top.gbFocusSearch) { e.preventDefault(); window.top.gbFocusSearch(); }
-  });
-  if (window.top.gbRefreshBell) window.top.gbRefreshBell();
-}
+// Inside a workspace tab: saving anything refreshes the bell ("/" for search is at the top of this file).
+if (document.documentElement.classList.contains('embedded') && window.top.gbRefreshBell) window.top.gbRefreshBell();
 
 // Drag & drop upload: drop a PDF / image — or the whole Outlook email (.msg / .eml) — onto any upload form marked
 // data-drop. data-autosubmit sends it right away; data-drop-page also catches drops and Ctrl+V paste anywhere on the page.
@@ -914,43 +952,7 @@ document.querySelectorAll('input[data-location-lookup]').forEach((loc) => {
   document.addEventListener('compositionend', (e) => { if (e.target.name && NAMES.has(e.target.name)) upper(e.target); }, true);
 })();
 
-// ---------- keyboard shortcuts (the list is under ⌨ in the top bar) ----------
-// The physical key decides (e.code), so they also work with the Korean keyboard in 한글 mode (Ctrl+ㅂ / Ctrl+ㄴ).
-const gbKey = (e, letter) => (e.ctrlKey || e.metaKey) && !e.shiftKey && !e.altKey
-  && (e.code === `Key${letter.toUpperCase()}` || String(e.key).toLowerCase() === letter);
 
-// Ctrl+S: save what is on screen — the form being typed in, else the page's Save button. Never the browser's
-// "Save page as…" box.
-const SAVE_WORDS = /\b(save|create|book|apply|update|confirm|add)\b/i;
-window.gbSave = () => {
-  const pick = (f) => {
-    if (!f || (f.getAttribute('method') || '').toLowerCase() !== 'post') return null;
-    return f.querySelector('.save-bar .btn') || [...f.querySelectorAll('button:not([type=button]), input[type=submit]')]
-      .find((b) => !b.disabled && !b.classList.contains('danger') && !b.hasAttribute('formaction') && SAVE_WORDS.test(b.textContent || b.value || '')) || null;
-  };
-  const here = document.activeElement?.closest?.('form');
-  const btn = pick(here) || document.querySelector('.save-bar .btn:not([disabled])')
-    || [...document.querySelectorAll('main form, .content form, form')].map(pick).find(Boolean);
-  if (btn) { btn.click(); return true; }
-  return false;
-};
-document.addEventListener('keydown', (e) => {
-  if (!gbKey(e, 's')) return;
-  e.preventDefault();
-  window.gbSave();
-});
-
-// Tell the ⌨ box which keys reach the page (diagnosis when a shortcut seems dead).
-document.addEventListener('keydown', (e) => {
-  if (!(e.ctrlKey || e.metaKey || e.key === '/')) return;
-  try { window.top.gbKeySeen?.(e, 'in the page'); } catch (err) { /* not in the workspace */ }
-}, true);
-
-// Ctrl+Q inside a page: close its workspace tab.
-document.addEventListener('keydown', (e) => {
-  if (!gbKey(e, 'q')) return;
-  try { if (window.top !== window && window.top.gbCloseTab) { e.preventDefault(); window.top.gbCloseTab(); } } catch (err) { /* not in the workspace */ }
-});
 
 // Carrier Track & Trace without a direct link (e.g. HMM): copy the B/L number while the page opens.
 document.addEventListener('click', (e) => {
