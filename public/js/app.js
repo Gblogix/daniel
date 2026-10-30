@@ -26,13 +26,14 @@ window.addEventListener('keydown', (e) => {
 
 // Tell the ⌨ box which keys reach the page (diagnosis when a shortcut seems dead).
 window.addEventListener('keydown', (e) => {
-  if (!(e.ctrlKey || e.metaKey || e.key === '/')) return;
+  if (!(e.ctrlKey || e.metaKey || e.altKey || e.key === '/')) return;
   try { window.top.gbKeySeen?.(e, 'in the page'); } catch (err) { /* not in the workspace */ }
 }, true);
 
 // Ctrl+Q inside a page: close its workspace tab.
 window.addEventListener('keydown', (e) => {
-  if (!gbKey(e, 'q')) return;
+  const altW = e.altKey && !e.ctrlKey && !e.metaKey && !e.shiftKey && (e.code === 'KeyW' || String(e.key).toLowerCase() === 'w');
+  if (!gbKey(e, 'q') && !altW) return;
   try { if (window.top !== window && window.top.gbCloseTab) { e.preventDefault(); window.top.gbCloseTab(); } } catch (err) { /* not in the workspace */ }
 }, true);
 

@@ -32,7 +32,7 @@
         const r = document.createElement('button'); r.className = 'x'; r.textContent = '↻'; r.title = 'Reload';
         r.onclick = (e) => { e.stopPropagation(); reload(t); }; el.appendChild(r);
       } else {
-        const x = document.createElement('button'); x.className = 'x'; x.textContent = '×'; x.title = 'Close';
+        const x = document.createElement('button'); x.className = 'x'; x.textContent = '×'; x.title = 'Close (Ctrl+Q or Alt+W · middle-click the tab)';
         x.onclick = (e) => { e.stopPropagation(); close(t.id); }; el.appendChild(x);
       }
       el.onclick = () => { if (t.home) home(t); else activate(t.id); };
@@ -128,10 +128,12 @@
     if (dirty(t) && !window.confirm('This tab has changes that are not saved. Close it anyway?')) return;
     close(t.id);
   };
+  window.gbAltW = (e) => e.altKey && !e.ctrlKey && !e.metaKey && !e.shiftKey && (e.code === 'KeyW' || String(e.key).toLowerCase() === 'w');
   // Physical key (e.code): also works with the Korean keyboard in 한글 mode.
   const isKey = (e, l) => (e.ctrlKey || e.metaKey) && !e.shiftKey && !e.altKey && (e.code === `Key${l.toUpperCase()}` || String(e.key).toLowerCase() === l);
   window.addEventListener('keydown', (e) => {
-    if (isKey(e, 'q')) { e.preventDefault(); window.gbCloseTab(); }
+    // Alt+W as well: on some PCs another program or the browser takes Ctrl+Q before the page sees it.
+    if (isKey(e, 'q') || window.gbAltW(e)) { e.preventDefault(); window.gbCloseTab(); }
     // Ctrl+S with the focus on the top bar / tab strip: save the page in the open tab.
     if (isKey(e, 's')) {
       e.preventDefault(); const t = tabs.find((x) => x.id === active);
@@ -147,7 +149,7 @@
     const mods = [e.ctrlKey && 'Ctrl', e.metaKey && 'Cmd', e.altKey && 'Alt', e.shiftKey && 'Shift'].filter(Boolean);
     out.textContent = `${[...mods, e.code || e.key].join(' + ')} (“${e.key}”) — received ${where}`;
   };
-  document.addEventListener('keydown', (e) => { if (e.ctrlKey || e.metaKey || e.key === '/') window.gbKeySeen(e, 'in the top bar'); }, true);
+  window.addEventListener('keydown', (e) => { if (e.ctrlKey || e.metaKey || e.altKey || e.key === '/') window.gbKeySeen(e, 'in the top bar'); }, true);
   // ⌨ shortcut list in the top bar.
   {
     const kb = document.getElementById('keybtn'); const kp = document.getElementById('keypanel');
