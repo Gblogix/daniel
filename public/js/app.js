@@ -951,3 +951,9 @@ document.addEventListener('keydown', (e) => {
   if (!gbKey(e, 'q')) return;
   try { if (window.top !== window && window.top.gbCloseTab) { e.preventDefault(); window.top.gbCloseTab(); } } catch (err) { /* not in the workspace */ }
 });
+
+// Carrier Track & Trace without a direct link (e.g. HMM): copy the B/L number while the page opens.
+document.addEventListener('click', (e) => {
+  const a = e.target.closest?.('a[data-copy-open]');
+  if (a) navigator.clipboard?.writeText(a.dataset.copyOpen).catch(() => {});
+});

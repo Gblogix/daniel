@@ -75,7 +75,7 @@
       <% if (trackingStatus.any && s.tracking_checked_at) { %><span class="muted">ETA auto · <%= fmtDateTime(s.tracking_checked_at) %> UTC</span>
       <% } else if (trackingStatus.any) { %><span class="muted">ETA auto after saving (needs MBL)</span>
       <% } else { %><span class="muted" title="No tracking API connected — the ETA comes from the documents (ISF / arrival notice) or is typed in">ETA manual (no tracking link)</span><% } %>
-      <% if (locals.trackLink) { %> · <a href="<%= trackLink.url %>" target="_blank" rel="noopener">🔎 <%= trackLink.label %> ↗</a><% } %></div><% } %>
+      <% if (locals.trackLink) { %> · <a href="<%= trackLink.url %>" target="_blank" rel="noopener" <% if (trackLink.copy) { %>data-copy-open="<%= trackLink.copy %>" title="Opens the carrier's Track & Trace — <%= trackLink.copy %> is copied: paste it there (Ctrl+V)"<% } %>>🔎 <%= trackLink.label %> ↗</a><% if (trackLink.copy) { %> <span class="muted">(<%= trackLink.copy %> copied on click)</span><% } %><% } %></div><% } %>
     <%- inp('atd', 'ATD (actual)', 'date') %>
     <%- inp('ata', 'ATA (actual)', 'date') %>
     <%- inp('place_of_delivery', 'Place of delivery') %>

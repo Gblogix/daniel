@@ -282,3 +282,12 @@ test('documents print the ocean MB/L with its SCAC (as OPUS): from the SCAC box,
   assert.equal(mblWithScac({ mode: 'FCL', mbl_no: '123456' }), '123456', 'no SCAC known: as typed');
   assert.equal(mblWithScac({ mode: 'AIR', mbl_no: '180-12345675', carrier: 'KOREAN AIR' }), '180-12345675');
 });
+
+test('track link: HMM opens its own Track & Trace with the B/L to paste; unknown carriers say SeaRates is not the carrier', () => {
+  const { trackUrl } = require('../src/tracking/codes');
+  const h = trackUrl({ mode: 'FCL', mbl_no: 'HDMUSELA12345678', containers: [{ container_no: 'HDMU2801320' }] });
+  assert.match(h.url, /^https:\/\/www\.hmm21\.com\//);
+  assert.equal(h.copy, 'SELA12345678');
+  assert.equal(trackUrl({ mode: 'FCL', mbl_no: '279223711', scac: 'MAEU' }).url, 'https://www.maersk.com/tracking/279223711');
+  assert.match(trackUrl({ mode: 'FCL', mbl_no: 'XXXX1', containers: [{ container_no: 'TCNU7654321' }] }).label, /not the carrier site/);
+});

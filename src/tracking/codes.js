@@ -63,9 +63,14 @@ function trackUrl(s) {
     HLCU: bl && `https://www.hapag-lloyd.com/en/online-business/track/track-by-booking-solution.html?blno=${e(bare)}`,
     ONEY: bl && `https://ecomm.one-line.com/one-ecom/manage-shipment/cargo-tracking?trakNoParam=${e(bare)}&trakNoTpCdParam=B`,
   };
+  // Carriers whose site has no link that opens one B/L: their own Track & Trace page; the number is copied on click.
+  const searchPages = {
+    HDMU: 'https://www.hmm21.com/e-service/general/trackNTrace/TrackNTrace.do',
+  };
   if (s.mode === 'AIR') return null;
-  const url = (scac && pages[scac]) || (ctn ? `https://www.searates.com/container/tracking/?number=${e(ctn)}` : null);
-  return url ? { url, label: scac && pages[scac] ? `${CARRIERS[scac] || scac} tracking` : 'Container tracking (SeaRates)' } : null;
+  if (scac && pages[scac]) return { url: pages[scac], label: `${CARRIERS[scac] || scac} tracking` };
+  if (scac && searchPages[scac] && (bare || ctn)) return { url: searchPages[scac], label: `${CARRIERS[scac] || scac} Track & Trace`, copy: bare || ctn };
+  return ctn ? { url: `https://www.searates.com/container/tracking/?number=${e(ctn)}`, label: 'Container tracking (SeaRates — not the carrier site)' } : null;
 }
 
 /**
