@@ -104,8 +104,10 @@
 <div class="card" id="tracking">
   <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap">
     <h2 style="margin:0">Carrier / GPS tracking</h2>
-    <form method="post" action="/shipments/<%= s.id %>/track"><input type="hidden" name="_csrf" value="<%= csrf %>">
-      <button class="btn secondary small" <%= trackingStatus.any ? '' : 'disabled title="No tracking provider configured — see Automation"' %>>↻ Refresh tracking now</button></form>
+    <% if (trackingStatus.any) { %><form method="post" action="/shipments/<%= s.id %>/track"><input type="hidden" name="_csrf" value="<%= csrf %>">
+      <button class="btn secondary small">↻ Refresh tracking now</button></form>
+    <% } else if (can('settings')) { %><a class="btn secondary small" href="/admin/settings#tracking" title="No tracking service connected yet">🔌 Connect tracking →</a>
+    <% } else { %><span class="muted small">Tracking not connected yet — ask an admin</span><% } %>
   </div>
   <dl class="trackinfo" style="margin:10px 0 0">
     <dt>Source</dt><dd><%= s.tracking_provider ? { terminal49: 'Terminal49', shipsgo: 'ShipsGo', dcsa: `Carrier API (${s.scac || ''})` }[s.tracking_provider] : (trackingStatus.any ? 'Not registered yet' : 'No provider configured') %>

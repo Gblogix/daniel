@@ -39,7 +39,7 @@ function status() {
   const e = env();
   return {
     terminal49: Boolean(e.terminal49), shipsgo: Boolean(e.shipsgo), dcsa: Object.keys(e.dcsa),
-    datalastic: Boolean(e.datalastic), aisstream: Boolean(e.aisstream), any: Object.keys(providers(e)).length > 0,
+    datalastic: Boolean(e.datalastic), aisstream: Boolean(e.aisstream), any: Object.keys(providers(e)).length > 0, hours: e.hours,
   };
 }
 

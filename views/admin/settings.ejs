@@ -26,8 +26,18 @@
   <form method="post" action="/admin/smartsheet/run"><input type="hidden" name="_csrf" value="<%= csrf %>">
     <button class="btn secondary small" <%= smartsheet.token ? '' : 'disabled' %>>↻ Sync now</button></form>
 </div>
-<div class="card" style="max-width:760px">
+<div class="card" style="max-width:760px" id="tracking">
   <h2>Tracking sources</h2>
+  <% if (!tracking.any) { %><div class="warnbox small" style="margin-bottom:10px">
+    <b>No tracking service connected</b> — ETA / vessel updates are not fetched, so "Refresh tracking" is off on every file. To switch it on (once, about 10 minutes):
+    <ol style="margin:6px 0 0;padding-left:18px;line-height:1.7">
+      <li>Sign up with a tracking service: <b>ShipsGo</b> (shipsgo.com — ocean by MB/L or container <b>and air by MAWB</b>, one key for both) or <b>Terminal49</b> (terminal49.com — ocean only; container, terminal holds and LFD).</li>
+      <li>In their account, create an <b>API key</b> (Settings / API).</li>
+      <li>On the server PC open <code>.env</code> (next to start-windows.bat) and add the line — paste the key only there, not in chats or emails:
+        <pre class="small" style="background:var(--soft);padding:6px 8px;border-radius:6px;margin:4px 0">SHIPSGO_API_KEY=…your key…</pre>
+        (or <code>TERMINAL49_API_KEY=…</code>). Both can be used together: ocean then goes to Terminal49, air to ShipsGo.</li>
+      <li>Run <code>server-tools\restart-server.bat</code> as administrator. Open files are then checked right away and every <%= tracking.hours || 4 %> hours after that (ETA, ATA, vessel, discharge, LFD); the Automation switch "auto tracking" must stay on.</li>
+    </ol></div><% } %>
   <table class="t">
     <tr><th>Ocean — carrier APIs (DCSA)</th><td><%= tracking.dcsa.length ? tracking.dcsa.join(', ') : 'not configured (DCSA_CARRIERS)' %></td></tr>
     <tr><th>Ocean — Terminal49</th><td><%= tracking.terminal49 ? '✔ connected' : 'not configured (TERMINAL49_API_KEY)' %></td></tr>
