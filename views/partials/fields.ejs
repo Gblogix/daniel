@@ -119,7 +119,11 @@
     <% if (locals.staffUsers) { %><%- sel('owner_id', 'OP (PIC)', staffUsers) %><%- sel('sales_id', 'Sales', staffUsers) %><% } %>
     <div data-ship-only <%= misc ? 'hidden' : '' %>>
       <div class="field ff-pair"><label for="f_packages">Package<%- src('packages') %></label><div class="ff-two">
-        <input id="f_packages" name="packages" type="number" step="1" value="<%= s.packages ?? '' %>"><input id="f_package_unit" name="package_unit" value="<%= s.package_unit || '' %>" placeholder="CTNS" aria-label="Package unit" class="ff-short"></div></div>
+        <input id="f_packages" name="packages" type="number" step="1" value="<%= s.packages ?? '' %>"><input id="f_package_unit" name="package_unit" value="<%= s.package_unit || '' %>" placeholder="Unit" aria-label="Package unit" class="ff-short" list="pkg-units"></div></div>
+      <%# Package units as on B/Ls and AWBs (click for the list, or type another one). %>
+      <datalist id="pkg-units"><% [['CTNS', 'Cartons'], ['PLTS', 'Pallets'], ['PKGS', 'Packages'], ['PCS', 'Pieces'], ['SKIDS', 'Skids'], ['CRTS', 'Crates'], ['CASES', 'Cases'],
+        ['BOXES', 'Boxes'], ['BAGS', 'Bags'], ['BALES', 'Bales'], ['BDLS', 'Bundles'], ['ROLLS', 'Rolls'], ['DRUMS', 'Drums'], ['REELS', 'Reels'], ['SETS', 'Sets'],
+        ['UNITS', 'Units'], ['TOTES', 'Totes'], ['ULD', 'Air container / ULD'], ['ENV', 'Envelopes'], ['LOOSE', 'Loose cargo']].forEach(([c, l]) => { %><option value="<%= c %>" label="<%= l %>"><% }) %></datalist>
       <div class="field ff-pair"><label for="f_weight_kg">Weight<%- src('weight_kg') %></label><div class="ff-two ff-units">
         <input id="f_weight_kg" name="weight_kg" type="number" step="0.01" value="<%= s.weight_kg ?? '' %>"><span>KG</span>
         <input id="f_weight_lbs" type="text" readonly tabindex="-1" class="conv-ro" data-conv="lbs" data-conv-of="weight_kg" value="<%= conv('lbs', s.weight_kg) %>" title="Pounds — worked out from KG" aria-label="LBS (auto)"><span>LB</span></div></div>
@@ -242,7 +246,7 @@
         <td><input name="item_desc" value="<%= i.description || '' %>"></td>
         <td><input name="item_hs" value="<%= i.hs_code || '' %>"></td>
         <td><input name="item_qty" value="<%= i.quantity ?? '' %>"></td>
-        <td><input name="item_unit" value="<%= i.unit || '' %>"></td>
+        <td><input name="item_unit" value="<%= i.unit || '' %>" list="pkg-units"></td>
         <td><input name="item_pkgs" value="<%= i.packages ?? '' %>"></td>
         <td><input name="item_kg" value="<%= i.weight_kg ?? '' %>"></td>
         <td><input data-conv="lbs" data-conv-of="item_kg" value="<%= conv('lbs', i.weight_kg) %>" readonly tabindex="-1" class="conv-ro" title="Pounds — worked out from KG"></td>
