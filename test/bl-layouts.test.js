@@ -291,3 +291,18 @@ test('track link: HMM opens its own Track & Trace with the B/L to paste; unknown
   assert.equal(trackUrl({ mode: 'FCL', mbl_no: '279223711', scac: 'MAEU' }).url, 'https://www.maersk.com/tracking/279223711');
   assert.match(trackUrl({ mode: 'FCL', mbl_no: 'XXXX1', containers: [{ container_no: 'TCNU7654321' }] }).label, /not the carrier site/);
 });
+
+test('air: notify = the consignee (not the AWB accounting "NOTIFY:"), unit PKGS by default', () => {
+  const { mergeExtractions } = require('../src/extract');
+  const d = mergeExtractions([{ doc_type: 'AWB', doc_role: 'house', hbl_no: 'NSCXA0000001', mbl_no: '350-12345678',
+    consignee_name: 'SAMPLE BUYER INC.', consignee_address: '1 SAMPLE BLVD, LA MIRADA, CA 90638',
+    notify_party: 'SAMPLE CREDIT, INC.', notify_address: '865 S SAMPLE ST, LOS ANGELES, CA', packages: 1, package_unit: 'CTN' }]);
+  assert.equal(d.mode, 'AIR');
+  assert.deepEqual([d.notify_party, d.notify_address], ['SAMPLE BUYER INC.', '1 SAMPLE BLVD, LA MIRADA, CA 90638']);
+  assert.equal(d.package_unit, 'PKGS');
+  const p = mergeExtractions([{ doc_type: 'AWB', hbl_no: 'NSCXA0000002', consignee_name: 'X', packages: 3, package_unit: 'PLTS' }]);
+  assert.equal(p.package_unit, 'PLTS', 'pallets stay pallets');
+  const S = require('../src/shipments');
+  const id = S.create({ mode: 'AIR', hbl_no: 'PKGS-1', packages: 2 });
+  assert.equal(S.find(id, null).package_unit, 'PKGS');
+});

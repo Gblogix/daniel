@@ -998,3 +998,12 @@ document.addEventListener('click', (e) => {
   const a = e.target.closest?.('a[data-copy-open]');
   if (a) navigator.clipboard?.writeText(a.dataset.copyOpen).catch(() => {});
 });
+
+// Notify party: copy the consignee, write SAME AS CONSIGNEE, or clear.
+document.querySelectorAll('[data-notify]').forEach((b) => b.addEventListener('click', () => {
+  const f = b.closest('form'); const v = (n) => f.querySelector(`[name="${n}"]`);
+  const put = (n, val) => { const el = v(n); if (!el) return; el.value = val; el.dispatchEvent(new Event('input', { bubbles: true })); el.classList.add('just-picked'); setTimeout(() => el.classList.remove('just-picked'), 900); };
+  if (b.dataset.notify === 'copy') { put('notify_party', v('consignee_name')?.value || ''); put('notify_address', v('consignee_address')?.value || ''); }
+  else if (b.dataset.notify === 'same') { put('notify_party', 'SAME AS CONSIGNEE'); put('notify_address', ''); }
+  else { put('notify_party', ''); put('notify_address', ''); }
+}));

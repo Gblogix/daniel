@@ -97,8 +97,17 @@ function nextRefNo(db, mode = 'FCL') {
   return require('./company').nextRef(code, { db, table: 'shipments', column: 'ref_no' });
 }
 
+// Air files count pieces: PKGS when the unit is left empty.
+function airUnit(data, current = {}) {
+  const mode = data.mode || current.mode;
+  const pkgs = 'packages' in data ? data.packages : current.packages;
+  const unit = 'package_unit' in data ? data.package_unit : current.package_unit;
+  if (mode === 'AIR' && pkgs != null && !unit) data.package_unit = 'PKGS';
+}
+
 function create(input, { db = store.db, userId } = {}) {
   const data = normalizeInput(input);
+  airUnit(data);
   // Person in charge: as given, else the customer's default PIC, else whoever created it.
   if (!data.owner_id) {
     const pic = data.customer_id ? db.get('SELECT default_pic_id FROM companies WHERE id = ?', data.customer_id)?.default_pic_id : null;
@@ -134,6 +143,7 @@ function update(id, input, { db = store.db } = {}) {
   if (!current) throw new Error('Shipment not found');
   if (current.locked_at) return []; // accounting lock: tracking / sync / master changes leave a finished file alone
   const data = normalizeInput(input);
+  if ('packages' in data || 'package_unit' in data || 'mode' in data) airUnit(data, current);
   if (!('status' in data) || data.status === current.status) {
     const next = inferStatus({ ...current, ...data }, db);
     if (next) data.status = next;

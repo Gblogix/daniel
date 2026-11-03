@@ -155,6 +155,16 @@ function mergeExtractions(docs) {
   const types = new Set(docs.map((d) => d.doc_type));
   if (!draft.carrier && draft.scac) draft.carrier = require('../tracking/codes').CARRIERS[draft.scac] || null;
   draft.mode = types.has('AWB') || draft.mawb_no || draft.flight_no ? 'AIR' : draft.containers.length ? 'FCL' : 'LCL';
+  if (draft.mode === 'AIR') {
+    // An air waybill has no notify box: a "NOTIFY: …" in Accounting Information is a bank / party to inform, not the
+    // file's notify party. Air files notify the consignee (changeable on the file).
+    if (draft.consignee_name) {
+      draft.notify_party = draft.consignee_name; draft.notify_address = draft.consignee_address || null;
+      draft.sources.notify_party = 'same as CNEE'; draft.sources.notify_address = 'same as CNEE';
+    }
+    // Air counts pieces: PKGS unless the documents name something else than cartons (pallets, skids…).
+    if (!draft.package_unit || /^(CTNS?|CARTONS?)$/i.test(String(draft.package_unit).trim())) draft.package_unit = 'PKGS';
+  }
   // Carrier / airline from the B/L SCAC prefix, the AWB prefix or the container owner (or a past file with the same prefix).
   if (!draft.carrier || (!draft.scac && draft.mode !== 'AIR')) {
     let c = null;

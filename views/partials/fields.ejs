@@ -51,6 +51,7 @@
       <%- inp('shipper_name', 'Shipper', 'text', 'data-party-lookup="shipper" data-address="f_shipper_address" autocomplete="off"') %><%- ta('shipper_address', '<span class="sr">Shipper </span>Address') %>
       <%- inp('consignee_name', 'Consignee', 'text', 'data-party-lookup="consignee" data-address="f_consignee_address" autocomplete="off"') %><%- ta('consignee_address', '<span class="sr">Consignee </span>Address') %>
       <%- inp('notify_party', 'Notify', 'text', 'data-party-lookup="notify" data-address="f_notify_address" autocomplete="off"') %><%- ta('notify_address', '<span class="sr">Notify </span>Address') %>
+      <div class="ff-note notify-tools"><button type="button" class="linkbtn" data-notify="copy" title="Copy the consignee's name and address into Notify">⇩ Same as consignee (copy)</button> · <button type="button" class="linkbtn" data-notify="same" title="Write SAME AS CONSIGNEE">“SAME AS CONSIGNEE”</button> · <button type="button" class="linkbtn" data-notify="clear">Clear</button></div>
       <%- sel('agent_id', 'Agent', agents) %>
       <%- sel('broker_id', 'Customs broker', brokers) %>
       <%- sel('trucker_id', 'Trucker', truckers) %>
@@ -119,7 +120,7 @@
     <% if (locals.staffUsers) { %><%- sel('owner_id', 'OP (PIC)', staffUsers) %><%- sel('sales_id', 'Sales', staffUsers) %><% } %>
     <div data-ship-only <%= misc ? 'hidden' : '' %>>
       <div class="field ff-pair"><label for="f_packages">Package<%- src('packages') %></label><div class="ff-two">
-        <input id="f_packages" name="packages" type="number" step="1" value="<%= s.packages ?? '' %>"><input id="f_package_unit" name="package_unit" value="<%= s.package_unit || '' %>" placeholder="Unit" aria-label="Package unit" class="ff-short" list="pkg-units"></div></div>
+        <input id="f_packages" name="packages" type="number" step="1" value="<%= s.packages ?? '' %>"><input id="f_package_unit" name="package_unit" value="<%= s.package_unit || '' %>" placeholder="<%= isAir ? 'PKGS' : 'Unit' %>" aria-label="Package unit" class="ff-short" list="pkg-units"></div></div>
       <%# Package units as on B/Ls and AWBs (click for the list, or type another one). %>
       <datalist id="pkg-units"><% [['CTNS', 'Cartons'], ['PLTS', 'Pallets'], ['PKGS', 'Packages'], ['PCS', 'Pieces'], ['SKIDS', 'Skids'], ['CRTS', 'Crates'], ['CASES', 'Cases'],
         ['BOXES', 'Boxes'], ['BAGS', 'Bags'], ['BALES', 'Bales'], ['BDLS', 'Bundles'], ['ROLLS', 'Rolls'], ['DRUMS', 'Drums'], ['REELS', 'Reels'], ['SETS', 'Sets'],
