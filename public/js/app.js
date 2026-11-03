@@ -1013,10 +1013,15 @@ document.querySelectorAll('[data-notify]').forEach((b) => b.addEventListener('cl
   const boxes = [...document.querySelectorAll('input[data-del]')];
   if (!boxes.length) return;
   const btns = document.querySelectorAll('[data-del-btn]');
-  const sync = () => {
-    const n = new Set(boxes.filter((b) => b.checked).map((b) => b.value)).size;
-    btns.forEach((b) => { b.disabled = !n; const c = b.querySelector('[data-del-count]'); if (c) c.textContent = n; });
-  };
+  const count = () => new Set(boxes.filter((b) => b.checked).map((b) => b.value)).size;
+  const sync = () => { const n = count(); btns.forEach((b) => { b.classList.toggle('is-empty', !n); const c = b.querySelector('[data-del-count]'); if (c) c.textContent = n; }); };
+  // Nothing ticked in the Delete column (e.g. only "Reviewed" ticked): say where to tick instead of doing nothing.
+  btns.forEach((b) => b.addEventListener('click', (e) => {
+    if (count()) return;
+    e.preventDefault(); e.stopImmediatePropagation();
+    document.querySelectorAll('.del-col').forEach((h) => { h.classList.add('spot-flash'); setTimeout(() => h.classList.remove('spot-flash'), 2200); });
+    window.alert('Tick the box in the 🗑 Delete column for each document to delete (the Reviewed box is only for sending).');
+  }, true));
   boxes.forEach((b) => b.addEventListener('change', () => { boxes.filter((x) => x.value === b.value).forEach((x) => { x.checked = b.checked; }); sync(); }));
   sync();
 })();
