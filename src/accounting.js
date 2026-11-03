@@ -212,6 +212,32 @@ function voidInvoice(id, db = store.db) {
   closeCheck(id, db);
 }
 
+/**
+ * Delete invoices / D/N / C/N / vendor bills ticked on a file. Not sent and no payment: removed for good (a vendor
+ * bill read from a PDF goes back to "to book"). Already sent: voided instead, so the party's copy still matches a
+ * record. With a payment applied: left alone — unapply the payment first.
+ */
+function deleteInvoices(ids, { db = store.db, shipmentId = null } = {}) {
+  const out = { deleted: [], voided: [], kept: [] };
+  for (const id of ids) {
+    const i = db.get('SELECT id, number, shipment_id, sent_at, paid_amount, status FROM invoices WHERE id = ?', id);
+    if (!i || (shipmentId && i.shipment_id !== shipmentId) || i.status === 'VOID') continue;
+    require('./locks').assertUnlocked(i.shipment_id, db);
+    const paid = Number(i.paid_amount) > 0 || db.get('SELECT 1 FROM payment_allocations WHERE invoice_id = ?', id);
+    if (paid) { out.kept.push(i.number); continue; }
+    if (i.sent_at) { db.run("UPDATE invoices SET status = 'VOID' WHERE id = ?", id); out.voided.push(i.number); continue; }
+    db.tx(() => {
+      db.run('UPDATE documents SET invoice_id = NULL WHERE invoice_id = ?', id);
+      db.run('UPDATE invoices SET document_id = NULL WHERE id = ?', id);
+      db.run('DELETE FROM invoice_lines WHERE invoice_id = ?', id);
+      db.run('DELETE FROM invoices WHERE id = ?', id);
+    });
+    out.deleted.push(i.number);
+  }
+  if (shipmentId) { require('./shipments').refreshClosed(shipmentId, { db }); }
+  return out;
+}
+
 /** Which invoices a payment in this direction can settle. */
 function settles(direction) {
   return direction === 'IN' ? "(i.kind = 'AR' OR (i.kind = 'DN' AND i.total > 0))" : "(i.kind = 'AP' OR (i.kind = 'DN' AND i.total < 0))";
@@ -568,7 +594,7 @@ function setReviewed(id, on, { db = store.db, userId = null } = {}) {
   db.run(`UPDATE invoices SET reviewed_at = ${on ? "datetime('now')" : 'NULL'}, reviewed_by = ? WHERE id = ?`, on ? userId : null, id);
 }
 
-module.exports = { findDuplicates, normNo,
+module.exports = { deleteInvoices, findDuplicates, normNo,
   CHARGE_CODES, CHARGE_ITEMS, chargeItems, saveInvoice, getInvoice, listInvoices, voidInvoice, recordPayment, settleNetting,
   agentStatement, arAging, shipmentProfit, refreshStatus, addDays, payOnAccount, applyUnapplied, unappliedPayments,
   shipmentLines, profitReport, openItems, settleSelected,

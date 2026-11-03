@@ -518,7 +518,7 @@ document.querySelectorAll('input[data-dup-check]').forEach((inp) => {
   };
   let last = { same: [], other: [], similar: [] };
   let timer = null;
-  const isOurs = () => ['AR'].includes(form.querySelector('[name="kind"]')?.value); // our A/R numbers are automatic
+  const isOurs = () => ['AR', 'DN', 'CN'].includes(form.querySelector('[name="kind"]')?.value); // our A/R, D/N, C/N numbers are automatic
   const check = async () => {
     if (isOurs()) { box.innerHTML = ''; last = { same: [], other: [], similar: [] }; return; }
     const number = inp.value.trim();
@@ -1007,3 +1007,16 @@ document.querySelectorAll('[data-notify]').forEach((b) => b.addEventListener('cl
   else if (b.dataset.notify === 'same') { put('notify_party', 'SAME AS CONSIGNEE'); put('notify_address', ''); }
   else { put('notify_party', ''); put('notify_address', ''); }
 }));
+
+// Accounting on a file: tick 🗑 (in the P/L list or Review & send — the same invoice is ticked in both), then delete.
+(() => {
+  const boxes = [...document.querySelectorAll('input[data-del]')];
+  if (!boxes.length) return;
+  const btns = document.querySelectorAll('[data-del-btn]');
+  const sync = () => {
+    const n = new Set(boxes.filter((b) => b.checked).map((b) => b.value)).size;
+    btns.forEach((b) => { b.disabled = !n; const c = b.querySelector('[data-del-count]'); if (c) c.textContent = n; });
+  };
+  boxes.forEach((b) => b.addEventListener('change', () => { boxes.filter((x) => x.value === b.value).forEach((x) => { x.checked = b.checked; }); sync(); }));
+  sync();
+})();

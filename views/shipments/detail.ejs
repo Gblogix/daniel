@@ -160,10 +160,13 @@
     <div><span>Margin</span><b><%= profit.margin != null ? `${profit.margin}%` : '—' %></b></div>
   </div>
   <% if (plLines.length) { %>
+  <%# Delete: tick in the 🗑 column (here or in Review & send below), then "Delete checked". %>
+  <form method="post" action="/shipments/<%= s.id %>/invoices/delete" id="inv-del"><input type="hidden" name="_csrf" value="<%= csrf %>"></form>
   <div class="tablewrap"><table class="t small">
-    <thead><tr><th>Invoice</th><th>Party</th><th>Item</th><th class="right">Revenue</th><th class="right">Cost</th><th>Status</th></tr></thead>
+    <thead><tr><% if (!locked) { %><th class="c" style="width:34px" title="Tick to delete">🗑</th><% } %><th>Invoice</th><th>Party</th><th>Item</th><th class="right">Revenue</th><th class="right">Cost</th><th>Status</th></tr></thead>
     <% let last = null; plLines.forEach((l) => { const first = l.invoice_id !== last; last = l.invoice_id; %>
       <tr class="<%= first ? '' : 'sub' %>">
+        <% if (!locked) { %><td class="c"><% if (first && !(l.paid_amount > 0)) { %><input type="checkbox" name="del" value="<%= l.invoice_id %>" form="inv-del" data-del aria-label="Delete <%= l.number %>"><% } %></td><% } %>
         <td class="nowrap"><% if (first) { %><a href="/invoices/<%= l.invoice_id %>"><b><%= l.number %></b></a> <span class="muted"><%= { AR: 'AR', DN: l.invoice_total < 0 ? 'C/N' : 'D/N', AP: 'Vendor' }[l.kind] %></span><% } %></td>
         <td><%= first ? (l.company_name || '') : '' %></td>
         <td><%= l.description %><%= l.rate != null && l.qty != null ? ` (${fmtNum(l.rate, 2)} × ${l.qty})` : '' %></td>
@@ -171,8 +174,11 @@
         <td class="nowrap"><% if (first) { %><span class="badge <%= l.status === 'PAID' ? 'paid' : 'unpaid' %>"><%= l.status %></span><%= l.status === 'OPEN' && l.paid_amount ? ` ${m(l.paid_amount)} paid` : '' %><%= l.kind !== 'AP' && l.status === 'OPEN' && !l.sent_at ? ' · not sent' : '' %><% } %></td>
       </tr>
     <% }) %>
-    <tr><td colspan="3" class="right"><b>Total</b></td><td class="right"><b><%= m(profit.revenue) %></b></td><td class="right"><b><%= m(profit.cost) %></b></td><td></td></tr>
+    <tr><% if (!locked) { %><td></td><% } %><td colspan="3" class="right"><b>Total</b></td><td class="right"><b><%= m(profit.revenue) %></b></td><td class="right"><b><%= m(profit.cost) %></b></td><td></td></tr>
   </table></div>
+  <% if (!locked) { %><div class="actions" style="margin-top:6px"><button class="btn danger small" form="inv-del" data-del-btn disabled
+    data-confirm="Delete the ticked documents? Not-sent ones are removed; ones already sent to the party are voided (kept as VOID).">🗑 Delete checked (<span data-del-count>0</span>)</button>
+    <span class="muted small">Paid ones can't be ticked — unapply the payment first.</span></div><% } %>
   <% } else { %><p class="muted small">No invoices or vendor bills on this file yet — add them below.</p><% } %>
 
   <div class="vendor-drop">
@@ -194,10 +200,11 @@
     <div class="review-head"><h3>Review &amp; send to parties</h3>
       <span class="muted small">Tick <b>Reviewed</b> once an invoice / D/N / C/N is checked. Only reviewed items are emailed<%= autoSend ? ' — automatic sending is ON (Automation)' : '' %>.</span></div>
     <table class="t small">
-      <thead><tr><th class="c" style="width:80px">Reviewed</th><th>Document</th><th>To</th><th class="right">Amount</th><th>State</th></tr></thead>
+      <thead><tr><th class="c" style="width:80px">Reviewed</th><% if (!locked) { %><th class="c" style="width:34px" title="Tick to delete">🗑</th><% } %><th>Document</th><th>To</th><th class="right">Amount</th><th>State</th></tr></thead>
       <% outgoing.forEach((i) => { const label = i.kind === 'AR' ? 'Invoice' : i.total < 0 ? 'Credit note' : 'Debit note'; %>
         <tr class="<%= i.reviewed_at ? 'is-reviewed' : '' %>">
           <td class="c"><input type="checkbox" class="big" name="reviewed" value="<%= i.id %>" <%= i.reviewed_at ? 'checked' : '' %> <%= i.sent_at ? 'disabled' : '' %> aria-label="Reviewed <%= i.number %>"></td>
+          <% if (!locked) { %><td class="c"><% if (!(i.paid_amount > 0)) { %><input type="checkbox" name="del" value="<%= i.id %>" form="inv-del" data-del aria-label="Delete <%= i.number %>"><% } %></td><% } %>
           <td><a href="/invoices/<%= i.id %>"><b><%= i.number %></b></a> <span class="muted"><%= label %></span> · <a href="/invoices/<%= i.id %>/preview" target="_blank">preview</a></td>
           <td><%= i.company_name || '' %><br><span class="<%= i.to.length ? 'muted' : 'late' %> small"><%= i.to.length ? i.to.join(', ') : 'no billing email — add on Parties' %></span></td>
           <td class="right nowrap"><%= m(Math.abs(i.total)) %></td>
@@ -210,6 +217,7 @@
     <div class="actions" style="margin-top:10px">
       <button class="btn secondary" name="send" value="0">Save review</button>
       <button class="btn" name="send" value="1" data-confirm="Save the review and email every reviewed, unsent item to its party?">✉ Save &amp; send reviewed to parties<%= ready ? ` (${ready} ready)` : '' %></button>
+      <% if (!locked) { %><button class="btn danger small" form="inv-del" data-del-btn disabled data-confirm="Delete the ticked documents? Not-sent ones are removed; ones already sent are voided.">🗑 Delete checked (<span data-del-count>0</span>)</button><% } %>
     </div>
   </form>
   <% } %>
@@ -219,10 +227,11 @@
     <input type="hidden" name="_csrf" value="<%= csrf %>">
     <div class="grid g4">
       <div class="field"><label>Type</label>
-        <select name="kind" data-kind-select data-ar="<%= S.guessCustomer(s) || '' %>" data-dn="<%= s.agent_id || '' %>" data-ap="<%= s.trucker_id || '' %>">
+        <select name="kind" data-kind-select data-ar="<%= S.guessCustomer(s) || '' %>" data-dn="<%= s.agent_id || '' %>" data-cn="<%= s.agent_id || '' %>" data-ap="<%= s.trucker_id || '' %>">
           <option value="AP">Vendor bill (cost) — trucker, broker, warehouse, carrier…</option>
           <option value="AR">AR invoice to customer (revenue)</option>
-          <option value="DN">D/N to agent (revenue; negative = credit)</option>
+          <option value="DN">D/N to agent — agent pays us (revenue)</option>
+          <option value="CN">C/N to agent — we pay the agent (cost)</option>
         </select></div>
       <div class="field"><label>Party</label>
         <select name="company_id" required data-party-search><option value="">— pick —</option>

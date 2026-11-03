@@ -355,16 +355,19 @@ router.post('/shipments/:id/accounting', auth.requireAccounting, (req, res) => {
   const lines = arr(req.body.l_desc).map((d, i) => ({ description: d, rate: arr(req.body.l_rate)[i], qty: arr(req.body.l_qty)[i], amount: arr(req.body.l_amount)[i] }))
     .filter((l) => String(l.description || '').trim() && [l.amount, l.rate].some((v) => String(v ?? '').trim() !== ''));
   if (!lines.length) { flash(req, 'err', 'Add at least one line with a description and amount'); return res.redirect(`/shipments/${id}#accounting`); }
-  const kind = ['AR', 'DN', 'AP'].includes(req.body.kind) ? req.body.kind : 'AR';
+  // CN = credit note to the agent (we pay): a D/N whose lines are all on the credit side — cost, not minus revenue.
+  const credit = req.body.kind === 'CN';
+  const kind = credit ? 'DN' : ['AR', 'DN', 'AP'].includes(req.body.kind) ? req.body.kind : 'AR';
   if (kind === 'AP' && !String(req.body.number || '').trim()) { flash(req, 'err', 'Enter the vendor invoice number'); return res.redirect(`/shipments/${id}#accounting`); }
   const data = { kind, allow_duplicate: req.body.allow_duplicate === '1', shipment_id: id, company_id: req.body.company_id, number: req.body.number, invoice_date: req.body.invoice_date, terms_days: req.body.terms_days, memo: req.body.memo, lines };
   if (kind === 'AR') Object.assign(data, { ship_to: s.consignee_name || '', customer_ref: s.customer_ref || '' });
   if (kind === 'DN') Object.assign(data, { agent_ref: s.agent_ref || s.sub_bl_no || s.hbl_no || '', profit_share: 0, lines: lines.map((l) => ({ ...l, mh: 'H', bl_no: s.hbl_no, pc: 'C',
-    side: Number(String(l.amount ?? '').replace(/,/g, '')) < 0 ? 'CREDIT' : 'DEBIT', amount: l.amount === '' || l.amount == null ? l.amount : Math.abs(Number(String(l.amount).replace(/,/g, ''))) })) });
+    side: credit || Number(String(l.amount ?? '').replace(/,/g, '')) < 0 ? 'CREDIT' : 'DEBIT', amount: l.amount === '' || l.amount == null ? l.amount : Math.abs(Number(String(l.amount).replace(/,/g, ''))) })) });
   try {
     const invId = A.saveInvoice(data, { userId: req.user.id });
     const inv = A.getInvoice(invId);
-    flash(req, 'ok', `${inv.number} saved — ${inv.lines.length} line(s), USD ${inv.total.toLocaleString('en-US', { minimumFractionDigits: 2 })}`);
+    const amt = Math.abs(inv.total).toLocaleString('en-US', { minimumFractionDigits: 2 });
+    flash(req, 'ok', `${inv.number} saved — ${inv.lines.length} line(s), USD ${amt}${inv.kind === 'DN' ? (inv.total < 0 ? ' (we owe the agent)' : ' (the agent owes us)') : ''}`);
   } catch (e) {
     flash(req, 'err', e.code === 'DUPLICATE' ? require('./billing').dupMessage(e) : e.message);
   }

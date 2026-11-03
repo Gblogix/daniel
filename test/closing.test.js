@@ -141,3 +141,23 @@ test('B/L text is saved in capitals; notes and holds keep their case', () => {
   assert.equal(s.notes, 'Call Mr. Kim');
   assert.equal(s.holds, 'CBP hold');
 });
+
+test('delete ticked invoices: draft removed, sent voided, paid kept; credit note to agent counts as cost', () => {
+  const id = S.create({ mode: 'FCL', hbl_no: 'DEL-INV' });
+  const cust = Number(db.run("INSERT INTO companies (name, type) VALUES ('DEL CUSTOMER', 'customer')").lastInsertRowid);
+  const agent = Number(db.run("INSERT INTO companies (name, type) VALUES ('DEL AGENT', 'agent')").lastInsertRowid);
+  const draft = A.saveInvoice({ kind: 'AR', shipment_id: id, company_id: cust, lines: [{ description: 'Freight', amount: 100 }] });
+  const sent = A.saveInvoice({ kind: 'AR', shipment_id: id, company_id: cust, lines: [{ description: 'Freight', amount: 50 }] });
+  db.run("UPDATE invoices SET sent_at = datetime('now') WHERE id = ?", sent);
+  const paid = A.saveInvoice({ kind: 'AR', shipment_id: id, company_id: cust, lines: [{ description: 'Freight', amount: 30 }] });
+  A.recordPayment({ company_id: cust, amount: 30, allocations: [{ invoice_id: paid, amount: 30 }] });
+  const cn = A.saveInvoice({ kind: 'DN', shipment_id: id, company_id: agent, lines: [{ description: 'Profit share', amount: 40, side: 'CREDIT' }] });
+  assert.equal(A.shipmentProfit(id).cost, 40, 'C/N to the agent is a cost, not minus revenue');
+  const r = A.deleteInvoices([draft, sent, paid, cn], { shipmentId: id });
+  assert.equal(r.deleted.length, 2);
+  assert.equal(r.voided.length, 1);
+  assert.equal(r.kept.length, 1);
+  assert.equal(db.get('SELECT 1 FROM invoices WHERE id = ?', draft), undefined);
+  assert.equal(db.get('SELECT status FROM invoices WHERE id = ?', sent).status, 'VOID');
+  assert.ok(db.get('SELECT 1 FROM invoices WHERE id = ?', paid));
+});

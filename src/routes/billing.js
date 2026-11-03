@@ -169,6 +169,19 @@ router.post('/shipments/:id/invoices/review', auth.requireAccounting, async (req
   res.redirect(`/shipments/${sid}#accounting`);
 });
 
+// Delete the ticked invoices / notes on a file (accounting staff and admins).
+router.post('/shipments/:id/invoices/delete', auth.requireAccounting, (req, res) => {
+  const sid = Number(req.params.id);
+  const ids = arr(req.body.del).map(Number).filter(Boolean);
+  if (!ids.length) { flash(req, 'err', 'Tick the documents to delete first (🗑 column)'); return res.redirect(`/shipments/${sid}#accounting`); }
+  const r = A.deleteInvoices(ids, { shipmentId: sid });
+  const parts = [r.deleted.length && `Deleted ${r.deleted.join(', ')}`, r.voided.length && `Voided (already sent) ${r.voided.join(', ')}`,
+    r.kept.length && `Kept ${r.kept.join(', ')} — a payment is applied; unapply it first`].filter(Boolean);
+  if (r.deleted.length || r.voided.length) S.addEvent(sid, 'INVOICES_DELETED', parts.join(' · '), { userId: req.user.id, customerVisible: false });
+  flash(req, r.kept.length && !r.deleted.length && !r.voided.length ? 'err' : 'ok', parts.join(' · ') || 'Nothing deleted');
+  res.redirect(`/shipments/${sid}#accounting`);
+});
+
 const safeBack = (v) => (typeof v === 'string' && /^\/(?!\/)/.test(v) ? v : null);
 
 // ---------- aging summary: every party, A/R · Debit · Credit · A/P ----------
