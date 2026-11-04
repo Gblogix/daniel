@@ -7,12 +7,15 @@
   const conv = (unit, v) => (v == null || v === '' || Number.isNaN(Number(v)) ? '' : (Math.round(Number(v) * (unit === 'lbs' ? 2.20462 : 35.3147) * 100) / 100));
   const sel = (k, label, opts, blank = true) => `<div class="field"><label for="f_${k}">${label}</label><select id="f_${k}" name="${k}">${blank ? '<option value="">—</option>' : ''}${opts.map((o) => `<option value="${e(o.id)}" ${String(s[k]) === String(o.id) ? 'selected' : ''}>${e(o.name)}</option>`).join('')}</select></div>`;
 %>
-<%# Customer / Bill to: customers first, then every other party (an agent, forwarder or vendor can be the one who pays — trucking files especially). %>
-<% const payerOpts = (k) => { const opt = (o) => `<option value="${e(o.id)}" ${String(s[k]) === String(o.id) ? 'selected' : ''}>${e(o.name)}</option>`;
-     const mine = new Set(customers.map((o) => String(o.id)));
+<%# Party boxes: parties of the fitting type first, then every other party — an agent or forwarder can pay (trucking
+    files especially), a customer can clear its own customs, etc. %>
+<% const partyOpts = (k, first) => { const opt = (o) => `<option value="${e(o.id)}" ${String(s[k]) === String(o.id) ? 'selected' : ''}>${e(o.name)}</option>`;
+     const mine = new Set(first.map((o) => String(o.id)));
      const rest = (locals.allParties || []).filter((o) => !mine.has(String(o.id)));
-     return customers.map(opt).join('') + (rest.length ? `<optgroup label="Other parties">${rest.map(opt).join('')}</optgroup>` : ''); };
-   const payer = (k, label) => `<div class="field"><label for="f_${k}">${label}</label><select id="f_${k}" name="${k}"><option value="">—</option>${payerOpts(k)}</select></div>`; %>
+     return first.map(opt).join('') + (rest.length ? `<optgroup label="Other parties">${rest.map(opt).join('')}</optgroup>` : ''); };
+   const payerOpts = (k) => partyOpts(k, customers);
+   const party = (k, label, first) => `<div class="field"><label for="f_${k}">${label}</label><select id="f_${k}" name="${k}"><option value="">—</option>${partyOpts(k, first)}</select></div>`;
+   const payer = (k, label) => party(k, label, customers); %>
 <% const misc = s.mode === 'OTHER'; const ship = (html) => html.replace('<div class="field">', `<div class="field" data-ship-only ${misc ? 'hidden' : ''}>`); %>
 <%# Air files have no ISF, vessel, containers, OBL…: those boxes are hidden (and come back if the mode is changed). %>
 <% const isAir = s.mode === 'AIR'; const only = (attr, hide) => (html) => html.replace('<div class="field"', `<div ${attr} ${hide ? 'hidden' : ''} class="field"`);
@@ -52,9 +55,9 @@
       <%- inp('consignee_name', 'Consignee', 'text', 'data-party-lookup="consignee" data-address="f_consignee_address" autocomplete="off"') %><%- ta('consignee_address', '<span class="sr">Consignee </span>Address') %>
       <%- inp('notify_party', 'Notify', 'text', 'data-party-lookup="notify" data-address="f_notify_address" autocomplete="off"') %><%- ta('notify_address', '<span class="sr">Notify </span>Address') %>
       <div class="ff-note notify-tools"><button type="button" class="linkbtn" data-notify="copy" title="Copy the consignee's name and address into Notify">⇩ Same as consignee (copy)</button> · <button type="button" class="linkbtn" data-notify="same" title="Write SAME AS CONSIGNEE">“SAME AS CONSIGNEE”</button> · <button type="button" class="linkbtn" data-notify="clear">Clear</button></div>
-      <%- sel('agent_id', 'Agent', agents) %>
-      <%- sel('broker_id', 'Customs broker', brokers) %>
-      <%- sel('trucker_id', 'Trucker', truckers) %>
+      <%- party('agent_id', 'Agent', agents) %>
+      <%- party('broker_id', 'Customs broker', brokers) %>
+      <%- party('trucker_id', 'Trucker', truckers) %>
     </div>
   </div>
 
