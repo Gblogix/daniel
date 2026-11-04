@@ -114,8 +114,8 @@ function senderFor(shipmentId, { db = store.db, from = '' } = {}) {
   const ok = (v) => { const raw = String(v || '').trim(); const a = raw.toLowerCase(); return domain && a.endsWith(`@${domain}`) && !base.includes(a) ? raw : null; };
   if (from) return ok(from);
   const u = require('./requestContext').currentUser();
-  if (u && ['admin', 'staff'].includes(u.role)) return ok(u.mail_from || u.email);
-  const op = shipmentId && db.get("SELECT COALESCE(NULLIF(u.mail_from, ''), u.email) AS email FROM shipments s JOIN users u ON u.id = s.owner_id WHERE s.id = ? AND u.role IN ('admin', 'staff') AND u.active = 1", shipmentId);
+  if (u && ['admin', 'staff'].includes(u.role)) return u.no_mail && !u.mail_from ? null : ok(u.mail_from || u.email); // no mailbox: the company one
+  const op = shipmentId && db.get("SELECT COALESCE(NULLIF(u.mail_from, ''), u.email) AS email FROM shipments s JOIN users u ON u.id = s.owner_id WHERE s.id = ? AND u.role IN ('admin', 'staff') AND u.active = 1 AND NOT (COALESCE(u.no_mail, 0) = 1 AND COALESCE(u.mail_from, '') = '')", shipmentId);
   return ok(op?.email);
 }
 

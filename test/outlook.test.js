@@ -203,3 +203,17 @@ test('send window: the greeting used last time for these recipients is filled in
   assert.match(d.html, /Dear Sarah,/);
   assert.doesNotMatch(d.html, /Dear Sample Customs Broker/);
 });
+
+test('no emails to a sign-in without a mailbox (admin@): digest skipped, sends go from the company mailbox', async () => {
+  const notify = require('../src/notify');
+  const ctx = require('../src/requestContext');
+  const { sendDailyDigests } = require('../src/alerts');
+  const S = require('../src/shipments');
+  const db = store.db;
+  const uid = Number(db.run("INSERT INTO users (email, name, role, password_hash, no_mail) VALUES ('nomail.admin@gblogix.com', 'No Mail Admin', 'admin', 'x', 1)").lastInsertRowid);
+  S.create({ mode: 'FCL', hbl_no: 'NOMAIL-1', owner_id: uid, mbl_no: 'X1' });
+  assert.equal(ctx.run({ user: db.get('SELECT * FROM users WHERE id = ?', uid) }, () => notify.senderFor(null)), null);
+  const before = db.get("SELECT COUNT(*) AS n FROM emails WHERE kind = 'DAILY_DIGEST' AND to_addr LIKE 'nomail.admin%'").n;
+  await sendDailyDigests({ force: true });
+  assert.equal(db.get("SELECT COUNT(*) AS n FROM emails WHERE kind = 'DAILY_DIGEST' AND to_addr LIKE 'nomail.admin%'").n, before);
+});

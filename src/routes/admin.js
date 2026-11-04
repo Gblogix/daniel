@@ -137,7 +137,7 @@ router.post('/admin/users', auth.requirePerm('users'), (req, res) => {
   try {
     if (id) {
       if (Number(id) === req.user.id && (role !== 'admin' || !active)) { flash(req, 'err', 'You cannot remove your own admin access'); return res.redirect('/admin/users'); }
-      store.db.run('UPDATE users SET email = ?, name = ?, role = ?, company_id = ?, active = ?, mail_from = ? WHERE id = ?', email, name, role, companyId, active ? 1 : 0, mailFrom, Number(id));
+      store.db.run('UPDATE users SET email = ?, name = ?, role = ?, company_id = ?, active = ?, mail_from = ?, no_mail = ? WHERE id = ?', email, name, role, companyId, active ? 1 : 0, mailFrom, req.body.gets_mail ? 0 : 1, Number(id));
       if (role !== 'staff') store.db.run('UPDATE users SET can_accounting = 0 WHERE id = ?', Number(id));
       // A password typed here is temporary: the user picks their own at the next sign-in (not when you change your own).
       if (password) {

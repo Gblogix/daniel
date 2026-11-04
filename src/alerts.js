@@ -62,7 +62,8 @@ async function sendDailyDigests({ db = store.db, now = new Date(), force = false
   const F = require('./followups');
   const { date } = officeNow(now);
   let sent = 0;
-  for (const user of db.all("SELECT * FROM users WHERE role IN ('admin', 'staff') AND active = 1 AND email LIKE '%@%'")) {
+  // Not to sign-ins without a real mailbox (Admin › Users › "Receives emails" off); to the person's send-from mailbox.
+  for (const user of db.all("SELECT * FROM users WHERE role IN ('admin', 'staff') AND active = 1 AND COALESCE(no_mail, 0) = 0 AND COALESCE(NULLIF(mail_from, ''), email) LIKE '%@%'")) {
     const key = `digest_${user.id}_date`;
     if (!force && db.setting(key) === date) continue;
     db.setSetting(key, date);
@@ -70,7 +71,7 @@ async function sendDailyDigests({ db = store.db, now = new Date(), force = false
     if (!items.length) continue;
     const c = F.counts(items);
     await require('./notify').queueEmail({
-      kind: 'DAILY_DIGEST', to: [user.email], subject: `[GB Logix] Today: ${c.critical} critical · ${c.high} high · ${c.total} follow-ups — ${date}`,
+      kind: 'DAILY_DIGEST', to: [user.mail_from || user.email], subject: `[GB Logix] Today: ${c.critical} critical · ${c.high} high · ${c.total} follow-ups — ${date}`,
       html: digestHtml(user, items, date),
     }, { db });
     sent++;

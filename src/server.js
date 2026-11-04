@@ -148,6 +148,11 @@ if (require.main === module) {
       for (const f of ['seal_no', 'size_type']) db.run(`UPDATE containers SET ${f} = UPPER(${f}) WHERE ${f} IS NOT NULL AND ${f} <> UPPER(${f})`);
       db.setSetting('bl_text_upper', '1');
     }
+    // admin@gblogix.com is a sign-in only (no mailbox — digests bounced): no emails to it. Once.
+    if (!db.setting('admin_mail_off')) {
+      db.run("UPDATE users SET no_mail = 1 WHERE lower(email) = 'admin@gblogix.com' AND (mail_from IS NULL OR mail_from = '')");
+      db.setSetting('admin_mail_off', '1');
+    }
     // Staff mailboxes given by the owner (James, Jay): once.
     if (!db.setting('staff_mailboxes_set')) {
       for (const r of require('./staffMail').assignMailboxes()) console.log(`Send-from mailbox ${r.mailbox}: ${r.user ? `${r.user} — ` : ''}${r.how}`);

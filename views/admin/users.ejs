@@ -9,7 +9,7 @@
 <div class="tablewrap" style="margin-bottom:18px"><table class="t">
   <thead><tr><th>Name</th><th>Email</th><th>Sends email from</th><th>Role</th><th>Company</th><th>Last login</th><th>Active</th><th></th></tr></thead>
   <% users.forEach((u) => { %>
-    <tr><td><%= u.name %></td><td><%= u.email %></td><td class="small"><%= ['admin', 'staff'].includes(u.role) ? (u.mail_from || u.email) : '' %></td><td><%= ROLES[u.role].label %><% if (u.role === 'admin' || u.can_accounting) { %> <span class="badge paid">$ accounting</span><% } %></td><td><%= u.company_name || '' %></td>
+    <tr><td><%= u.name %></td><td><%= u.email %></td><td class="small"><%= ['admin', 'staff'].includes(u.role) ? (u.mail_from || u.email) : '' %><%= u.no_mail ? ' · ✉ off' : '' %></td><td><%= ROLES[u.role].label %><% if (u.role === 'admin' || u.can_accounting) { %> <span class="badge paid">$ accounting</span><% } %></td><td><%= u.company_name || '' %></td>
       <td class="small"><%= fmtDateTime(u.last_login_at) %></td><td><%= u.active ? '✔' : '✕' %></td>
       <td><details><summary class="btn secondary small">Edit</summary>
         <form method="post" action="/admin/users" style="min-width:260px;margin-top:8px">
@@ -21,6 +21,7 @@
           <div class="field"><label>Company</label><select name="company_id"><option value="">—</option><% companies.forEach((c) => { %><option value="<%= c.id %>" <%= u.company_id === c.id ? 'selected' : '' %>><%= c.name %></option><% }) %></select></div>
           <div class="field"><label>Reset password (optional, temporary)</label><input name="password" type="password" minlength="8" autocomplete="new-password"></div>
           <label class="check"><input type="checkbox" name="active" value="1" <%= u.active ? 'checked' : '' %>> Active</label>
+          <label class="check"><input type="checkbox" name="gets_mail" value="1" <%= u.no_mail ? '' : 'checked' %>> Receives emails (daily to-do digest) — untick for a sign-in with no real mailbox</label>
           <button class="btn small" style="margin-top:8px">Save</button>
         </form></details></td></tr>
   <% }) %>
