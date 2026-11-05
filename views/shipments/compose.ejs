@@ -5,21 +5,20 @@
   <a class="btn secondary" href="/shipments/<%= s.id %>" target="_self" title="Back in this tab — what you typed here is kept until you send">← Back to the file</a></div>
 <div class="infobox small" id="draft-note" hidden>↺ Your unsent email was restored. <button type="button" class="linkbtn" id="draft-reset">Start over</button></div>
 <% if (d.partyMissing) { %><div class="warnbox">No <%= { AN: 'customs broker', DO: 'trucker' }[d.kind] || 'customer' %> on this file yet — type the address below, or set the party on the file first.</div><% } %>
-<form class="card compose" method="post" action="/shipments/<%= s.id %>/email/<%= d.kind %>?_csrf=<%= csrf %>" enctype="multipart/form-data" id="compose">
+<form class="card compose" data-sid="<%= s.id %>" method="post" action="/shipments/<%= s.id %>/email/<%= d.kind %>?_csrf=<%= csrf %>" enctype="multipart/form-data" id="compose">
   <input type="hidden" name="_csrf" value="<%= csrf %>">
-  <datalist id="addr-suggest"><% d.suggestions.forEach((a) => { %><option value="<%= a %>"><% }) %></datalist>
   <div class="crow"><label>From</label><div class="cfield muted"><%= mailbox || 'Email sending not set up — the message is kept in the Outbox' %></div></div>
-  <div class="crow"><label for="reply_to">Reply to</label><div class="cfield"><input id="reply_to" name="reply_to" list="addr-suggest" placeholder="Optional — where replies should go" value="<%= me.email || '' %>"></div></div>
+  <div class="crow"><label for="reply_to">Reply to</label><div class="cfield"><input id="reply_to" name="reply_to" data-addr-suggest placeholder="Optional — where replies should go" value="<%= me.email || '' %>"></div></div>
   <% if (d.remembered) { %><div class="infobox small">✉ Recipients filled from the last <%= d.remembered.kind === 'DO' ? 'D/O to' : 'A/N for' %> <b><%= d.remembered.who %></b> (<a href="/shipments/<%= d.remembered.id %>" target="_blank"><%= d.remembered.ref_no %></a>, <%= fmtDate(d.remembered.date) %>) — change them if needed; what you send now is remembered for this <%= d.remembered.kind === 'DO' ? 'trucker' : 'shipper' %>.</div><% } %>
   <% if (d.greeting) { %><div class="muted small" style="margin:-4px 0 8px 120px">“Dear <%= d.greeting %>” — as in your last email to these recipients.</div><% } %>
   <% [['to', 'To', d.to], ['cc', 'CC', d.cc], ['bcc', 'BCC', d.bcc || []]].forEach(([k, label, list]) => { %>
   <div class="crow"><label><%= label %></label><div class="cfield chips-input" data-chips="<%= k %>">
     <% list.forEach((a) => { %><span class="chip" data-v="<%= a %>"><%= a %><button type="button" aria-label="Remove <%= a %>">×</button></span><% }) %>
-    <input list="addr-suggest" placeholder="Add email address here… (Enter)" aria-label="<%= label %> address">
+    <input data-addr-suggest placeholder="Type a name or address — or click to pick (Enter)" aria-label="<%= label %> address">
     <input type="hidden" name="<%= k %>" value="<%= list.join(', ') %>"></div></div>
   <% }) %>
   <div class="crow"><label></label><div class="cfield"><label class="check small"><input type="checkbox" name="include_me" value="1"> Include myself (CC <%= me.email || 'me' %>)</label>
-    <% if (d.suggestions.length) { %><span class="muted small"> · suggestions from this file's parties and earlier emails appear as you type</span><% } %></div></div>
+    <span class="muted small"> · click a box for addresses used before (this file's parties first) — or type a few letters of the name / address</span></div></div>
   <div class="crow"><label>Attachment</label><div class="cfield">
     <% d.generate.forEach((t) => { %><label class="check small attach"><input type="checkbox" name="generate" value="<%= t %>" checked> 📄 <b><%= NAMES[t] %></b> — created now (PDF) <a href="/shipments/<%= s.id %>/doc/<%= t %>" data-preview="<%= NAMES[t] %>" <%- t === 'AN' ? 'data-an-preview' : '' %>>preview</a></label>
       <% if (t === 'AN') { %><label class="check small attach" style="margin-left:22px"><input type="checkbox" name="an_prices" value="1" data-an-prices> 💲 Show charges &amp; amount due on the A/N <span class="muted">(tick to include prices)</span></label><% } %><% }) %>
@@ -48,7 +47,7 @@
 (() => {
   const ok = (v) => /^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(v);
   document.querySelectorAll('[data-chips]').forEach((box) => {
-    const input = box.querySelector('input[list]'); const hidden = box.querySelector('input[type=hidden]');
+    const input = box.querySelector('input[data-addr-suggest]'); const hidden = box.querySelector('input[type=hidden]');
     const sync = () => { hidden.value = [...box.querySelectorAll('.chip')].map((c) => c.dataset.v).join(', '); };
     const add = (raw) => { for (const v of String(raw).split(/[,;\s]+/).map((x) => x.trim().toLowerCase()).filter(Boolean)) {
       if (!ok(v) || [...box.querySelectorAll('.chip')].some((c) => c.dataset.v === v)) continue;
@@ -97,7 +96,7 @@
     for (const [k, list] of Object.entries(saved.chips || {})) {
       const box = document.querySelector(`[data-chips="${k}"]`); if (!box) continue;
       box.querySelectorAll('.chip').forEach((c) => c.remove());
-      const input = box.querySelector('input[list]'); input.value = list.join(', '); input.dispatchEvent(new Event('change'));
+      const input = box.querySelector('input[data-addr-suggest]'); input.value = list.join(', '); input.dispatchEvent(new Event('change'));
     }
     form.reply_to.value = saved.reply_to ?? form.reply_to.value; subj.value = saved.subject ?? subj.value;
     if (saved.body) document.getElementById('body').innerHTML = saved.body;
@@ -110,8 +109,28 @@
   document.getElementById('draft-reset').addEventListener('click', () => { store.clear(); location.reload(); });
   document.querySelector('[data-discard]').addEventListener('click', () => store.clear());
 
+  // "Dear …": once recipients are in To, use the greeting from the last email to them (unless you typed your own).
+  const bodyEl = document.getElementById('body');
+  const greetRe = /Dear\s+[^<,\n]*,/i;
+  let autoGreeting = (greetRe.exec(bodyEl.innerHTML) || [''])[0];
+  const toBox = document.querySelector('[data-chips="to"]');
+  const greet = async () => {
+    const to = toBox.querySelector('input[type=hidden]').value;
+    if (!to) return;
+    const cur = (greetRe.exec(bodyEl.innerHTML) || [''])[0];
+    if (cur && cur !== autoGreeting && !/^Dear\s*,$/i.test(cur)) return; // typed by hand: keep
+    try {
+      const r = await (await fetch(`/emails/greeting.json?to=${encodeURIComponent(to)}`)).json();
+      if (!r.name) return;
+      const next = `Dear ${r.name.replace(/[<>&]/g, '')},`;
+      if (cur) bodyEl.innerHTML = bodyEl.innerHTML.replace(greetRe, next);
+      autoGreeting = next; keep();
+    } catch (err) { /* offline */ }
+  };
+  new MutationObserver(greet).observe(toBox, { childList: true });
+
   document.getElementById('compose').addEventListener('submit', (e) => {
-    document.querySelectorAll('[data-chips] input[list]').forEach((i) => { if (i.value.trim()) i.dispatchEvent(new Event('change')); });
+    document.querySelectorAll('[data-chips] input[data-addr-suggest]').forEach((i) => { if (i.value.trim()) i.dispatchEvent(new Event('change')); });
     if (!document.querySelector('[name=to]').value) { e.preventDefault(); alert('Add at least one recipient in To'); return; }
     document.querySelector('[name=html]').value = document.getElementById('body').innerHTML;
     store.clear();

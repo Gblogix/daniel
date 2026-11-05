@@ -118,6 +118,15 @@ router.post('/pickup-locations', auth.requirePerm('shipments_edit'), (req, res) 
   res.redirect('/pickup-locations');
 });
 
+// Send window: address suggestions (Parties + everyone emailed before) and the greeting used last time for them.
+router.get('/emails/suggest.json', auth.requireInternal, (req, res) => {
+  res.json(require('../notify').addressBook(String(req.query.q || '').slice(0, 80), { shipmentId: Number(req.query.sid) || null }));
+});
+router.get('/emails/greeting.json', auth.requireInternal, (req, res) => {
+  const to = String(req.query.to || '').split(/[,;\s]+/).filter(Boolean).slice(0, 20);
+  res.json({ name: require('../notify').rememberedGreeting(to) });
+});
+
 // Type-ahead for text fields (values used on earlier files).
 router.get('/suggest.json', auth.requireInternal, (req, res) => {
   const all = req.query.all === '1';

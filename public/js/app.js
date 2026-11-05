@@ -1025,3 +1025,20 @@ document.querySelectorAll('[data-notify]').forEach((b) => b.addEventListener('cl
   boxes.forEach((b) => b.addEventListener('change', () => { boxes.filter((x) => x.value === b.value).forEach((x) => { x.checked = b.checked; }); sync(); }));
   sync();
 })();
+
+// Send window: address suggestions — everyone emailed before and every party email (this file's parties first).
+// Click a box for the list; type part of a name or an address to narrow it.
+document.querySelectorAll('input[data-addr-suggest]').forEach((input) => {
+  const sid = input.form?.dataset.sid || '';
+  const cache = new Map();
+  input.dataset.suggestOnFocus = '';
+  gbSuggestBox(input, async (q) => {
+    const k = q.toLowerCase();
+    if (!cache.has(k)) cache.set(k, fetch(`/emails/suggest.json?sid=${encodeURIComponent(sid)}&q=${encodeURIComponent(q)}`).then((r) => r.json()).catch(() => []));
+    const taken = new Set([...input.form.querySelectorAll('.chip')].map((c) => c.dataset.v));
+    return (await cache.get(k)).filter((a) => !taken.has(a.email)).map((a) => ({ label: a.email, sub: [a.name, a.here ? 'this file' : a.n ? `used ${a.n}×` : ''].filter(Boolean).join(' · '), a }));
+  }, (it) => {
+    input.value = it.a.email;
+    input.dispatchEvent(new Event('change')); // the chip box turns it into a chip
+  });
+});

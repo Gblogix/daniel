@@ -351,6 +351,36 @@ function rememberedRecipients(s, kind, { db = store.db } = {}) {
 }
 
 /**
+ * Address book for the send window: every address on Parties (notice, billing, report emails) and every address
+ * emailed before (To / CC / BCC, any file), with the party's name. This file's parties and addresses come first, then
+ * the most used. `q` matches the address or the name.
+ */
+function addressBook(q = '', { db = store.db, shipmentId = null, limit = 20 } = {}) {
+  const book = new Map();
+  const split = (v) => String(v || '').split(/[,;\s]+/).map((x) => x.trim().toLowerCase()).filter((x) => /^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(x));
+  const put = (email, patch) => { const cur = book.get(email) || { email, name: '', n: 0, last: '', here: false }; book.set(email, Object.assign(cur, patch(cur))); };
+  for (const c of db.all("SELECT name, emails, billing_emails, report_emails FROM companies WHERE COALESCE(emails, '') || COALESCE(billing_emails, '') || COALESCE(report_emails, '') <> ''")) {
+    for (const e of split(`${c.emails},${c.billing_emails},${c.report_emails}`)) put(e, (cur) => ({ name: cur.name || c.name }));
+  }
+  // Real correspondence only — not the staff's own to-do digests / LFD watch / test emails.
+  for (const r of db.all("SELECT to_addr, cc_addr, bcc_addr, created_at FROM emails WHERE status <> 'FAILED' AND kind NOT IN ('DAILY_DIGEST', 'LFD_DIGEST', 'TEST') ORDER BY id DESC LIMIT 3000")) {
+    for (const e of split(`${r.to_addr},${r.cc_addr},${r.bcc_addr}`)) put(e, (cur) => ({ n: cur.n + 1, last: cur.last || r.created_at }));
+  }
+  if (shipmentId) {
+    const s = db.get('SELECT customer_id, broker_id, trucker_id, agent_id, delivery_company_id, bill_to_id FROM shipments WHERE id = ?', shipmentId) || {};
+    const here = [...Object.values(s).flatMap((id) => recipients(id, db)), ...db.all('SELECT to_addr, cc_addr FROM emails WHERE shipment_id = ?', shipmentId).flatMap((r) => split(`${r.to_addr},${r.cc_addr}`))];
+    for (const e of here) put(e.toLowerCase(), () => ({ here: true }));
+  }
+  for (const u of db.all("SELECT lower(email) AS e FROM users WHERE COALESCE(no_mail, 0) = 1")) book.delete(u.e); // sign-ins without a mailbox
+  const t = String(q || '').trim().toLowerCase();
+  const hit = (x) => !t || x.email.includes(t) || x.name.toLowerCase().includes(t);
+  const starts = (x) => (t && (x.email.startsWith(t) || x.name.toLowerCase().startsWith(t)) ? 1 : 0);
+  return [...book.values()].filter(hit)
+    .sort((a, b) => Number(b.here) - Number(a.here) || starts(b) - starts(a) || b.n - a.n || String(b.last).localeCompare(String(a.last)) || a.email.localeCompare(b.email))
+    .slice(0, limit);
+}
+
+/**
  * The greeting used last time for these recipients ("Dear Sarah," / "Dear Mr. Kim,"): taken from the newest email
  * that went to any of the addresses, on any file. null when none had a named greeting.
  */
@@ -406,7 +436,7 @@ async function sendComposed({ kind, shipmentId, to, cc = [], bcc = [], replyTo =
   return id;
 }
 
-module.exports = { senderFor, rememberedRecipients, rememberedGreeting, COMPOSE, composeDefaults, sendComposed,
+module.exports = { addressBook, senderFor, rememberedRecipients, rememberedGreeting, COMPOSE, composeDefaults, sendComposed,
   docContext, storeGenerated, subjectLine, recipients, generateDocument, queueEmail, deliver, summaryHtml, deliveryProblem, lastEmailId,
   sendBrokerPacket, sendCustomerUpdate, sendDeliveryOrder, onDocumentsApplied, onShipmentChanged,
 };

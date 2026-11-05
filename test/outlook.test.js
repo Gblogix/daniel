@@ -217,3 +217,18 @@ test('no emails to a sign-in without a mailbox (admin@): digest skipped, sends g
   await sendDailyDigests({ force: true });
   assert.equal(db.get("SELECT COUNT(*) AS n FROM emails WHERE kind = 'DAILY_DIGEST' AND to_addr LIKE 'nomail.admin%'").n, before);
 });
+
+test('send window address book: every party email and earlier recipient, this file first, internal digests left out', () => {
+  const notify = require('../src/notify');
+  const S = require('../src/shipments');
+  const db = store.db;
+  const br = Number(db.run("INSERT INTO companies (name, type, emails) VALUES ('Book Broker Inc', 'broker', 'desk@bookbroker.example')").lastInsertRowid);
+  const sid = S.create({ mode: 'FCL', hbl_no: 'BOOK-1', broker_id: br });
+  db.run("INSERT INTO emails (shipment_id, kind, to_addr, subject, body_html, status) VALUES (NULL, 'BROKER_PACKET', 'kim@otherclient.example', 'A/N', 'x', 'SENT')");
+  db.run("INSERT INTO emails (shipment_id, kind, to_addr, subject, body_html, status) VALUES (NULL, 'DAILY_DIGEST', 'digest.only@gblogix.com', 'Today', 'x', 'SENT')");
+  const all = notify.addressBook('', { shipmentId: sid, limit: 500 }).map((a) => a.email);
+  assert.equal(all[0], 'desk@bookbroker.example', "this file's broker first");
+  assert.ok(all.includes('kim@otherclient.example'), 'emailed before on another file');
+  assert.ok(!all.includes('digest.only@gblogix.com'), 'internal digests are not suggestions');
+  assert.deepEqual(notify.addressBook('book broker').map((a) => a.email), ['desk@bookbroker.example'], 'found by the party name');
+});
