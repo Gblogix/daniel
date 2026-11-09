@@ -54,7 +54,7 @@
       <%- inp('shipper_name', 'Shipper', 'text', 'data-party-lookup="shipper" data-address="f_shipper_address" autocomplete="off"') %><%- ta('shipper_address', '<span class="sr">Shipper </span>Address') %>
       <%- inp('consignee_name', 'Consignee', 'text', 'data-party-lookup="consignee" data-address="f_consignee_address" autocomplete="off"') %><%- ta('consignee_address', '<span class="sr">Consignee </span>Address') %>
       <%- inp('notify_party', 'Notify', 'text', 'data-party-lookup="notify" data-address="f_notify_address" autocomplete="off"') %><%- ta('notify_address', '<span class="sr">Notify </span>Address') %>
-      <div class="ff-note notify-tools"><button type="button" class="linkbtn" data-notify="copy" title="Copy the consignee's name and address into Notify">⇩ Same as consignee (copy)</button> · <button type="button" class="linkbtn" data-notify="same" title="Write SAME AS CONSIGNEE">“SAME AS CONSIGNEE”</button> · <button type="button" class="linkbtn" data-notify="clear">Clear</button></div>
+      <div class="ff-note notify-tools"><button type="button" class="linkbtn" data-notify="copy" title="Copy the consignee's name and address into Notify">⇩ Same as consignee (copy)</button><button type="button" class="linkbtn" data-notify="same" title="Write SAME AS CONSIGNEE">“SAME AS CONSIGNEE”</button><button type="button" class="linkbtn" data-notify="clear">Clear</button></div>
       <%- party('agent_id', 'Agent', agents) %>
       <%- party('broker_id', 'Customs broker', brokers) %>
       <%- party('trucker_id', 'Trucker', truckers) %>

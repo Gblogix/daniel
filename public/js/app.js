@@ -1064,3 +1064,11 @@ document.querySelectorAll('input[data-addr-suggest]').forEach((input) => {
     if (lab) { lab.querySelector('.autofill-src')?.remove(); const sp = document.createElement('span'); sp.className = 'autofill-src'; sp.textContent = `↺ ${r.from === 'Parties' ? 'Parties' : `from ${r.from}`}`; lab.append(sp); }
   });
 })();
+
+// File form columns follow the form's own width (2 columns from 760px, 4 from 1180px): side-by-side review screens
+// are narrower than the file page. A class instead of CSS containers, which Safari did not always paint.
+document.querySelectorAll('.fileform.opus').forEach((wrap) => {
+  const fit = () => { const w = wrap.clientWidth; wrap.classList.toggle('ff-w2', w >= 760); wrap.classList.toggle('ff-w4', w >= 1180); };
+  fit();
+  if ('ResizeObserver' in window) new ResizeObserver(fit).observe(wrap); else window.addEventListener('resize', fit);
+});
