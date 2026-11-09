@@ -102,7 +102,22 @@ function suggest(s, { db = store.db } = {}) {
       if (DELIVERY.some((f) => f in fills)) from.delivery = hit.ref_no;
     }
   }
+  // Deliver-to picked (or filled above) but no address: the address last used for that place, else the party's own.
+  const dc = s.delivery_company_id || fills.delivery_company_id;
+  if (dc && empty(s.delivery_address) && empty(fills.delivery_address)) {
+    const a = deliveryAddressFor(dc, { db, excludeId: s.id });
+    if (a) { fills.delivery_address = a.address; from.delivery = from.delivery || a.from; }
+  }
   return { fills, from };
+}
+
+/** Address for a delivery place (warehouse / customer): as on the last file delivered there, else its Parties address. */
+function deliveryAddressFor(companyId, { db = store.db, excludeId = 0 } = {}) {
+  const prev = db.get("SELECT ref_no, delivery_address FROM shipments WHERE delivery_company_id = ? AND id <> ? AND delivery_address IS NOT NULL AND TRIM(delivery_address) <> '' ORDER BY id DESC LIMIT 1", companyId, excludeId || 0);
+  if (prev) return { address: prev.delivery_address, from: prev.ref_no };
+  const c = db.get('SELECT name, address FROM companies WHERE id = ?', companyId);
+  if (c?.address && String(c.address).trim()) return { address: require('./address').tidy(c.address, c.name), from: 'Parties' };
+  return null;
 }
 
 /** Fill the empty fields of a saved file from its history; logs what came from where. Returns the filled field names. */
@@ -156,4 +171,4 @@ function applyMaster(id, { db = store.db } = {}) {
   return keys;
 }
 
-module.exports = { carrierFor, suggest, apply, applyMaster, spreadPickup, PICKUP, DELIVERY };
+module.exports = { deliveryAddressFor, carrierFor, suggest, apply, applyMaster, spreadPickup, PICKUP, DELIVERY };

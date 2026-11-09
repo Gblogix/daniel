@@ -152,6 +152,11 @@ router.get('/history', auth.requireInternal, (req, res) => {
 });
 
 /** Form helper: what past files suggest for the fields still empty (carrier, pick-up location, delivery). */
+// Deliver-to picked on the form: its address (last file delivered there, else Parties).
+router.get('/delivery-address.json', auth.requireInternal, (req, res) => {
+  res.json(require('../autofill').deliveryAddressFor(Number(req.query.company) || 0, { excludeId: Number(req.query.id) || 0 }) || {});
+});
+
 router.get('/shipments/autofill.json', auth.requireInternal, (req, res) => {
   const q = req.query;
   const keys = ['id', 'mode', 'mbl_no', 'carrier', 'scac', 'pod', 'agent_id', 'customer_id', 'consignee_name', 'ctn', ...require('../autofill').PICKUP, ...require('../autofill').DELIVERY];

@@ -1042,3 +1042,25 @@ document.querySelectorAll('input[data-addr-suggest]').forEach((input) => {
     input.dispatchEvent(new Event('change')); // the chip box turns it into a chip
   });
 });
+
+// Deliver to: picking the place fills its address (last file delivered there, else its Parties address). An address
+// typed by hand is kept; one filled for the previous pick is replaced.
+(() => {
+  const sel = document.querySelector('select[name="delivery_company_id"]');
+  const addr = sel?.form?.querySelector('[name="delivery_address"]');
+  if (!sel || !addr) return;
+  let auto = '';
+  sel.addEventListener('change', async () => {
+    if (!sel.value) return;
+    if (addr.value.trim() && addr.value !== auto && !addr.classList.contains('autofilled')) return;
+    const id = /\/shipments\/(\d+)/.exec(location.pathname)?.[1] || '';
+    let r = {};
+    try { r = await (await fetch(`/delivery-address.json?company=${encodeURIComponent(sel.value)}&id=${id}`)).json(); } catch (err) { return; }
+    if (!r.address) return;
+    addr.value = r.address; auto = r.address;
+    addr.classList.add('autofilled'); addr.dispatchEvent(new Event('input', { bubbles: true }));
+    addr.classList.add('autofilled');
+    const lab = sel.form.querySelector(`label[for="${addr.id}"]`);
+    if (lab) { lab.querySelector('.autofill-src')?.remove(); const sp = document.createElement('span'); sp.className = 'autofill-src'; sp.textContent = `↺ ${r.from === 'Parties' ? 'Parties' : `from ${r.from}`}`; lab.append(sp); }
+  });
+})();

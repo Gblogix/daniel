@@ -105,3 +105,18 @@ test('cargo / freight location address: kept under the location, follows it to t
   const html = T.arrivalNotice({ ...S.find(b, null), items: [], containers: [] }, { company: {} });
   assert.match(html, /SAMPLE KE CARGO TERMINAL<br>6000 SAMPLE AVE<br>LOS ANGELES, CA 90045/);
 });
+
+test('deliver-to picked: its address fills in — last file delivered there, else the Parties address', () => {
+  const AF2 = require('../src/autofill');
+  const db = require('../src/db').db;
+  const wh = Number(db.run("INSERT INTO companies (name, type, address) VALUES ('SAMPLE BRANDS - WALNUT', 'delivery', '1500 E Sample Ave, Fullerton, CA 92831')").lastInsertRowid);
+  const bare = Number(db.run("INSERT INTO companies (name, type) VALUES ('NO ADDRESS WAREHOUSE', 'delivery')").lastInsertRowid);
+  const a = S.create({ mode: 'FCL', hbl_no: 'DLV-A', delivery_company_id: wh });
+  assert.equal(S.find(a, null).delivery_address, '1500 E Sample Ave, Fullerton, CA 92831', 'from Parties on save');
+  S.update(a, { delivery_address: '1500 E Sample Ave, Dock 3, Fullerton, CA 92831' });
+  const b = S.create({ mode: 'AIR', hbl_no: 'DLV-B', delivery_company_id: wh });
+  assert.equal(S.find(b, null).delivery_address, '1500 E Sample Ave, Dock 3, Fullerton, CA 92831', 'as on the last file delivered there');
+  assert.equal(AF2.deliveryAddressFor(bare), null, 'nothing known: left empty');
+  const c = S.create({ mode: 'FCL', hbl_no: 'DLV-C', delivery_company_id: wh, delivery_address: 'TYPED BY HAND' });
+  assert.equal(S.find(c, null).delivery_address, 'TYPED BY HAND');
+});
